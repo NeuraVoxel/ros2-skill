@@ -7,8 +7,10 @@ Usage:
 
 Config file structure:
   {
-    "discord": {
-      "token": "YOUR_DISCORD_BOT_TOKEN"
+    "channels": {
+      "discord": {
+        "token": "YOUR_DISCORD_BOT_TOKEN"
+      }
     }
   }
 
@@ -26,9 +28,6 @@ def load_config(config_path):
     """Load nanobot config from the specified config file path."""
     config_path = os.path.expanduser(config_path)
     
-    # Debug: Show resolved config path
-    print(f"[DEBUG] Loading config from: {config_path}", file=sys.stderr)
-    
     if not os.path.exists(config_path):
         print(f"Error: Config file not found at {config_path}", file=sys.stderr)
         sys.exit(1)
@@ -37,31 +36,31 @@ def load_config(config_path):
         with open(config_path, 'r') as f:
             config = json.load(f)
         
-        # Debug: Show loaded config structure (without sensitive data)
-        print(f"[DEBUG] Config keys: {list(config.keys())}", file=sys.stderr)
-        
-        # Validate config structure
-        if "discord" not in config:
-            print("Error: Config missing 'discord' section", file=sys.stderr)
-            print(f"[DEBUG] Available sections: {list(config.keys())}", file=sys.stderr)
+        # Validate config structure: channels.discord.token
+        if "channels" not in config:
+            print("Error: Config missing 'channels' section", file=sys.stderr)
             sys.exit(1)
         
-        if not isinstance(config["discord"], dict):
-            print("Error: Config 'discord' section must be a dictionary", file=sys.stderr)
+        if not isinstance(config["channels"], dict):
+            print("Error: Config 'channels' section must be a dictionary", file=sys.stderr)
             sys.exit(1)
         
-        print(f"[DEBUG] Discord section keys: {list(config['discord'].keys())}", file=sys.stderr)
-        
-        if "token" not in config["discord"]:
-            print("Error: Config 'discord' section missing 'token' key", file=sys.stderr)
-            print(f"[DEBUG] Available keys in discord: {list(config['discord'].keys())}", file=sys.stderr)
+        if "discord" not in config["channels"]:
+            print("Error: Config 'channels' section missing 'discord' key", file=sys.stderr)
             sys.exit(1)
         
-        if not config["discord"]["token"]:
-            print("Error: Config 'discord.token' is empty", file=sys.stderr)
+        if not isinstance(config["channels"]["discord"], dict):
+            print("Error: Config 'channels.discord' must be a dictionary", file=sys.stderr)
             sys.exit(1)
         
-        print(f"[DEBUG] Config loaded successfully, token length: {len(config['discord']['token'])}", file=sys.stderr)
+        if "token" not in config["channels"]["discord"]:
+            print("Error: Config 'channels.discord' section missing 'token' key", file=sys.stderr)
+            sys.exit(1)
+        
+        if not config["channels"]["discord"]["token"]:
+            print("Error: Config 'channels.discord.token' is empty", file=sys.stderr)
+            sys.exit(1)
+        
         return config
         
     except json.JSONDecodeError as e:
@@ -73,7 +72,7 @@ def load_config(config_path):
 
 def send_image(path, channel_id, config_path, delete_after):
     config = load_config(config_path)
-    token = config["discord"]["token"]
+    token = config["channels"]["discord"]["token"]
     
     if not channel_id:
         print("Error: --channel-id argument is required", file=sys.stderr)

@@ -77,8 +77,10 @@ Discord integration requires a config file with the following structure:
 
 ```json
 {
-  "discord": {
-    "token": "YOUR_DISCORD_BOT_TOKEN"
+  "channels": {
+    "discord": {
+      "token": "YOUR_DISCORD_BOT_TOKEN"
+    }
   }
 }
 ```

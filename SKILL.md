@@ -123,8 +123,10 @@ The Discord bot token is read from a config file whose path is provided via the 
 
 ```json
 {
-  "discord": {
-    "token": "YOUR_DISCORD_BOT_TOKEN"
+  "channels": {
+    "discord": {
+      "token": "YOUR_DISCORD_BOT_TOKEN"
+    }
   }
 }
 ```

@@ -35,7 +35,7 @@ Output (error):
 
 ## discord_tools.py send-image
 
-Send an image file to a Discord channel. The bot token is read from the config file specified by `--config` at `config["discord"]["token"]`. Both the config path and channel ID must be provided as CLI arguments by the agent.
+Send an image file to a Discord channel. The bot token is read from the config file specified by `--config` at `config["channels"]["discord"]["token"]`. Both the config path and channel ID must be provided as CLI arguments by the agent.
 
 | Option | Required | Description |
 |--------|----------|-------------|
@@ -47,8 +47,10 @@ Send an image file to a Discord channel. The bot token is read from the config f
 **Config file structure:**
 ```json
 {
-  "discord": {
-    "token": "YOUR_DISCORD_BOT_TOKEN"
+  "channels": {
+    "discord": {
+      "token": "YOUR_DISCORD_BOT_TOKEN"
+    }
   }
 }
 ```
