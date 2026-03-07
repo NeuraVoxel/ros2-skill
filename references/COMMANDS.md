@@ -1719,13 +1719,17 @@ When a label is given, the node's available transitions are queried first to res
 
 Common transition labels:
 
-| Label | Typical start state | Goal state |
-|-------|-------------------|------------|
-| `configure` | unconfigured | inactive |
-| `activate` | inactive | active |
-| `deactivate` | active | inactive |
-| `cleanup` | inactive | unconfigured |
-| `shutdown` | unconfigured / inactive / active | finalized |
+| Label | ID | Start state | Goal state |
+|-------|----|-------------|------------|
+| `configure` | 1 | unconfigured | inactive |
+| `cleanup` | 2 | inactive | unconfigured |
+| `activate` | 3 | inactive | active |
+| `deactivate` | 4 | active | inactive |
+| `unconfigured_shutdown` | 5 | unconfigured | finalized |
+| `inactive_shutdown` | 6 | inactive | finalized |
+| `active_shutdown` | 7 | active | finalized |
+
+The short form `shutdown` is also accepted and resolves via suffix matching to whichever shutdown transition is available from the node's current state.
 
 Examples:
 ```bash
@@ -1734,10 +1738,12 @@ python3 scripts/ros2_cli.py lifecycle set /my_lifecycle_node configure
 python3 scripts/ros2_cli.py lifecycle set /my_lifecycle_node activate
 python3 scripts/ros2_cli.py lifecycle set /my_lifecycle_node deactivate
 python3 scripts/ros2_cli.py lifecycle set /my_lifecycle_node cleanup
-python3 scripts/ros2_cli.py lifecycle set /my_lifecycle_node shutdown
+python3 scripts/ros2_cli.py lifecycle set /my_lifecycle_node shutdown               # suffix-matched to current state
+python3 scripts/ros2_cli.py lifecycle set /my_lifecycle_node unconfigured_shutdown  # explicit full label
 
 # By numeric ID — no extra round-trip to the node
-python3 scripts/ros2_cli.py lifecycle set /my_lifecycle_node 3
+python3 scripts/ros2_cli.py lifecycle set /my_lifecycle_node 3   # activate
+python3 scripts/ros2_cli.py lifecycle set /my_lifecycle_node 5   # shutdown from unconfigured
 ```
 
 Output (success):

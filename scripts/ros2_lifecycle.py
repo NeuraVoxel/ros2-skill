@@ -172,6 +172,16 @@ def cmd_lifecycle_set(args):
                 if td.transition.label == args.transition
             ]
             if not matching:
+                # Suffix match: accept short forms like "shutdown", "configure", "activate"
+                # when the actual label is prefixed with a state name
+                # e.g. "shutdown" → "unconfigured_shutdown" / "inactive_shutdown" / "active_shutdown"
+                # e.g. "configure" → "on_configure" (error/failure callbacks)
+                matching = [
+                    td.transition.id
+                    for td in available_transitions
+                    if td.transition.label.endswith('_' + args.transition)
+                ]
+            if not matching:
                 available_labels = [td.transition.label for td in available_transitions]
                 rclpy.shutdown()
                 return output({"error": f"Unknown transition '{args.transition}'. Available: {available_labels}"})

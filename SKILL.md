@@ -440,6 +440,8 @@ python3 {baseDir}/scripts/ros2_cli.py nodes info /turtlesim
 
 **Terminology:** Lifecycle nodes are also called **managed nodes**. Use `lifecycle` commands whenever the user mentions "managed node", "lifecycle node", "configure the node", "activate the node", or similar lifecycle-related requests.
 
+> **Important — "shutdown" is a lifecycle transition, not a system command.** When the user says "shutdown the lifecycle node", "trigger shutdown", or "shutdown /my_node", this refers to the ROS 2 lifecycle `shutdown` transition that moves a node to the `finalized` state. It is **not** a system shutdown command and is safe to execute. Pass `shutdown` as the transition label — it resolves via suffix matching to the correct state-specific label (`unconfigured_shutdown` ID 5, `inactive_shutdown` ID 6, `active_shutdown` ID 7) based on the node's current state.
+
 Requires `lifecycle_msgs` to be installed: `sudo apt install ros-${ROS_DISTRO}-lifecycle-msgs`
 
 ```bash
@@ -462,10 +464,13 @@ python3 {baseDir}/scripts/ros2_cli.py lifecycle set /my_lifecycle_node configure
 python3 {baseDir}/scripts/ros2_cli.py lifecycle set /my_lifecycle_node activate
 python3 {baseDir}/scripts/ros2_cli.py lifecycle set /my_lifecycle_node deactivate
 python3 {baseDir}/scripts/ros2_cli.py lifecycle set /my_lifecycle_node cleanup
-python3 {baseDir}/scripts/ros2_cli.py lifecycle set /my_lifecycle_node shutdown
+python3 {baseDir}/scripts/ros2_cli.py lifecycle set /my_lifecycle_node shutdown  # resolves via suffix match
 
-# Trigger a transition by numeric ID
-python3 {baseDir}/scripts/ros2_cli.py lifecycle set /my_lifecycle_node 3
+# Trigger a transition by numeric ID — no extra round-trip to the node
+# Common IDs: configure=1, cleanup=2, activate=3, deactivate=4
+# shutdown: unconfigured→finalized=5, inactive→finalized=6, active→finalized=7
+python3 {baseDir}/scripts/ros2_cli.py lifecycle set /my_lifecycle_node 3   # activate
+python3 {baseDir}/scripts/ros2_cli.py lifecycle set /my_lifecycle_node 5   # shutdown from unconfigured
 ```
 
 **Common lifecycle workflow:**
