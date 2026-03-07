@@ -739,5 +739,115 @@ class TestDoctorParsing(unittest.TestCase):
                             f"Handler for {key} is not callable")
 
 
+class TestMulticastParsing(unittest.TestCase):
+    """Parser argument and DISPATCH wiring tests for the multicast commands.
+
+    All tests gracefully skip if ROS 2 / rclpy is not available, matching
+    the pattern used throughout this test suite.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        if not check_rclpy_available():
+            raise unittest.SkipTest("rclpy not available - requires ROS 2 environment")
+        import ros2_cli
+        cls.ros2_cli = ros2_cli
+        cls.parser = ros2_cli.build_parser()
+
+    # ------------------------------------------------------------------
+    # multicast send — defaults
+    # ------------------------------------------------------------------
+
+    def test_multicast_send_command(self):
+        args = self.parser.parse_args(["multicast", "send"])
+        self.assertEqual(args.command, "multicast")
+        self.assertEqual(args.subcommand, "send")
+
+    def test_multicast_send_default_group(self):
+        args = self.parser.parse_args(["multicast", "send"])
+        self.assertEqual(args.group, "225.0.0.1")
+
+    def test_multicast_send_default_port(self):
+        args = self.parser.parse_args(["multicast", "send"])
+        self.assertEqual(args.port, 49150)
+
+    def test_multicast_send_custom_group(self):
+        args = self.parser.parse_args(["multicast", "send", "--group", "239.0.0.1"])
+        self.assertEqual(args.group, "239.0.0.1")
+
+    def test_multicast_send_custom_group_short(self):
+        args = self.parser.parse_args(["multicast", "send", "-g", "239.0.0.1"])
+        self.assertEqual(args.group, "239.0.0.1")
+
+    def test_multicast_send_custom_port(self):
+        args = self.parser.parse_args(["multicast", "send", "--port", "12345"])
+        self.assertEqual(args.port, 12345)
+
+    def test_multicast_send_custom_port_short(self):
+        args = self.parser.parse_args(["multicast", "send", "-p", "12345"])
+        self.assertEqual(args.port, 12345)
+
+    # ------------------------------------------------------------------
+    # multicast receive — defaults
+    # ------------------------------------------------------------------
+
+    def test_multicast_receive_command(self):
+        args = self.parser.parse_args(["multicast", "receive"])
+        self.assertEqual(args.command, "multicast")
+        self.assertEqual(args.subcommand, "receive")
+
+    def test_multicast_receive_default_group(self):
+        args = self.parser.parse_args(["multicast", "receive"])
+        self.assertEqual(args.group, "225.0.0.1")
+
+    def test_multicast_receive_default_port(self):
+        args = self.parser.parse_args(["multicast", "receive"])
+        self.assertEqual(args.port, 49150)
+
+    def test_multicast_receive_default_timeout(self):
+        args = self.parser.parse_args(["multicast", "receive"])
+        self.assertEqual(args.timeout, 5.0)
+
+    def test_multicast_receive_custom_timeout(self):
+        args = self.parser.parse_args(["multicast", "receive", "--timeout", "10"])
+        self.assertEqual(args.timeout, 10.0)
+
+    def test_multicast_receive_custom_timeout_short(self):
+        args = self.parser.parse_args(["multicast", "receive", "-t", "3.5"])
+        self.assertEqual(args.timeout, 3.5)
+
+    def test_multicast_receive_custom_group(self):
+        args = self.parser.parse_args(["multicast", "receive", "--group", "239.0.0.1"])
+        self.assertEqual(args.group, "239.0.0.1")
+
+    def test_multicast_receive_custom_port(self):
+        args = self.parser.parse_args(["multicast", "receive", "--port", "9999"])
+        self.assertEqual(args.port, 9999)
+
+    # ------------------------------------------------------------------
+    # DISPATCH table wiring
+    # ------------------------------------------------------------------
+
+    def test_multicast_dispatch_keys_present(self):
+        expected = [
+            ("multicast", "send"),
+            ("multicast", "receive"),
+        ]
+        for key in expected:
+            self.assertIn(key, self.ros2_cli.DISPATCH,
+                          f"Missing DISPATCH key: {key}")
+
+    def test_multicast_handlers_are_callable(self):
+        for key in [("multicast", "send"), ("multicast", "receive")]:
+            self.assertTrue(callable(self.ros2_cli.DISPATCH[key]),
+                            f"Handler for {key} is not callable")
+
+    def test_multicast_send_and_receive_are_different_handlers(self):
+        self.assertIsNot(
+            self.ros2_cli.DISPATCH[("multicast", "send")],
+            self.ros2_cli.DISPATCH[("multicast", "receive")],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

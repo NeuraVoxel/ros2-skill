@@ -372,6 +372,21 @@ Examples:
     --timeout / -to  How long to listen in seconds (default: 10.0)
     $ python3 ros2_cli.py doctor hello
     $ python3 ros2_cli.py doctor hello --topic /ros2_hello --timeout 5
+
+  multicast send [--group GROUP] [--port PORT]
+    Send one UDP multicast datagram to GROUP:PORT.
+    --group / -g   Multicast group (default: 225.0.0.1)
+    --port  / -p   UDP port (default: 49150)
+    $ python3 ros2_cli.py multicast send
+    $ python3 ros2_cli.py multicast send --group 225.0.0.1 --port 49150
+
+  multicast receive [--group GROUP] [--port PORT] [--timeout SEC]
+    Listen for UDP multicast packets and report all received within timeout.
+    --group   / -g   Multicast group (default: 225.0.0.1)
+    --port    / -p   UDP port (default: 49150)
+    --timeout / -t   How long to listen in seconds (default: 5.0)
+    $ python3 ros2_cli.py multicast receive
+    $ python3 ros2_cli.py multicast receive --timeout 10
 """
 
 import argparse
@@ -452,6 +467,10 @@ from ros2_action import (
 from ros2_doctor import (
     cmd_doctor_check,
     cmd_doctor_hello,
+)
+from ros2_multicast import (
+    cmd_multicast_send,
+    cmd_multicast_receive,
 )
 from ros2_lifecycle import (
     cmd_lifecycle_nodes,
@@ -951,6 +970,26 @@ def build_parser():
     _add_doctor_args(wtf)
     _add_doctor_subs(wtf)
 
+    # ------------------------------------------------------------------
+    # multicast
+    # ------------------------------------------------------------------
+    def _add_multicast_args(p):
+        p.add_argument("--group", "-g", default="225.0.0.1",
+                       help="Multicast group address (default: 225.0.0.1)")
+        p.add_argument("--port", "-p", type=int, default=49150,
+                       help="UDP port (default: 49150)")
+
+    multicast = sub.add_parser("multicast", help="Send or receive UDP multicast packets")
+    mcsub = multicast.add_subparsers(dest="subcommand")
+
+    mc_send = mcsub.add_parser("send", help="Send one UDP multicast datagram")
+    _add_multicast_args(mc_send)
+
+    mc_recv = mcsub.add_parser("receive", help="Receive UDP multicast packets")
+    _add_multicast_args(mc_recv)
+    mc_recv.add_argument("--timeout", "-t", type=float, default=5.0,
+                         help="How long to listen in seconds (default: 5.0)")
+
     return parser
 
 
@@ -1064,6 +1103,9 @@ DISPATCH = {
     # wtf — alias for doctor
     ("wtf",    None):    cmd_doctor_check,
     ("wtf",    "hello"): cmd_doctor_hello,
+    # multicast
+    ("multicast", "send"):    cmd_multicast_send,
+    ("multicast", "receive"): cmd_multicast_receive,
 }
 
 

@@ -2304,3 +2304,76 @@ Output (no other hosts):
 }
 ```
 
+---
+
+## multicast send
+
+Send one UDP multicast datagram to a multicast group. Uses pure Python `socket` — no ROS 2 required.
+
+**ROS 2 CLI equivalent:** `ros2 multicast send`
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--group GROUP` / `-g` | `225.0.0.1` | Multicast group address |
+| `--port PORT` / `-p` | `49150` | UDP port |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py multicast send
+python3 {baseDir}/scripts/ros2_cli.py multicast send --group 225.0.0.1 --port 49150
+```
+
+Output:
+```json
+{
+  "sent": {
+    "group": "225.0.0.1",
+    "port": 49150,
+    "message": "Hello, multicast!"
+  }
+}
+```
+
+---
+
+## multicast receive
+
+Listen for UDP multicast packets and return all received within the timeout window. Uses pure Python `socket` — no ROS 2 required.
+
+**ROS 2 CLI equivalent:** `ros2 multicast receive`
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--group GROUP` / `-g` | `225.0.0.1` | Multicast group address |
+| `--port PORT` / `-p` | `49150` | UDP port |
+| `--timeout SECS` / `-t` | `5.0` | How long to listen in seconds |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py multicast receive
+python3 {baseDir}/scripts/ros2_cli.py multicast receive --timeout 10
+python3 {baseDir}/scripts/ros2_cli.py multicast receive --group 225.0.0.1 --port 49150 --timeout 5
+```
+
+Output (packets received):
+```json
+{
+  "received": [
+    {"from": "192.168.1.42", "message": "Hello, multicast!"}
+  ],
+  "total": 1,
+  "group": "225.0.0.1",
+  "port": 49150,
+  "timeout": 5.0
+}
+```
+
+Output (nothing received):
+```json
+{
+  "received": [],
+  "total": 0,
+  "group": "225.0.0.1",
+  "port": 49150,
+  "timeout": 5.0
+}
+```
+

@@ -141,6 +141,8 @@ python3 {baseDir}/scripts/ros2_cli.py version
 | Doctor | `doctor [--report] [--report-failed] [--exclude-packages] [--include-warnings]` | Run ROS 2 system health checks; output JSON summary with pass/warn/fail per checker |
 | Doctor | `doctor hello [--topic TOPIC] [--timeout SECS]` | Check cross-host connectivity via ROS topic and UDP multicast |
 | Wtf | `wtf [...]` | Alias for `doctor` — identical flags and subcommands |
+| Multicast | `multicast send [--group GROUP] [--port PORT]` | Send one UDP multicast datagram to GROUP:PORT (default 225.0.0.1:49150) |
+| Multicast | `multicast receive [--group GROUP] [--port PORT] [--timeout SECS]` | Listen for UDP multicast packets; return all received within timeout |
 
 ---
 
