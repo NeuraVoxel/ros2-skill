@@ -14,6 +14,7 @@ from rclpy.qos import qos_profile_system_default
 from ros2_utils import (
     ROS2CLI, get_msg_type, get_msg_error, get_msg_fields,
     msg_to_dict, dict_to_msg, output, resolve_field, _get_service_event_qos,
+    resolve_output_path,
 )
 
 # ---------------------------------------------------------------------------
@@ -1091,10 +1092,7 @@ def cmd_topics_capture_image(args):
     timeout = args.timeout
     img_type = args.type
 
-    artifacts_dir = os.path.join(os.path.dirname(__file__), '..', 'artifacts')
-    artifacts_dir = os.path.abspath(artifacts_dir)
-    if not os.path.exists(artifacts_dir):
-        os.makedirs(artifacts_dir, exist_ok=True)
+    out_path = resolve_output_path(output_filename)
 
     try:
         rclpy.init()
@@ -1124,7 +1122,6 @@ def cmd_topics_capture_image(args):
             return output({"error": f"No image received from {topic} within {timeout} seconds"})
 
         msg = received['msg']
-        out_path = os.path.join(artifacts_dir, output_filename)
 
         if isinstance(msg, CompressedImage):
             np_arr = np.frombuffer(msg.data, np.uint8)

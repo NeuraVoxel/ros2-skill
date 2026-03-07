@@ -7,7 +7,7 @@ import time
 
 import rclpy
 
-from ros2_utils import ROS2CLI, msg_to_dict, output
+from ros2_utils import ROS2CLI, msg_to_dict, output, resolve_output_path
 
 
 def _call_cm_service(node, srv_type, cm_name, svc_suffix, request, timeout):
@@ -318,18 +318,9 @@ def cmd_control_view_controller_chains(args):
         controllers = [msg_to_dict(c) for c in svc_result.controller]
         dot_source = _generate_dot(controllers)
 
-        artifacts_dir = os.path.join(os.path.dirname(__file__), '..', 'artifacts')
-        artifacts_dir = os.path.abspath(artifacts_dir)
-        if not os.path.exists(artifacts_dir):
-            os.makedirs(artifacts_dir, exist_ok=True)
-
-        # Derive .gv filename from the requested output filename
-        pdf_filename = args.output
-        base = pdf_filename.rsplit('.', 1)[0] if '.' in pdf_filename else pdf_filename
-        gv_filename  = base + ".gv"
-
-        gv_path  = os.path.join(artifacts_dir, gv_filename)
-        pdf_path = os.path.join(artifacts_dir, pdf_filename)
+        # Resolve output paths; resolve_output_path creates artifacts/ if needed.
+        pdf_path = resolve_output_path(args.output)
+        gv_path  = os.path.splitext(pdf_path)[0] + ".gv"
 
         with open(gv_path, "w") as f:
             f.write(dot_source)
