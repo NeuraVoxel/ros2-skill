@@ -253,11 +253,12 @@ def cmd_control_set_hardware_component_state(args):
         rclpy.shutdown()
         if err:
             return output(err)
-        output({
-            "component":    args.name,
-            "ok":           result.ok,
-            "actual_state": msg_to_dict(result.actual_state),
-        })
+        out = {"component": args.name, "ok": result.ok}
+        # actual_state was added in later versions of controller_manager_msgs;
+        # guard with hasattr for compatibility with older distros.
+        if hasattr(result, "actual_state"):
+            out["actual_state"] = msg_to_dict(result.actual_state)
+        output(out)
     except Exception as e:
         output({"error": str(e)})
 
