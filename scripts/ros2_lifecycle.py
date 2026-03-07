@@ -29,7 +29,6 @@ def cmd_lifecycle_nodes(args):
         rclpy.shutdown()
         output({"managed_nodes": managed_nodes, "count": len(managed_nodes)})
     except Exception as e:
-        rclpy.shutdown()
         output({"error": str(e)})
 
 
@@ -105,7 +104,6 @@ def cmd_lifecycle_list(args):
             rclpy.shutdown()
             output({"nodes": results})
     except Exception as e:
-        rclpy.shutdown()
         output({"error": str(e)})
 
 
@@ -136,7 +134,6 @@ def cmd_lifecycle_get(args):
             rclpy.shutdown()
             output({"error": "Timeout getting lifecycle state"})
     except Exception as e:
-        rclpy.shutdown()
         output({"error": str(e)})
 
 
@@ -202,5 +199,4 @@ def cmd_lifecycle_set(args):
             rclpy.shutdown()
             output({"error": "Timeout triggering lifecycle transition"})
     except Exception as e:
-        rclpy.shutdown()
         output({"error": str(e)})

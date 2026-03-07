@@ -59,6 +59,8 @@ See the [OpenClaw tutorial](examples/openclaw.md) for full setup and usage.
 | Nodes | `list`, `ls`, `details`, `info` |
 | Parameters | `list`, `ls`, `get`, `set`, `describe`, `dump`, `load`, `delete` |
 | Actions | `list`, `ls`, `details`, `info`, `type`, `send`, `send-goal`, `cancel`, `echo`, `find` |
+| Lifecycle | `nodes`, `list`, `ls`, `get`, `set` |
+| Control | `list-controller-types`, `lct`, `list-controllers`, `lc`, `list-hardware-components`, `lhc`, `list-hardware-interfaces`, `lhi`, `load-controller`, `load`, `unload-controller`, `unload`, `reload-controller-libraries`, `rcl`, `set-controller-state`, `scs`, `set-hardware-component-state`, `shcs`, `switch-controllers`, `sc`, `view-controller-chains`, `vcc` |
 | Discord | `send-image` (in `discord_tools.py`) |
 
 All commands output JSON. See [`SKILL.md`](SKILL.md) for quick reference and [`references/COMMANDS.md`](references/COMMANDS.md) for full details with examples.
@@ -152,6 +154,7 @@ ros2-skill/
 │   ├── ros2_service.py        # Service commands
 │   ├── ros2_action.py         # Action commands
 │   ├── ros2_lifecycle.py      # Lifecycle (managed node) commands
+│   ├── ros2_control.py        # Controller manager commands
 │   └── discord_tools.py       # Discord integration
 ├── references/
 │   └── COMMANDS.md            # Full command reference with output examples

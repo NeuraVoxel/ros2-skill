@@ -284,6 +284,66 @@ Examples:
     python3 ros2_cli.py params set /turtlesim:background_r 255
     python3 ros2_cli.py params set /turtlesim:background_g 0
     python3 ros2_cli.py params set /turtlesim:background_b 0
+
+  control list-controller-types [--controller-manager CM] [--timeout SEC]
+  control lct
+    List all controller types in the pluginlib registry with their base classes.
+    $ python3 ros2_cli.py control list-controller-types
+
+  control list-controllers [--controller-manager CM] [--timeout SEC]
+  control lc
+    List loaded controllers, their type and current state.
+    $ python3 ros2_cli.py control list-controllers
+
+  control list-hardware-components [--controller-manager CM] [--timeout SEC]
+  control lhc
+    List hardware components (actuator, sensor, system) managed by ros2_control.
+    $ python3 ros2_cli.py control list-hardware-components
+
+  control list-hardware-interfaces [--controller-manager CM] [--timeout SEC]
+  control lhi
+    List all command and state interfaces.
+    $ python3 ros2_cli.py control list-hardware-interfaces
+
+  control load-controller <name> [--controller-manager CM]
+  control load             <name>
+    Load a controller plugin by name.
+    $ python3 ros2_cli.py control load-controller joint_trajectory_controller
+
+  control unload-controller <name> [--controller-manager CM]
+  control unload             <name>
+    Unload a stopped controller.
+    $ python3 ros2_cli.py control unload-controller joint_trajectory_controller
+
+  control reload-controller-libraries [--force-kill] [--controller-manager CM]
+  control rcl
+    Reload all controller plugin libraries.
+    $ python3 ros2_cli.py control reload-controller-libraries --force-kill
+
+  control set-controller-state <name> <active|inactive> [--controller-manager CM]
+  control scs                  <name> <active|inactive>
+    Activate or deactivate a single controller.
+    $ python3 ros2_cli.py control set-controller-state joint_trajectory_controller active
+
+  control set-hardware-component-state <name> <unconfigured|inactive|active|finalized>
+  control shcs                          <name> <state>
+    Drive a hardware component through its lifecycle.
+    $ python3 ros2_cli.py control set-hardware-component-state my_robot active
+
+  control switch-controllers [--activate CTRL ...] [--deactivate CTRL ...]
+                             [--strictness BEST_EFFORT|STRICT] [--activate-asap]
+  control sc
+    Atomically switch multiple controllers in one call.
+    $ python3 ros2_cli.py control switch-controllers \
+        --activate joint_trajectory_controller --deactivate cartesian_controller
+
+  control view-controller-chains [--output FILE] [--channel-id ID] [--config PATH]
+  control vcc
+    Write a Graphviz diagram of chained controllers to artifacts/ and optionally
+    send the PDF to Discord. Requires graphviz: sudo apt install graphviz
+    $ python3 ros2_cli.py control view-controller-chains
+    $ python3 ros2_cli.py control view-controller-chains \
+        --output my_diagram.pdf --channel-id 1234567890
 """
 
 import argparse
@@ -366,6 +426,19 @@ from ros2_lifecycle import (
     cmd_lifecycle_list,
     cmd_lifecycle_get,
     cmd_lifecycle_set,
+)
+from ros2_control import (
+    cmd_control_list_controller_types,
+    cmd_control_list_controllers,
+    cmd_control_list_hardware_components,
+    cmd_control_list_hardware_interfaces,
+    cmd_control_load_controller,
+    cmd_control_unload_controller,
+    cmd_control_reload_controller_libraries,
+    cmd_control_set_controller_state,
+    cmd_control_set_hardware_component_state,
+    cmd_control_switch_controllers,
+    cmd_control_view_controller_chains,
 )
 
 # Keep rclpy available for the main() finally block
@@ -606,6 +679,113 @@ def build_parser():
                    help="Timeout in seconds (default: 5)")
 
     # ------------------------------------------------------------------
+    # control
+    # ------------------------------------------------------------------
+    ctrl = sub.add_parser("control", help="Controller manager operations (ros2 control)")
+    csub = ctrl.add_subparsers(dest="subcommand")
+
+    def _add_cm_args(p):
+        p.add_argument(
+            "--controller-manager", dest="controller_manager",
+            default="/controller_manager",
+            help="Controller manager node name (default: /controller_manager)",
+        )
+        p.add_argument("--timeout", type=float, default=5.0,
+                       help="Service call timeout in seconds (default: 5)")
+
+    for _name in ("list-controller-types", "lct"):
+        p = csub.add_parser(_name,
+            help="List available controller types and their base classes"
+            if _name == "list-controller-types" else "Alias for list-controller-types")
+        _add_cm_args(p)
+
+    for _name in ("list-controllers", "lc"):
+        p = csub.add_parser(_name,
+            help="List loaded controllers, their type and status"
+            if _name == "list-controllers" else "Alias for list-controllers")
+        _add_cm_args(p)
+
+    for _name in ("list-hardware-components", "lhc"):
+        p = csub.add_parser(_name,
+            help="List available hardware components"
+            if _name == "list-hardware-components" else "Alias for list-hardware-components")
+        _add_cm_args(p)
+
+    for _name in ("list-hardware-interfaces", "lhi"):
+        p = csub.add_parser(_name,
+            help="List available command and state interfaces"
+            if _name == "list-hardware-interfaces" else "Alias for list-hardware-interfaces")
+        _add_cm_args(p)
+
+    for _name in ("load-controller", "load"):
+        p = csub.add_parser(_name,
+            help="Load a controller in the controller manager"
+            if _name == "load-controller" else "Alias for load-controller")
+        p.add_argument("name", help="Controller name")
+        _add_cm_args(p)
+
+    for _name in ("unload-controller", "unload"):
+        p = csub.add_parser(_name,
+            help="Unload a controller from the controller manager"
+            if _name == "unload-controller" else "Alias for unload-controller")
+        p.add_argument("name", help="Controller name")
+        _add_cm_args(p)
+
+    for _name in ("reload-controller-libraries", "rcl"):
+        p = csub.add_parser(_name,
+            help="Reload controller libraries"
+            if _name == "reload-controller-libraries" else "Alias for reload-controller-libraries")
+        p.add_argument("--force-kill", dest="force_kill", action="store_true", default=False,
+                       help="Force kill controllers before reloading")
+        _add_cm_args(p)
+
+    for _name in ("set-controller-state", "scs"):
+        p = csub.add_parser(_name,
+            help="Adjust the state of the controller"
+            if _name == "set-controller-state" else "Alias for set-controller-state")
+        p.add_argument("name", help="Controller name")
+        p.add_argument("state", choices=["active", "inactive"],
+                       help="Target state: active or inactive")
+        _add_cm_args(p)
+
+    for _name in ("set-hardware-component-state", "shcs"):
+        p = csub.add_parser(_name,
+            help="Adjust the state of the hardware component"
+            if _name == "set-hardware-component-state" else "Alias for set-hardware-component-state")
+        p.add_argument("name", help="Hardware component name")
+        p.add_argument("state", choices=["unconfigured", "inactive", "active", "finalized"],
+                       help="Target lifecycle state")
+        _add_cm_args(p)
+
+    for _name in ("switch-controllers", "sc"):
+        p = csub.add_parser(_name,
+            help="Switch controllers in the controller manager"
+            if _name == "switch-controllers" else "Alias for switch-controllers")
+        p.add_argument("--activate", nargs="*", default=[],
+                       help="Controllers to activate")
+        p.add_argument("--deactivate", nargs="*", default=[],
+                       help="Controllers to deactivate")
+        p.add_argument("--strictness", choices=["BEST_EFFORT", "STRICT"],
+                       default="BEST_EFFORT",
+                       help="Switching strictness (default: BEST_EFFORT)")
+        p.add_argument("--activate-asap", dest="activate_asap", action="store_true",
+                       default=False,
+                       help="Activate controllers as soon as possible")
+        _add_cm_args(p)
+
+    for _name in ("view-controller-chains", "vcc"):
+        p = csub.add_parser(_name,
+            help="Generate a diagram of loaded chained controllers"
+            if _name == "view-controller-chains" else "Alias for view-controller-chains")
+        p.add_argument("--output", default="controller_diagram.pdf",
+                       help="Output filename saved in artifacts/ (default: controller_diagram.pdf)")
+        p.add_argument("--channel-id", dest="channel_id", default=None,
+                       help="Discord channel ID; if provided, sends the PDF via discord_tools")
+        p.add_argument("--config", default="~/.nanobot/config.json",
+                       help="Path to nanobot config for Discord (default: ~/.nanobot/config.json)")
+        _add_cm_args(p)
+
+    # ------------------------------------------------------------------
     # params
     # ------------------------------------------------------------------
     params = sub.add_parser("params", help="Parameter operations")
@@ -756,6 +936,30 @@ DISPATCH = {
     ("lifecycle", "set"): cmd_lifecycle_set,
     # lifecycle — alias
     ("lifecycle", "ls"): cmd_lifecycle_list,
+    # control — canonical
+    ("control", "list-controller-types"):        cmd_control_list_controller_types,
+    ("control", "list-controllers"):             cmd_control_list_controllers,
+    ("control", "list-hardware-components"):     cmd_control_list_hardware_components,
+    ("control", "list-hardware-interfaces"):     cmd_control_list_hardware_interfaces,
+    ("control", "load-controller"):              cmd_control_load_controller,
+    ("control", "unload-controller"):            cmd_control_unload_controller,
+    ("control", "reload-controller-libraries"):  cmd_control_reload_controller_libraries,
+    ("control", "set-controller-state"):         cmd_control_set_controller_state,
+    ("control", "set-hardware-component-state"): cmd_control_set_hardware_component_state,
+    ("control", "switch-controllers"):           cmd_control_switch_controllers,
+    ("control", "view-controller-chains"):       cmd_control_view_controller_chains,
+    # control — aliases
+    ("control", "lct"):   cmd_control_list_controller_types,
+    ("control", "lc"):    cmd_control_list_controllers,
+    ("control", "lhc"):   cmd_control_list_hardware_components,
+    ("control", "lhi"):   cmd_control_list_hardware_interfaces,
+    ("control", "load"):  cmd_control_load_controller,
+    ("control", "unload"): cmd_control_unload_controller,
+    ("control", "rcl"):   cmd_control_reload_controller_libraries,
+    ("control", "scs"):   cmd_control_set_controller_state,
+    ("control", "shcs"):  cmd_control_set_hardware_component_state,
+    ("control", "sc"):    cmd_control_switch_controllers,
+    ("control", "vcc"):   cmd_control_view_controller_chains,
     # params — canonical
     ("params", "list"): cmd_params_list,
     ("params", "get"): cmd_params_get,

@@ -2,6 +2,41 @@
 
 All notable changes to ros2-skill will be documented in this file.
 
+## [1.0.1] - 2026-03-07
+
+Refactored the CLI into separate domain modules and added two new command domains: lifecycle (managed node introspection and control) and control (ros2_control controller manager operations).
+
+### Architecture
+
+- Decomposed `ros2_cli.py` into domain modules (`ros2_topic.py`, `ros2_node.py`, `ros2_param.py`, `ros2_service.py`, `ros2_action.py`, `ros2_lifecycle.py`, `ros2_control.py`) with shared utilities in `ros2_utils.py`; `ros2_cli.py` now acts as the dispatcher and argument parser only
+
+### Topics
+
+- `topics capture-image` — capture a single frame from a ROS 2 image topic (compressed or raw), save to `artifacts/`; optional Discord send via `--channel-id` and `--config`
+
+### Lifecycle
+
+- `lifecycle nodes` — list all managed (lifecycle) nodes by scanning for `/get_state` services
+- `lifecycle list` / `ls` — list available states and transitions for one or all managed nodes
+- `lifecycle get` — get the current lifecycle state of a managed node
+- `lifecycle set` — trigger a lifecycle state transition by label (e.g. `configure`, `activate`) or numeric ID
+
+### Control
+
+- `control list-controller-types` / `lct` — list controller plugin types available in the pluginlib registry
+- `control list-controllers` / `lc` — list loaded controllers, their type, and current state
+- `control list-hardware-components` / `lhc` — list hardware components (actuator, sensor, system) and their lifecycle state
+- `control list-hardware-interfaces` / `lhi` — list all command and state interfaces
+- `control load-controller` / `load` — load a controller plugin by name
+- `control unload-controller` / `unload` — unload a stopped controller
+- `control reload-controller-libraries` / `rcl` — reload controller plugin libraries; `--force-kill` stops running controllers first
+- `control set-controller-state` / `scs` — activate or deactivate a single controller via `SwitchController`
+- `control set-hardware-component-state` / `shcs` — drive a hardware component through its lifecycle (`unconfigured`, `inactive`, `active`, `finalized`)
+- `control switch-controllers` / `sc` — atomically activate and/or deactivate multiple controllers in a single `SwitchController` call; `--strictness STRICT|BEST_EFFORT`
+- `control view-controller-chains` / `vcc` — generate a Graphviz DOT diagram of loaded chained controllers, render to PDF in `artifacts/`, optionally send to Discord
+
+---
+
 ## [1.0.0] - 2026-03-01
 
 Initial release of ros2-skill — an adaptation of [ros-skill](https://github.com/lpigeon/ros-skill) redesigned for direct local ROS 2 communication via rclpy instead of rosbridge.

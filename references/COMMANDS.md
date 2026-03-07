@@ -1760,3 +1760,375 @@ Output (error — unknown label, with available options):
 {"error": "Unknown transition 'go'. Available: ['configure', 'unconfigured_shutdown']"}
 ```
 
+---
+
+## control list-controller-types
+
+List all controller types available in the pluginlib registry with their base classes.
+
+**Alias:** `lct`
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| --controller-manager | No | Controller manager node name (default: /controller_manager) |
+| --timeout | No | Service call timeout in seconds (default: 5.0) |
+
+Example:
+```bash
+python3 scripts/ros2_cli.py control list-controller-types
+python3 scripts/ros2_cli.py control lct --controller-manager /my_robot/controller_manager
+```
+
+Output (success):
+```json
+{
+  "controller_types": [
+    {"type": "joint_trajectory_controller/JointTrajectoryController", "base_class": "controller_interface::ControllerInterface"},
+    {"type": "diff_drive_controller/DiffDriveController", "base_class": "controller_interface::ControllerInterface"}
+  ],
+  "count": 2
+}
+```
+Output (error):
+```json
+{"error": "Controller manager service not available: /controller_manager/list_controller_types. Is the controller manager running?"}
+```
+
+---
+
+## control list-controllers
+
+List all loaded controllers, their type, and current state.
+
+**Alias:** `lc`
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| --controller-manager | No | Controller manager node name (default: /controller_manager) |
+| --timeout | No | Service call timeout in seconds (default: 5.0) |
+
+Example:
+```bash
+python3 scripts/ros2_cli.py control list-controllers
+python3 scripts/ros2_cli.py control lc
+```
+
+Output (success):
+```json
+{
+  "controllers": [
+    {"name": "joint_trajectory_controller", "type": "joint_trajectory_controller/JointTrajectoryController", "state": "active"},
+    {"name": "joint_state_broadcaster", "type": "joint_state_broadcaster/JointStateBroadcaster", "state": "active"}
+  ],
+  "count": 2
+}
+```
+Output (error):
+```json
+{"error": "Timeout calling /controller_manager/list_controllers"}
+```
+
+---
+
+## control list-hardware-components
+
+List hardware components (actuator, sensor, system) managed by ros2_control.
+
+**Alias:** `lhc`
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| --controller-manager | No | Controller manager node name (default: /controller_manager) |
+| --timeout | No | Service call timeout in seconds (default: 5.0) |
+
+Example:
+```bash
+python3 scripts/ros2_cli.py control list-hardware-components
+python3 scripts/ros2_cli.py control lhc
+```
+
+Output (success):
+```json
+{
+  "hardware_components": [
+    {"name": "RRBotSystemPositionOnly", "type": "system", "state": {"id": 3, "label": "active"}}
+  ],
+  "count": 1
+}
+```
+Output (error):
+```json
+{"error": "Controller manager service not available: /controller_manager/list_hardware_components. Is the controller manager running?"}
+```
+
+---
+
+## control list-hardware-interfaces
+
+List all available command and state interfaces.
+
+**Alias:** `lhi`
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| --controller-manager | No | Controller manager node name (default: /controller_manager) |
+| --timeout | No | Service call timeout in seconds (default: 5.0) |
+
+Example:
+```bash
+python3 scripts/ros2_cli.py control list-hardware-interfaces
+python3 scripts/ros2_cli.py control lhi
+```
+
+Output (success):
+```json
+{
+  "command_interfaces": [{"name": "joint1/position", "is_available": true, "is_claimed": true}],
+  "state_interfaces": [{"name": "joint1/position", "is_available": true}]
+}
+```
+Output (error):
+```json
+{"error": "Controller manager service not available: /controller_manager/list_hardware_interfaces. Is the controller manager running?"}
+```
+
+---
+
+## control load-controller
+
+Load a controller plugin by name into the controller manager.
+
+**Alias:** `load`
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| name | Yes | Controller name (positional) |
+| --controller-manager | No | Controller manager node name (default: /controller_manager) |
+| --timeout | No | Service call timeout in seconds (default: 5.0) |
+
+Example:
+```bash
+python3 scripts/ros2_cli.py control load-controller joint_trajectory_controller
+python3 scripts/ros2_cli.py control load joint_trajectory_controller
+```
+
+Output (success):
+```json
+{"controller": "joint_trajectory_controller", "ok": true}
+```
+Output (error):
+```json
+{"error": "Controller manager service not available: /controller_manager/load_controller. Is the controller manager running?"}
+```
+
+---
+
+## control unload-controller
+
+Unload a stopped controller from the controller manager.
+
+**Alias:** `unload`
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| name | Yes | Controller name (positional) |
+| --controller-manager | No | Controller manager node name (default: /controller_manager) |
+| --timeout | No | Service call timeout in seconds (default: 5.0) |
+
+Example:
+```bash
+python3 scripts/ros2_cli.py control unload-controller joint_trajectory_controller
+python3 scripts/ros2_cli.py control unload joint_trajectory_controller
+```
+
+Output (success):
+```json
+{"controller": "joint_trajectory_controller", "ok": true}
+```
+Output (error):
+```json
+{"controller": "joint_trajectory_controller", "ok": false}
+```
+
+---
+
+## control reload-controller-libraries
+
+Reload all controller plugin libraries in the controller manager.
+
+**Alias:** `rcl`
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| --force-kill | No | Force kill controllers before reloading |
+| --controller-manager | No | Controller manager node name (default: /controller_manager) |
+| --timeout | No | Service call timeout in seconds (default: 5.0) |
+
+Example:
+```bash
+python3 scripts/ros2_cli.py control reload-controller-libraries
+python3 scripts/ros2_cli.py control rcl --force-kill
+```
+
+Output (success):
+```json
+{"ok": true, "force_kill": false}
+```
+Output (error):
+```json
+{"error": "Controller manager service not available: /controller_manager/reload_controller_libraries. Is the controller manager running?"}
+```
+
+---
+
+## control set-controller-state
+
+Activate or deactivate a single controller via SwitchController (STRICT mode).
+
+**Alias:** `scs`
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| name | Yes | Controller name (positional) |
+| state | Yes | Target state: `active` or `inactive` (positional) |
+| --controller-manager | No | Controller manager node name (default: /controller_manager) |
+| --timeout | No | Service call timeout in seconds (default: 5.0) |
+
+Example:
+```bash
+python3 scripts/ros2_cli.py control set-controller-state joint_trajectory_controller active
+python3 scripts/ros2_cli.py control scs joint_trajectory_controller inactive
+```
+
+Output (success):
+```json
+{"controller": "joint_trajectory_controller", "state": "active", "ok": true}
+```
+Output (error):
+```json
+{"controller": "joint_trajectory_controller", "state": "active", "ok": false}
+```
+
+---
+
+## control set-hardware-component-state
+
+Drive a hardware component through its lifecycle state machine.
+
+**Alias:** `shcs`
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| name | Yes | Hardware component name (positional) |
+| state | Yes | Target lifecycle state: `unconfigured`, `inactive`, `active`, or `finalized` (positional) |
+| --controller-manager | No | Controller manager node name (default: /controller_manager) |
+| --timeout | No | Service call timeout in seconds (default: 5.0) |
+
+Example:
+```bash
+python3 scripts/ros2_cli.py control set-hardware-component-state my_robot active
+python3 scripts/ros2_cli.py control shcs my_robot inactive
+```
+
+Output (success):
+```json
+{"component": "my_robot", "ok": true, "actual_state": {"id": 3, "label": "active"}}
+```
+Output (error):
+```json
+{"error": "Controller manager service not available: /controller_manager/set_hardware_component_state. Is the controller manager running?"}
+```
+
+---
+
+## control switch-controllers
+
+Atomically activate and/or deactivate multiple controllers in a single call.
+
+**Alias:** `sc`
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| --activate | No | Controllers to activate (space-separated list) |
+| --deactivate | No | Controllers to deactivate (space-separated list) |
+| --strictness | No | `BEST_EFFORT` or `STRICT` (default: BEST_EFFORT) |
+| --activate-asap | No | Activate controllers as soon as possible |
+| --controller-manager | No | Controller manager node name (default: /controller_manager) |
+| --timeout | No | Service call timeout in seconds (default: 5.0) |
+
+Example:
+```bash
+python3 scripts/ros2_cli.py control switch-controllers \
+    --activate joint_trajectory_controller --deactivate cartesian_controller
+python3 scripts/ros2_cli.py control sc --activate ctrl_a ctrl_b --strictness STRICT
+```
+
+Output (success):
+```json
+{
+  "activate": ["joint_trajectory_controller"],
+  "deactivate": ["cartesian_controller"],
+  "strictness": "BEST_EFFORT",
+  "ok": true
+}
+```
+Output (error):
+```json
+{"error": "Timeout calling /controller_manager/switch_controller"}
+```
+
+---
+
+## control view-controller-chains
+
+Generate a Graphviz diagram of loaded chained controllers, save as PDF to `artifacts/`, and optionally send to Discord.
+
+**Alias:** `vcc`
+
+Requires graphviz: `sudo apt install graphviz`
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| --output | No | Output PDF filename saved in artifacts/ (default: controller_diagram.pdf) |
+| --channel-id | No | Discord channel ID; if provided, sends the PDF via discord_tools |
+| --config | No | Path to nanobot config for Discord (default: ~/.nanobot/config.json) |
+| --controller-manager | No | Controller manager node name (default: /controller_manager) |
+| --timeout | No | Service call timeout in seconds (default: 5.0) |
+
+Example:
+```bash
+python3 scripts/ros2_cli.py control view-controller-chains
+python3 scripts/ros2_cli.py control vcc --output my_diagram.pdf --channel-id 1234567890
+```
+
+Output (success):
+```json
+{
+  "gv_path": "/path/to/artifacts/controller_diagram.gv",
+  "pdf_path": "/path/to/artifacts/controller_diagram.pdf",
+  "controllers": 3
+}
+```
+Output (success with Discord):
+```json
+{
+  "gv_path": "/path/to/artifacts/controller_diagram.gv",
+  "pdf_path": "/path/to/artifacts/controller_diagram.pdf",
+  "controllers": 3,
+  "discord_sent": true
+}
+```
+Output (graphviz not installed):
+```json
+{
+  "gv_path": "/path/to/artifacts/controller_diagram.gv",
+  "pdf_path": null,
+  "warning": "graphviz 'dot' not installed; .gv written but PDF not generated. Install with: sudo apt install graphviz",
+  "controllers": 3
+}
+```
+Output (error):
+```json
+{"error": "Controller manager service not available: /controller_manager/list_controllers. Is the controller manager running?"}
+```
+

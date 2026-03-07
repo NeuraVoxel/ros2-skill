@@ -113,6 +113,28 @@ python3 {baseDir}/scripts/ros2_cli.py version
 | Actions | `actions cancel <action>` | Cancel all in-flight goals |
 | Actions | `actions echo <action>` | Echo live action feedback and status messages |
 | Actions | `actions find <action_type>` | Find action servers by action type |
+| Control | `control list-controller-types` | List controller plugin types in the pluginlib registry |
+| Control | `control lct` | Alias for `control list-controller-types` |
+| Control | `control list-controllers` | List loaded controllers and their current state |
+| Control | `control lc` | Alias for `control list-controllers` |
+| Control | `control list-hardware-components` | List hardware components (actuator, sensor, system) |
+| Control | `control lhc` | Alias for `control list-hardware-components` |
+| Control | `control list-hardware-interfaces` | List all command and state interfaces |
+| Control | `control lhi` | Alias for `control list-hardware-interfaces` |
+| Control | `control load-controller <name>` | Load a controller plugin by name |
+| Control | `control load <name>` | Alias for `control load-controller` |
+| Control | `control unload-controller <name>` | Unload a stopped controller |
+| Control | `control unload <name>` | Alias for `control unload-controller` |
+| Control | `control reload-controller-libraries` | Reload all controller plugin libraries |
+| Control | `control rcl` | Alias for `control reload-controller-libraries` |
+| Control | `control set-controller-state <name> <active\|inactive>` | Activate or deactivate a single controller |
+| Control | `control scs <name> <state>` | Alias for `control set-controller-state` |
+| Control | `control set-hardware-component-state <name> <state>` | Drive a hardware component through its lifecycle |
+| Control | `control shcs <name> <state>` | Alias for `control set-hardware-component-state` |
+| Control | `control switch-controllers` | Atomically switch multiple controllers in one call |
+| Control | `control sc` | Alias for `control switch-controllers` |
+| Control | `control view-controller-chains` | Generate Graphviz diagram of chained controllers, save to artifacts/ |
+| Control | `control vcc` | Alias for `control view-controller-chains` |
 
 ---
 
@@ -452,6 +474,53 @@ python3 {baseDir}/scripts/ros2_cli.py lifecycle set /my_lifecycle_node configure
 
 Options: `--timeout SECONDS` (default 5) — applies to `list`, `get`, and `set`; `nodes` takes no options
 
+### control — Controller Manager Operations
+
+**Terminology:** Use `control` commands whenever the user mentions "controller manager", "ros2_control", "load a controller", "activate a controller", "hardware component", "hardware interface", or switching controllers.
+
+Requires `controller_manager_msgs`: `sudo apt install ros-${ROS_DISTRO}-ros2-control`
+
+```bash
+# List available controller types (pluginlib registry)
+python3 {baseDir}/scripts/ros2_cli.py control list-controller-types
+
+# List loaded controllers and their current state
+python3 {baseDir}/scripts/ros2_cli.py control list-controllers
+
+# List hardware components and interfaces
+python3 {baseDir}/scripts/ros2_cli.py control list-hardware-components
+python3 {baseDir}/scripts/ros2_cli.py control list-hardware-interfaces
+
+# Load a controller plugin
+python3 {baseDir}/scripts/ros2_cli.py control load-controller joint_trajectory_controller
+
+# Activate / deactivate a single controller
+python3 {baseDir}/scripts/ros2_cli.py control set-controller-state joint_trajectory_controller active
+python3 {baseDir}/scripts/ros2_cli.py control set-controller-state joint_trajectory_controller inactive
+
+# Atomically switch multiple controllers in one call
+python3 {baseDir}/scripts/ros2_cli.py control switch-controllers \
+  --activate joint_trajectory_controller --deactivate cartesian_controller
+
+# Unload a stopped controller
+python3 {baseDir}/scripts/ros2_cli.py control unload-controller joint_trajectory_controller
+
+# Drive a hardware component through its lifecycle
+python3 {baseDir}/scripts/ros2_cli.py control set-hardware-component-state my_robot active
+
+# Reload controller libraries (--force-kill stops running controllers first)
+python3 {baseDir}/scripts/ros2_cli.py control reload-controller-libraries --force-kill
+
+# Generate Graphviz diagram of chained controllers (saved to artifacts/)
+python3 {baseDir}/scripts/ros2_cli.py control view-controller-chains
+python3 {baseDir}/scripts/ros2_cli.py control view-controller-chains \
+  --output my_diagram.pdf --channel-id 1234567890 --config ~/.nanobot/config.json
+```
+
+Options (all control commands): `--controller-manager NAME` (default: `/controller_manager`), `--timeout SECONDS` (default: 5)
+
+`set-hardware-component-state` accepts: `unconfigured`, `inactive`, `active`, `finalized`
+
 ### params list / get / set
 
 Uses `node:param_name` format or space-separated `node param_name` format.
@@ -741,6 +810,9 @@ python3 {baseDir}/scripts/ros2_cli.py topics publish-until /heater/cmd \
 - `services call` — can reset, spawn, kill, or change robot state
 - `params set` — modifies runtime parameters
 - `actions send` — triggers robot actions (rotation, navigation, etc.)
+- `control set-controller-state` / `control switch-controllers` — activating or deactivating controllers affects what the robot can do
+- `control set-hardware-component-state` — driving hardware through lifecycle states can stop actuators or sensors
+- `control reload-controller-libraries` — stops all running controllers if `--force-kill` is used
 
 **Always stop the robot after movement.** The last message in any `publish-sequence` should be all zeros:
 ```json
@@ -766,3 +838,4 @@ python3 {baseDir}/scripts/ros2_cli.py topics publish-until /heater/cmd \
 | Subscribe timeout | No publisher on topic | Check `topics details` to verify publishers exist |
 | publish-sequence length error | Array mismatch | `messages` and `durations` arrays must have the same length |
 | publish-until hangs / no feedback | Wrong monitor topic or field | Use Step 2–4 of the Goal-Oriented workflow to verify topic and field |
+| Controller manager service not available | ros2_control not running or wrong namespace | Check with `nodes list`; use `--controller-manager` to set the correct namespace |
