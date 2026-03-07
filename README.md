@@ -55,7 +55,7 @@ See the [OpenClaw tutorial](examples/openclaw.md) for full setup and usage.
 | Connection | `version` |
 | Safety | `estop` |
 | Topics | `list`, `type`, `details`, `message`, `subscribe`, `publish`, `publish-sequence`, `publish-until`, `hz`, `bw`, `delay`, `find`, `capture-image` |
-| Services | `list`, `details`, `call`, `find`, `echo` |
+| Services | `list`, `type`, `details`, `call`, `find`, `echo` |
 | Nodes | `list`, `details` |
 | Parameters | `list`, `get`, `set`, `describe`, `dump`, `load`, `delete` |
 | Actions | `list`, `details`, `type`, `send`, `cancel`, `echo`, `find` |
