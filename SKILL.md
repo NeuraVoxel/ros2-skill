@@ -125,6 +125,8 @@ python3 {baseDir}/scripts/ros2_cli.py version
 | Control | `control load <name>` | Alias for `control load-controller` |
 | Control | `control unload-controller <name>` | Unload a stopped controller |
 | Control | `control unload <name>` | Alias for `control unload-controller` |
+| Control | `control configure-controller <name>` | Configure a loaded controller (unconfigured → inactive); surfaces on_configure() errors |
+| Control | `control cc <name>` | Alias for `control configure-controller` |
 | Control | `control reload-controller-libraries` | Reload all controller plugin libraries |
 | Control | `control rcl` | Alias for `control reload-controller-libraries` |
 | Control | `control set-controller-state <name> <active\|inactive>` | Activate or deactivate a single controller |
@@ -500,10 +502,21 @@ python3 {baseDir}/scripts/ros2_cli.py control list-controllers
 python3 {baseDir}/scripts/ros2_cli.py control list-hardware-components
 python3 {baseDir}/scripts/ros2_cli.py control list-hardware-interfaces
 
-# Load a controller plugin
+# Load a controller plugin (brings it to unconfigured state)
 python3 {baseDir}/scripts/ros2_cli.py control load-controller joint_trajectory_controller
 
-# Activate / deactivate a single controller
+# Configure a loaded controller (unconfigured → inactive)
+# Use this instead of relying on SwitchController's silent auto-configure — it surfaces on_configure() errors
+python3 {baseDir}/scripts/ros2_cli.py control configure-controller joint_trajectory_controller
+python3 {baseDir}/scripts/ros2_cli.py control cc joint_trajectory_controller  # alias
+
+# Recommended full workflow: load → configure → activate
+# python3 {baseDir}/scripts/ros2_cli.py control load-controller joint_trajectory_controller
+# python3 {baseDir}/scripts/ros2_cli.py control configure-controller joint_trajectory_controller
+# python3 {baseDir}/scripts/ros2_cli.py control set-controller-state joint_trajectory_controller active
+
+# Activate / deactivate a single controller (configure happens implicitly if controller is in unconfigured state,
+# but errors may be hidden — prefer explicit configure-controller first)
 python3 {baseDir}/scripts/ros2_cli.py control set-controller-state joint_trajectory_controller active
 python3 {baseDir}/scripts/ros2_cli.py control set-controller-state joint_trajectory_controller inactive
 

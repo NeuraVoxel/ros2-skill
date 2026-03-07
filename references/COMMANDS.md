@@ -1952,6 +1952,51 @@ Output (error):
 
 ---
 
+## control configure-controller
+
+Configure a loaded controller, driving it from the `unconfigured` state to `inactive`. This calls the `ConfigureController` service directly, which surfaces any `on_configure()` errors that `SwitchController`'s built-in auto-configure silently hides.
+
+Use this command when a controller is stuck in `unconfigured` after `load-controller`, or when you need to confirm that configuration succeeds before attempting to activate.
+
+**Alias:** `cc`
+
+**ROS 2 CLI equivalent:** `ros2 control configure_controller <name>`
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `name` | Yes | Controller name (positional) |
+| `--controller-manager` | No | Controller manager node name (default: /controller_manager) |
+| `--timeout` | No | Service call timeout in seconds (default: 5.0) |
+
+Recommended workflow — explicit load → configure → activate:
+```bash
+# 1. Load the controller (brings it to unconfigured)
+python3 scripts/ros2_cli.py control load-controller joint_trajectory_controller
+
+# 2. Configure it (unconfigured → inactive); errors from on_configure() are visible here
+python3 scripts/ros2_cli.py control configure-controller joint_trajectory_controller
+# or using alias:
+python3 scripts/ros2_cli.py control cc joint_trajectory_controller
+
+# 3. Activate it (inactive → active)
+python3 scripts/ros2_cli.py control set-controller-state joint_trajectory_controller active
+```
+
+Output (success):
+```json
+{"controller": "joint_trajectory_controller", "ok": true}
+```
+Output (failure — on_configure() returned error):
+```json
+{"controller": "joint_trajectory_controller", "ok": false}
+```
+Output (error — service not available):
+```json
+{"error": "Controller manager service not available: /controller_manager/configure_controller. Is the controller manager running?"}
+```
+
+---
+
 ## control reload-controller-libraries
 
 Reload all controller plugin libraries in the controller manager.

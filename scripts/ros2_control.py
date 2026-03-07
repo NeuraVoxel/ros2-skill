@@ -157,6 +157,26 @@ def cmd_control_unload_controller(args):
         output({"error": str(e)})
 
 
+def cmd_control_configure_controller(args):
+    """Configure a loaded controller (unconfigured → inactive)."""
+    try:
+        from controller_manager_msgs.srv import ConfigureController
+        rclpy.init()
+        node = ROS2CLI()
+        request = ConfigureController.Request()
+        request.name = args.name
+        result, err = _call_cm_service(
+            node, ConfigureController, args.controller_manager,
+            "configure_controller", request, args.timeout,
+        )
+        rclpy.shutdown()
+        if err:
+            return output(err)
+        output({"controller": args.name, "ok": result.ok})
+    except Exception as e:
+        output({"error": str(e)})
+
+
 def cmd_control_reload_controller_libraries(args):
     """Reload controller libraries."""
     try:

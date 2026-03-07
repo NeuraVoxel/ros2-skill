@@ -315,6 +315,12 @@ Examples:
     Unload a stopped controller.
     $ python3 ros2_cli.py control unload-controller joint_trajectory_controller
 
+  control configure-controller <name> [--controller-manager CM]
+  control cc                   <name>
+    Configure a loaded controller (unconfigured → inactive). Surfaces on_configure()
+    errors that SwitchController's auto-configure silently hides.
+    $ python3 ros2_cli.py control configure-controller joint_trajectory_controller
+
   control reload-controller-libraries [--force-kill] [--controller-manager CM]
   control rcl
     Reload all controller plugin libraries.
@@ -435,6 +441,7 @@ from ros2_control import (
     cmd_control_list_hardware_interfaces,
     cmd_control_load_controller,
     cmd_control_unload_controller,
+    cmd_control_configure_controller,
     cmd_control_reload_controller_libraries,
     cmd_control_set_controller_state,
     cmd_control_set_hardware_component_state,
@@ -732,6 +739,13 @@ def build_parser():
         p.add_argument("name", help="Controller name")
         _add_cm_args(p)
 
+    for _name in ("configure-controller", "cc"):
+        p = csub.add_parser(_name,
+            help="Configure a loaded controller (unconfigured → inactive)"
+            if _name == "configure-controller" else "Alias for configure-controller")
+        p.add_argument("name", help="Controller name")
+        _add_cm_args(p)
+
     for _name in ("reload-controller-libraries", "rcl"):
         p = csub.add_parser(_name,
             help="Reload controller libraries"
@@ -944,6 +958,7 @@ DISPATCH = {
     ("control", "list-hardware-interfaces"):     cmd_control_list_hardware_interfaces,
     ("control", "load-controller"):              cmd_control_load_controller,
     ("control", "unload-controller"):            cmd_control_unload_controller,
+    ("control", "configure-controller"):         cmd_control_configure_controller,
     ("control", "reload-controller-libraries"):  cmd_control_reload_controller_libraries,
     ("control", "set-controller-state"):         cmd_control_set_controller_state,
     ("control", "set-hardware-component-state"): cmd_control_set_hardware_component_state,
@@ -956,6 +971,7 @@ DISPATCH = {
     ("control", "lhi"):   cmd_control_list_hardware_interfaces,
     ("control", "load"):  cmd_control_load_controller,
     ("control", "unload"): cmd_control_unload_controller,
+    ("control", "cc"):    cmd_control_configure_controller,
     ("control", "rcl"):   cmd_control_reload_controller_libraries,
     ("control", "scs"):   cmd_control_set_controller_state,
     ("control", "shcs"):  cmd_control_set_hardware_component_state,
