@@ -148,6 +148,8 @@ python3 {baseDir}/scripts/ros2_cli.py version
 
 Images captured from ROS 2 topics are automatically saved to the `artifacts/` folder in the skill directory. The folder is created automatically if it doesn't exist.
 
+**Important:** The `--output` argument for `topics capture-image` and `control view-controller-chains` takes a **filename only** (e.g., `robot_view.jpg`, `my_diagram.pdf`) — not a full path. The script resolves the path to `artifacts/` automatically. Passing a full path will result in the file being saved to the wrong location.
+
 ### Discord Configuration
 
 The Discord bot token is read from a config file whose path is provided via the `--config` argument. The config file structure:
@@ -171,7 +173,7 @@ The Discord bot token is read from a config file whose path is provided via the 
 ```bash
 python3 {baseDir}/scripts/ros2_cli.py topics capture-image \
   --topic /camera/image_raw/compressed \
-  --output robot_view.jpg \
+  --output robot_view.jpg \  # filename only — saved to artifacts/robot_view.jpg automatically
   --timeout 5.0 \
   --type auto
 ```
@@ -518,7 +520,8 @@ python3 {baseDir}/scripts/ros2_cli.py control reload-controller-libraries --forc
 # Generate Graphviz diagram of chained controllers (saved to artifacts/)
 python3 {baseDir}/scripts/ros2_cli.py control view-controller-chains
 python3 {baseDir}/scripts/ros2_cli.py control view-controller-chains \
-  --output my_diagram.pdf --channel-id 1234567890 --config ~/.nanobot/config.json
+  --output my_diagram.pdf \  # filename only — saved to artifacts/my_diagram.pdf automatically
+  --channel-id 1234567890 --config ~/.nanobot/config.json
 ```
 
 Options (all control commands): `--controller-manager NAME` (default: `/controller_manager`), `--timeout SECONDS` (default: 5)
