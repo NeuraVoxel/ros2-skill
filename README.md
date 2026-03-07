@@ -54,13 +54,13 @@ See the [OpenClaw tutorial](examples/openclaw.md) for full setup and usage.
 | -------- | -------- |
 | Connection | `version` |
 | Safety | `estop` |
-| Topics | `list`, `ls`, `type`, `details`, `info`, `message`, `message-structure`, `message-struct`, `subscribe`, `echo`, `sub`, `publish`, `pub`, `publish-sequence`, `pub-seq`, `publish-until`, `publish-continuous`, `hz`, `bw`, `delay`, `find`, `capture-image` |
-| Services | `list`, `ls`, `type`, `details`, `info`, `call`, `find`, `echo` |
-| Nodes | `list`, `ls`, `details`, `info` |
-| Parameters | `list`, `ls`, `get`, `set`, `describe`, `dump`, `load`, `delete` |
-| Actions | `list`, `ls`, `details`, `info`, `type`, `send`, `send-goal`, `cancel`, `echo`, `find` |
-| Lifecycle | `nodes`, `list`, `ls`, `get`, `set` |
-| Control | `list-controller-types`, `lct`, `list-controllers`, `lc`, `list-hardware-components`, `lhc`, `list-hardware-interfaces`, `lhi`, `load-controller`, `load`, `unload-controller`, `unload`, `configure-controller`, `cc`, `reload-controller-libraries`, `rcl`, `set-controller-state`, `scs`, `set-hardware-component-state`, `shcs`, `switch-controllers`, `sc`, `swc`, `view-controller-chains`, `vcc` |
+| Topics | `list`, `type`, `details`, `message`, `subscribe`, `publish`, `publish-sequence`, `publish-until`, `hz`, `bw`, `delay`, `find`, `capture-image` |
+| Services | `list`, `details`, `call`, `find`, `echo` |
+| Nodes | `list`, `details` |
+| Parameters | `list`, `get`, `set`, `describe`, `dump`, `load`, `delete` |
+| Actions | `list`, `details`, `type`, `send`, `cancel`, `echo`, `find` |
+| Lifecycle | `nodes`, `list`, `get`, `set` |
+| Control | `list-controller-types`, `list-controllers`, `list-hardware-components`, `list-hardware-interfaces`, `load-controller`, `unload-controller`, `configure-controller`, `reload-controller-libraries`, `set-controller-state`, `set-hardware-component-state`, `switch-controllers`, `view-controller-chains` |
 | Discord | `send-image` (in `discord_tools.py`) |
 
 All commands output JSON. See [`SKILL.md`](SKILL.md) for quick reference and [`references/COMMANDS.md`](references/COMMANDS.md) for full details with examples.
@@ -84,12 +84,6 @@ python3 scripts/ros2_cli.py topics message geometry_msgs/Twist
 ```
 
 See [Message Type Aliases](references/COMMANDS.md#message-type-aliases) for the full list.
-
----
-
-## Media and Artifacts Folder
-
-Images and other media are saved in the `artifacts/` folder (must be created manually in the root of the skill). This folder is used for storing captured images and other files to be sent via Discord or other integrations.
 
 ---
 
