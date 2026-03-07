@@ -2,21 +2,9 @@
 
 All notable changes to ros2-skill will be documented in this file.
 
-## [1.0.3] - 2026-03-07
-
-Added `multicast` command for sending and receiving UDP multicast packets via pure Python sockets (no rclpy dependency).
-
-### Multicast
-
-- `multicast send [--group GROUP] [--port PORT]` — send one UDP multicast datagram to the specified group and port (defaults: `225.0.0.1:49150`); returns JSON with `sent` details
-- `multicast receive [--group GROUP] [--port PORT] [--timeout SEC]` — listen for UDP multicast packets and return all received within the timeout window (default: 5 s); returns JSON with `received` list, `total`, `group`, `port`, and `timeout`
-- Flags: `--group` / `-g` (multicast group, default: `225.0.0.1`), `--port` / `-p` (UDP port, default: `49150`), `--timeout` / `-t` (receive only, default: `5.0`)
-
----
-
 ## [1.0.2] - 2026-03-07
 
-Added `doctor` and `wtf` commands for ROS 2 system health checking via native rclpy and `ros2doctor` entry-point checkers.
+Added `doctor`, `wtf`, and `multicast` commands for ROS 2 system health checking and UDP multicast diagnostics.
 
 ### Doctor / Wtf
 
@@ -24,6 +12,12 @@ Added `doctor` and `wtf` commands for ROS 2 system health checking via native rc
 - `doctor hello` — check cross-host connectivity: publishes a `std_msgs/String` on a configurable topic (default `/canyouhearme`) and sends UDP multicast packets to `225.0.0.1:49150`; reports which remote hosts replied via ROS and multicast
 - `wtf` — exact alias for `doctor`; same flags (`--report`, `--report-failed`, `--exclude-packages`, `--include-warnings`) and same `hello` subcommand
 - Flags: `--report` / `-r` (all reports), `--report-failed` / `-rf` (failed-checker reports only), `--exclude-packages` / `-ep` (skip package checks), `--include-warnings` / `-iw` (treat warnings as failures)
+
+### Multicast
+
+- `multicast send [--group GROUP] [--port PORT]` — send one UDP multicast datagram to the specified group and port (defaults: `225.0.0.1:49150`); returns JSON with `sent` details
+- `multicast receive [--group GROUP] [--port PORT] [--timeout SEC]` — listen for UDP multicast packets and return all received within the timeout window (default: 5 s); returns JSON with `received` list, `total`, `group`, `port`, and `timeout`
+- Flags: `--group` / `-g` (multicast group, default: `225.0.0.1`), `--port` / `-p` (UDP port, default: `49150`), `--timeout` / `-t` (receive only, default: `5.0`)
 
 ---
 
