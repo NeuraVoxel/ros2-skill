@@ -166,28 +166,37 @@ def cmd_lifecycle_set(args):
                 rclpy.shutdown()
                 return output({"error": "Timeout querying available transitions"})
             available_transitions = trans_future.result().available_transitions
+            # 1. Exact match  e.g. "configure", "activate", "cleanup"
             matching = [
                 td.transition.id
                 for td in available_transitions
                 if td.transition.label == args.transition
             ]
             if not matching:
-                # Suffix match: short form matches any label ending with _<input>
-                # e.g. "shutdown" → "unconfigured_shutdown" / "inactive_shutdown" / "active_shutdown"
+                # 2. Suffix match: input is the trailing component after '_'
+                #    e.g. "shutdown"    → "unconfigured_shutdown", "inactive_shutdown", "active_shutdown"
+                #    e.g. "success"     → "on_configure_success", "on_activate_success", …
                 matching = [
                     td.transition.id
                     for td in available_transitions
                     if td.transition.label.endswith('_' + args.transition)
                 ]
             if not matching:
-                # Prefix match: short form matches any label starting with <input>_
-                # e.g. "unconfigured" → "unconfigured_shutdown"
-                # e.g. "inactive"     → "inactive_shutdown"
-                # e.g. "active"       → "active_shutdown"
+                # 3. Prefix match: input is the leading component before '_'
+                #    e.g. "unconfigured" → "unconfigured_shutdown"
+                #    e.g. "on_configure" → "on_configure_success", "on_configure_failure"
                 matching = [
                     td.transition.id
                     for td in available_transitions
                     if td.transition.label.startswith(args.transition + '_')
+                ]
+            if not matching:
+                # 4. Substring match: input appears anywhere inside the label
+                #    e.g. "configure" → "on_configure_success", "on_configure_failure", …
+                matching = [
+                    td.transition.id
+                    for td in available_transitions
+                    if args.transition in td.transition.label
                 ]
             if not matching:
                 available_labels = [td.transition.label for td in available_transitions]

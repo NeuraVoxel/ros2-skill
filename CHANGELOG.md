@@ -39,7 +39,7 @@ Refactored the CLI into separate domain modules and added two new command domain
 ### Fixes
 
 - `control set-hardware-component-state` (`shcs`) — fixed `AttributeError`: response field is `state` (not `actual_state`) in all distros; `actual_state` key still present in JSON output
-- `lifecycle set` — added suffix and prefix matching so short forms resolve to state-specific transition labels: suffix match (`shutdown` → `unconfigured_shutdown` / `inactive_shutdown` / `active_shutdown`) and prefix match (`unconfigured` → `unconfigured_shutdown`, `inactive` → `inactive_shutdown`, `active` → `active_shutdown`); both work generically for any compound transition label
+- `lifecycle set` — four-level fuzzy matching so any short form resolves to a full transition label: (1) exact, (2) suffix (`shutdown` → `unconfigured_shutdown`; `success` → `on_configure_success`), (3) prefix (`unconfigured` → `unconfigured_shutdown`; `on_configure` → `on_configure_success`), (4) substring (`configure` → `on_configure_success`); all four levels are generic for every transition, not only shutdown
 
 ### Utilities
 
