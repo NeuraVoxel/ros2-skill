@@ -172,14 +172,22 @@ def cmd_lifecycle_set(args):
                 if td.transition.label == args.transition
             ]
             if not matching:
-                # Suffix match: accept short forms like "shutdown", "configure", "activate"
-                # when the actual label is prefixed with a state name
+                # Suffix match: short form matches any label ending with _<input>
                 # e.g. "shutdown" → "unconfigured_shutdown" / "inactive_shutdown" / "active_shutdown"
-                # e.g. "configure" → "on_configure" (error/failure callbacks)
                 matching = [
                     td.transition.id
                     for td in available_transitions
                     if td.transition.label.endswith('_' + args.transition)
+                ]
+            if not matching:
+                # Prefix match: short form matches any label starting with <input>_
+                # e.g. "unconfigured" → "unconfigured_shutdown"
+                # e.g. "inactive"     → "inactive_shutdown"
+                # e.g. "active"       → "active_shutdown"
+                matching = [
+                    td.transition.id
+                    for td in available_transitions
+                    if td.transition.label.startswith(args.transition + '_')
                 ]
             if not matching:
                 available_labels = [td.transition.label for td in available_transitions]

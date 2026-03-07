@@ -1729,7 +1729,11 @@ Common transition labels:
 | `inactive_shutdown` | 6 | inactive | finalized |
 | `active_shutdown` | 7 | active | finalized |
 
-The short form `shutdown` is also accepted and resolves via suffix matching to whichever shutdown transition is available from the node's current state.
+Short forms are accepted via two-way fuzzy matching against the available transitions for the node's current state:
+- **Suffix match** — input matches the end of a label: `shutdown` → `unconfigured_shutdown` / `inactive_shutdown` / `active_shutdown`
+- **Prefix match** — input matches the start of a label: `unconfigured` → `unconfigured_shutdown`, `inactive` → `inactive_shutdown`, `active` → `active_shutdown`
+
+Exact match is always tried first; suffix then prefix are fallbacks.
 
 Examples:
 ```bash
