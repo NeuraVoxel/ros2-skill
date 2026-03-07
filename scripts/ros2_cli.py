@@ -351,6 +351,27 @@ Examples:
     $ python3 ros2_cli.py control view-controller-chains
     $ python3 ros2_cli.py control view-controller-chains \
         --output my_diagram.pdf --channel-id 1234567890
+
+  doctor [--report/-r] [--report-failed/-rf] [--exclude-packages/-ep] [--include-warnings/-iw]
+  wtf    [same flags]
+    Run ROS 2 system health checks (network, platform, packages, topics, QoS, RMW).
+    Requires ros2doctor: sudo apt install ros-$ROS_DISTRO-ros2doctor
+    --report / -r           Include all checker report sections in output
+    --report-failed / -rf   Include report sections for failed checks only
+    --exclude-packages / -ep  Skip the package checker
+    --include-warnings / -iw  Treat warnings as failures in the summary
+    $ python3 ros2_cli.py doctor
+    $ python3 ros2_cli.py doctor --report-failed --include-warnings
+    $ python3 ros2_cli.py wtf
+
+  doctor hello [--topic TOPIC] [--timeout SEC]
+  wtf    hello [--topic TOPIC] [--timeout SEC]
+    Check cross-host ROS 2 connectivity. Publishes to a topic and sends UDP
+    multicast; reports which remote hosts responded.
+    --topic / -t   Topic to use (default: /canyouhearme)
+    --timeout / -to  How long to listen in seconds (default: 10.0)
+    $ python3 ros2_cli.py doctor hello
+    $ python3 ros2_cli.py doctor hello --topic /ros2_hello --timeout 5
 """
 
 import argparse
@@ -428,6 +449,10 @@ from ros2_action import (
     cmd_actions_find,
 )
 
+from ros2_doctor import (
+    cmd_doctor_check,
+    cmd_doctor_hello,
+)
 from ros2_lifecycle import (
     cmd_lifecycle_nodes,
     cmd_lifecycle_list,
@@ -893,6 +918,39 @@ def build_parser():
     p = asub.add_parser("find", help="Find action servers by action type")
     p.add_argument("action_type", nargs="?")
 
+    # ------------------------------------------------------------------
+    # doctor / wtf
+    # ------------------------------------------------------------------
+    def _add_doctor_args(p):
+        p.add_argument("--report", "-r", action="store_true", default=False,
+                       help="Print all report sections in the output")
+        p.add_argument("--report-failed", "-rf", dest="report_failed",
+                       action="store_true", default=False,
+                       help="Print report sections for failed checks only")
+        p.add_argument("--exclude-packages", "-ep", dest="exclude_packages",
+                       action="store_true", default=False,
+                       help="Exclude package checks")
+        p.add_argument("--include-warnings", "-iw", dest="include_warnings",
+                       action="store_true", default=False,
+                       help="Treat warnings as failures in the summary")
+
+    def _add_doctor_subs(p):
+        dsub = p.add_subparsers(dest="subcommand")
+        hello = dsub.add_parser("hello",
+                                help="Check network connectivity between multiple hosts")
+        hello.add_argument("--topic", "-t", default="/canyouhearme",
+                           help="Topic to publish/subscribe on (default: /canyouhearme)")
+        hello.add_argument("--timeout", "-to", dest="timeout", type=float, default=10.0,
+                           help="How long to listen for responses in seconds (default: 10.0)")
+
+    doctor = sub.add_parser("doctor", help="Check ROS 2 system health")
+    _add_doctor_args(doctor)
+    _add_doctor_subs(doctor)
+
+    wtf = sub.add_parser("wtf", help="Alias for doctor (Why The Failure)")
+    _add_doctor_args(wtf)
+    _add_doctor_subs(wtf)
+
     return parser
 
 
@@ -1000,6 +1058,12 @@ DISPATCH = {
     ("actions", "info"): cmd_actions_details,
     ("actions", "send-goal"): cmd_actions_send,
     ("actions", "ls"): cmd_actions_list,
+    # doctor — canonical
+    ("doctor", None):    cmd_doctor_check,
+    ("doctor", "hello"): cmd_doctor_hello,
+    # wtf — alias for doctor
+    ("wtf",    None):    cmd_doctor_check,
+    ("wtf",    "hello"): cmd_doctor_hello,
 }
 
 

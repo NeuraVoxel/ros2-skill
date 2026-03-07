@@ -590,5 +590,154 @@ class TestLifecycleParsing(unittest.TestCase):
                             f"Handler for {key} is not callable")
 
 
+class TestDoctorParsing(unittest.TestCase):
+    """Parser argument and DISPATCH wiring tests for the doctor / wtf commands.
+
+    All tests gracefully skip if ROS 2 / rclpy is not available, matching
+    the pattern used throughout this test suite.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        if not check_rclpy_available():
+            raise unittest.SkipTest("rclpy not available - requires ROS 2 environment")
+        import ros2_cli
+        cls.ros2_cli = ros2_cli
+        cls.parser = ros2_cli.build_parser()
+
+    # ------------------------------------------------------------------
+    # doctor — top-level flags default values
+    # ------------------------------------------------------------------
+
+    def test_doctor_no_subcommand(self):
+        args = self.parser.parse_args(["doctor"])
+        self.assertEqual(args.command, "doctor")
+        self.assertIsNone(args.subcommand)
+
+    def test_doctor_report_flag(self):
+        args = self.parser.parse_args(["doctor", "--report"])
+        self.assertTrue(args.report)
+
+    def test_doctor_report_short_flag(self):
+        args = self.parser.parse_args(["doctor", "-r"])
+        self.assertTrue(args.report)
+
+    def test_doctor_report_failed_flag(self):
+        args = self.parser.parse_args(["doctor", "--report-failed"])
+        self.assertTrue(args.report_failed)
+
+    def test_doctor_report_failed_short_flag(self):
+        args = self.parser.parse_args(["doctor", "-rf"])
+        self.assertTrue(args.report_failed)
+
+    def test_doctor_exclude_packages_flag(self):
+        args = self.parser.parse_args(["doctor", "--exclude-packages"])
+        self.assertTrue(args.exclude_packages)
+
+    def test_doctor_exclude_packages_short_flag(self):
+        args = self.parser.parse_args(["doctor", "-ep"])
+        self.assertTrue(args.exclude_packages)
+
+    def test_doctor_include_warnings_flag(self):
+        args = self.parser.parse_args(["doctor", "--include-warnings"])
+        self.assertTrue(args.include_warnings)
+
+    def test_doctor_include_warnings_short_flag(self):
+        args = self.parser.parse_args(["doctor", "-iw"])
+        self.assertTrue(args.include_warnings)
+
+    def test_doctor_default_flags_are_false(self):
+        args = self.parser.parse_args(["doctor"])
+        self.assertFalse(args.report)
+        self.assertFalse(args.report_failed)
+        self.assertFalse(args.exclude_packages)
+        self.assertFalse(args.include_warnings)
+
+    # ------------------------------------------------------------------
+    # doctor hello subcommand
+    # ------------------------------------------------------------------
+
+    def test_doctor_hello(self):
+        args = self.parser.parse_args(["doctor", "hello"])
+        self.assertEqual(args.command, "doctor")
+        self.assertEqual(args.subcommand, "hello")
+
+    def test_doctor_hello_default_topic(self):
+        args = self.parser.parse_args(["doctor", "hello"])
+        self.assertEqual(args.topic, "/canyouhearme")
+
+    def test_doctor_hello_custom_topic(self):
+        args = self.parser.parse_args(["doctor", "hello", "--topic", "/my_hello"])
+        self.assertEqual(args.topic, "/my_hello")
+
+    def test_doctor_hello_short_topic(self):
+        args = self.parser.parse_args(["doctor", "hello", "-t", "/other"])
+        self.assertEqual(args.topic, "/other")
+
+    def test_doctor_hello_default_timeout(self):
+        args = self.parser.parse_args(["doctor", "hello"])
+        self.assertEqual(args.timeout, 10.0)
+
+    def test_doctor_hello_custom_timeout(self):
+        args = self.parser.parse_args(["doctor", "hello", "--timeout", "5"])
+        self.assertEqual(args.timeout, 5.0)
+
+    # ------------------------------------------------------------------
+    # wtf — mirrors doctor exactly
+    # ------------------------------------------------------------------
+
+    def test_wtf_no_subcommand(self):
+        args = self.parser.parse_args(["wtf"])
+        self.assertEqual(args.command, "wtf")
+        self.assertIsNone(args.subcommand)
+
+    def test_wtf_flags_same_as_doctor(self):
+        args = self.parser.parse_args(["wtf", "--report", "--include-warnings"])
+        self.assertTrue(args.report)
+        self.assertTrue(args.include_warnings)
+
+    def test_wtf_hello(self):
+        args = self.parser.parse_args(["wtf", "hello"])
+        self.assertEqual(args.command, "wtf")
+        self.assertEqual(args.subcommand, "hello")
+
+    def test_wtf_hello_default_topic(self):
+        args = self.parser.parse_args(["wtf", "hello"])
+        self.assertEqual(args.topic, "/canyouhearme")
+
+    # ------------------------------------------------------------------
+    # DISPATCH table wiring
+    # ------------------------------------------------------------------
+
+    def test_doctor_dispatch_keys_present(self):
+        expected = [
+            ("doctor", None),
+            ("doctor", "hello"),
+            ("wtf",    None),
+            ("wtf",    "hello"),
+        ]
+        for key in expected:
+            self.assertIn(key, self.ros2_cli.DISPATCH,
+                          f"Missing DISPATCH key: {key}")
+
+    def test_wtf_maps_to_same_handler_as_doctor(self):
+        self.assertIs(
+            self.ros2_cli.DISPATCH[("wtf", None)],
+            self.ros2_cli.DISPATCH[("doctor", None)],
+        )
+
+    def test_wtf_hello_maps_to_same_handler_as_doctor_hello(self):
+        self.assertIs(
+            self.ros2_cli.DISPATCH[("wtf", "hello")],
+            self.ros2_cli.DISPATCH[("doctor", "hello")],
+        )
+
+    def test_doctor_handlers_are_callable(self):
+        for key in [("doctor", None), ("doctor", "hello"),
+                    ("wtf", None),    ("wtf", "hello")]:
+            self.assertTrue(callable(self.ros2_cli.DISPATCH[key]),
+                            f"Handler for {key} is not callable")
+
+
 if __name__ == "__main__":
     unittest.main()

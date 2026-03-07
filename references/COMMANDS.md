@@ -2187,3 +2187,120 @@ Output (error):
 {"error": "Controller manager service not available: /controller_manager/list_controllers. Is the controller manager running?"}
 ```
 
+---
+
+## doctor / wtf
+
+Run ROS 2 system health checks. `wtf` is an exact alias for `doctor` (same flags, same subcommands, same output).
+
+**ROS 2 CLI equivalent:** `ros2 doctor` / `ros2 wtf`
+
+### doctor (default — health check)
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--report` / `-r` | false | Include all report sections in the output |
+| `--report-failed` / `-rf` | false | Include report sections for failed checks only |
+| `--exclude-packages` / `-ep` | false | Skip package-related checks |
+| `--include-warnings` / `-iw` | false | Treat warnings as failures in the overall summary |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py doctor
+python3 {baseDir}/scripts/ros2_cli.py doctor --include-warnings
+python3 {baseDir}/scripts/ros2_cli.py doctor --report-failed -ep
+python3 {baseDir}/scripts/ros2_cli.py wtf
+```
+
+Output (all passing):
+```json
+{
+  "summary": {
+    "total": 4,
+    "passed": 4,
+    "failed": 0,
+    "warned": 0,
+    "overall": "PASS"
+  },
+  "checks": [
+    {"name": "network", "status": "PASS", "errors": 0, "warnings": 0},
+    {"name": "platform", "status": "PASS", "errors": 0, "warnings": 0},
+    {"name": "rmw", "status": "PASS", "errors": 0, "warnings": 0},
+    {"name": "topic", "status": "PASS", "errors": 0, "warnings": 0}
+  ]
+}
+```
+
+Output (with warnings, `--report-failed` flag):
+```json
+{
+  "summary": {
+    "total": 4,
+    "passed": 3,
+    "failed": 0,
+    "warned": 1,
+    "overall": "WARN"
+  },
+  "checks": [
+    {"name": "network", "status": "WARN", "errors": 0, "warnings": 1},
+    {"name": "platform", "status": "PASS", "errors": 0, "warnings": 0},
+    {"name": "rmw", "status": "PASS", "errors": 0, "warnings": 0},
+    {"name": "topic", "status": "PASS", "errors": 0, "warnings": 0}
+  ],
+  "reports": []
+}
+```
+
+Output (ros2doctor not installed):
+```json
+{"error": "No ros2doctor checkers found. Is ros2doctor installed? Source ROS 2 setup.bash."}
+```
+
+---
+
+### doctor hello
+
+Check cross-host connectivity by publishing on a ROS 2 topic and sending UDP multicast packets simultaneously, then reporting which other hosts responded.
+
+**ROS 2 CLI equivalent:** `ros2 doctor hello`
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--topic TOPIC` / `-t` | `/canyouhearme` | Topic to publish and subscribe on |
+| `--timeout SECS` / `-to` | `10.0` | How long to listen for responses (seconds) |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py doctor hello
+python3 {baseDir}/scripts/ros2_cli.py doctor hello --timeout 5 --topic /ros2_hello
+python3 {baseDir}/scripts/ros2_cli.py wtf hello
+```
+
+Output (other hosts heard):
+```json
+{
+  "published": {
+    "topic": "/canyouhearme",
+    "multicast": "225.0.0.1:49150",
+    "message": "hello, it's me my-robot"
+  },
+  "ros_topic_heard_from": ["hello, it's me other-robot"],
+  "multicast_heard_from": ["192.168.1.42"],
+  "total_ros_hosts": 1,
+  "total_multicast_hosts": 1
+}
+```
+
+Output (no other hosts):
+```json
+{
+  "published": {
+    "topic": "/canyouhearme",
+    "multicast": "225.0.0.1:49150",
+    "message": "hello, it's me my-robot"
+  },
+  "ros_topic_heard_from": [],
+  "multicast_heard_from": [],
+  "total_ros_hosts": 0,
+  "total_multicast_hosts": 0
+}
+```
+

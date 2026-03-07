@@ -59,6 +59,8 @@ python3 scripts/ros2_cli.py topics subscribe /scan --duration 3
 | Actions | `list`, `details`, `type`, `send`, `cancel`, `echo`, `find` |
 | Lifecycle | `nodes`, `list`, `get`, `set` |
 | Control | `list-controller-types`, `list-controllers`, `list-hardware-components`, `list-hardware-interfaces`, `load-controller`, `unload-controller`, `configure-controller`, `reload-controller-libraries`, `set-controller-state`, `set-hardware-component-state`, `switch-controllers`, `view-controller-chains` |
+| Doctor | `check` (default), `hello` |
+| Wtf | alias for `doctor` — same commands |
 | Discord | `send-image` (in `discord_tools.py`) |
 
 All commands output JSON. See [`SKILL.md`](SKILL.md) for quick reference and [`references/COMMANDS.md`](references/COMMANDS.md) for full details with examples.

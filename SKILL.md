@@ -138,6 +138,9 @@ python3 {baseDir}/scripts/ros2_cli.py version
 | Control | `control swc` | Alias for `control switch-controllers` |
 | Control | `control view-controller-chains` | Generate Graphviz diagram of chained controllers, save to artifacts/ |
 | Control | `control vcc` | Alias for `control view-controller-chains` |
+| Doctor | `doctor [--report] [--report-failed] [--exclude-packages] [--include-warnings]` | Run ROS 2 system health checks; output JSON summary with pass/warn/fail per checker |
+| Doctor | `doctor hello [--topic TOPIC] [--timeout SECS]` | Check cross-host connectivity via ROS topic and UDP multicast |
+| Wtf | `wtf [...]` | Alias for `doctor` — identical flags and subcommands |
 
 ---
 
