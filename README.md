@@ -19,6 +19,8 @@ Agent (LLM) → ros2_cli.py → rclpy → ROS 2
 
 An AI agent skill that lets agents control ROS 2 robots through natural language. The agent reads `SKILL.md`, understands available commands, and executes `ros2_cli.py` to interact with ROS 2 directly via rclpy — no rosbridge required, perfect for on-board deployment.
 
+The long-term goal is full parity with the `ros2` CLI — every command available in a terminal, made accessible to an AI agent. Beyond that baseline, ros2-skill adds capabilities that only make sense in an agent context: goal-conditioned publishing, sensor image capture, system diagnostics, and external integrations like Discord reporting.
+
 ## Quick Start (CLI)
 
 ```bash
@@ -87,32 +89,14 @@ python3 scripts/ros2_cli.py topics message geometry_msgs/Twist
 
 See [Message Type Aliases](references/COMMANDS.md#message-type-aliases) for the full list.
 
----
-
-## Image Capture Example
-
-Capture an image from a ROS 2 topic and save to `artifacts/`:
-
-```bash
-python3 scripts/ros2_cli.py topics capture-image --topic /camera/image_raw/compressed --output test.jpg --timeout 5 --type auto
-```
-
----
-
-## Discord Send Example
-
-Send an image to a Discord channel using the CLI tool:
-
-```bash
-python3 scripts/discord_tools.py send-image --path artifacts/test.jpg --channel-id 123456789012345678 --config ~/.nanobot/config.json --delete
-```
+See [`EXAMPLES.md`](EXAMPLES.md) for usage examples including image capture and Discord integration.
 
 ---
 
 ## How It Works
 
 1. The agent platform loads `SKILL.md` into the agent's system prompt
-2. `{baseDir}` in commands is replaced with the actual skill installation path
+2. The agent platform substitutes `{baseDir}` with the actual skill installation path
 3. User asks something like "move the robot forward"
 4. Agent executes: `python3 {baseDir}/scripts/ros2_cli.py topics publish /cmd_vel ...`
 5. `ros2_cli.py` uses rclpy to communicate with ROS 2 and returns JSON
@@ -133,6 +117,8 @@ ros2-skill/
 │   ├── ros2_action.py         # Action commands
 │   ├── ros2_lifecycle.py      # Lifecycle (managed node) commands
 │   ├── ros2_interface.py      # Interface type discovery commands
+│   ├── ros2_doctor.py         # Doctor / Wtf system diagnostics
+│   ├── ros2_multicast.py      # Multicast (UDP) diagnostics
 │   ├── ros2_control.py        # Controller manager commands
 │   └── discord_tools.py       # Discord integration
 ├── references/
@@ -144,7 +130,11 @@ ros2-skill/
 ## Requirements
 
 - Python 3.10+
-- ROS 2 environment sourced (`source /opt/ros/${ROS_DISTRO}/setup.bash`)
+- ROS 2 (Humble, Iron, Jazzy, or compatible distribution), environment sourced
+
+**Optional:**
+- `opencv-python` and `numpy` — required for `topics capture-image`
+- `requests` — required for `discord_tools.py send-image`
 
 ## Testing
 
@@ -153,7 +143,7 @@ source /opt/ros/${ROS_DISTRO}/setup.bash
 python3 -m pytest tests/ -v
 ```
 
-Note: Some tests require a running ROS 2 environment.
+Tests that require a live ROS 2 environment will skip gracefully if one is not available.
 
 ## Changelog
 
