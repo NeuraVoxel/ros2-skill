@@ -4,14 +4,14 @@ All notable changes to ros2-skill will be documented in this file.
 
 ## [1.0.3] - 2026-03-08
 
-Added parameter preset commands for saving and restoring named parameter snapshots per node.
+Added parameter preset commands for saving and restoring named parameter snapshots. Presets are stored flat in `.presets/{preset}.json` (beside the skill directory, created automatically) — use descriptive names like `turtlesim_indoor` to identify node and configuration.
 
 ### Parameters
 
-- `params preset-save <node> <preset>` — save the current live parameters of a node to `.presets/{node}/{preset}.json` (beside the skill directory, created automatically); uses `ListParameters` + `GetParameters` and writes a plain `{param_name: value}` JSON file
+- `params preset-save <node> <preset>` — save the current live parameters of a node to `.presets/{preset}.json`; uses `ListParameters` + `GetParameters` and writes a plain `{param_name: value}` JSON file
 - `params preset-load <node> <preset>` — restore a named preset onto a node via `SetParameters`; reports per-parameter success and failure reasons
-- `params preset-list [node]` — list all saved presets from `.presets/`; accepts an optional node filter; no running ROS 2 graph required
-- `params preset-delete <node> <preset>` — remove a saved preset file; no running ROS 2 graph required
+- `params preset-list` — list all saved presets from `.presets/`; no arguments; no running ROS 2 graph required
+- `params preset-delete <preset>` — remove a saved preset file by name only (no node arg needed); no running ROS 2 graph required
 
 ### Internal
 

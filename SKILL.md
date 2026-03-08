@@ -105,8 +105,8 @@ python3 {baseDir}/scripts/ros2_cli.py version
 | Params | `params delete <node> <param>` | Delete a parameter |
 | Params | `params preset-save <node> <name>` | Save node parameters as a named preset |
 | Params | `params preset-load <node> <name>` | Restore a named preset onto a node |
-| Params | `params preset-list [node]` | List all saved presets |
-| Params | `params preset-delete <node> <name>` | Delete a saved preset |
+| Params | `params preset-list` | List all saved presets |
+| Params | `params preset-delete <name>` | Delete a saved preset |
 | Actions | `actions list` | List action servers |
 | Actions | `actions ls` | Alias for `actions list` |
 | Actions | `actions details <action>` | Get action goal/result/feedback fields |
@@ -673,23 +673,20 @@ python3 {baseDir}/scripts/ros2_cli.py params delete /turtlesim background_r
 
 ### params preset — Parameter Presets
 
-**Terminology:** Use preset commands when the user wants to save a configuration ("save these settings as 'indoor'"), switch between named configurations, or restore a previous parameter state. Presets are stored as JSON files in `.presets/` (beside the skill directory, created automatically) — no ROS 2 graph required for `preset-list` and `preset-delete`.
+**Terminology:** Use preset commands when the user wants to save a configuration ("save these settings as 'indoor'"), switch between named configurations, or restore a previous parameter state. Presets are stored as flat JSON files in `.presets/{preset_name}.json` (beside the skill directory, created automatically) — no ROS 2 graph required for `preset-list` and `preset-delete`. Use descriptive preset names that identify the node (e.g. `turtlesim_indoor`) since there are no per-node subdirectories.
 
 ```bash
-# Save the current parameters of /turtlesim as the 'indoor' preset
-python3 {baseDir}/scripts/ros2_cli.py params preset-save /turtlesim indoor
+# Save the current parameters of /turtlesim as the 'turtlesim_indoor' preset
+python3 {baseDir}/scripts/ros2_cli.py params preset-save /turtlesim turtlesim_indoor
 
-# List all saved presets (no node filter)
+# List all saved presets
 python3 {baseDir}/scripts/ros2_cli.py params preset-list
 
-# List presets for a specific node
-python3 {baseDir}/scripts/ros2_cli.py params preset-list /turtlesim
+# Restore the 'turtlesim_indoor' preset onto /turtlesim
+python3 {baseDir}/scripts/ros2_cli.py params preset-load /turtlesim turtlesim_indoor
 
-# Restore the 'indoor' preset onto /turtlesim
-python3 {baseDir}/scripts/ros2_cli.py params preset-load /turtlesim indoor
-
-# Delete a preset
-python3 {baseDir}/scripts/ros2_cli.py params preset-delete /turtlesim indoor
+# Delete a preset (only preset name needed — no node)
+python3 {baseDir}/scripts/ros2_cli.py params preset-delete turtlesim_indoor
 ```
 
 ### interface — Interface Type Discovery

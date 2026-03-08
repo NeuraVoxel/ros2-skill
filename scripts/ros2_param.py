@@ -510,8 +510,8 @@ def cmd_params_delete(args):
 # ---------------------------------------------------------------------------
 # Parameter preset commands
 # Presets are stored as plain {param_name: value} JSON files under
-# .presets/{node_clean}/{preset_name}.json  (beside the scripts/ directory,
-# created automatically — same pattern as the artifacts/ folder)
+# .presets/{preset_name}.json  (beside the scripts/ directory,
+# created automatically — same pattern as the .artifacts/ folder)
 # ---------------------------------------------------------------------------
 
 def _presets_base():
@@ -526,15 +526,12 @@ def cmd_params_preset_save(args):
     node_name = args.node
     if not node_name.startswith('/'):
         node_name = '/' + node_name
-    node_clean = node_name.lstrip('/').replace('/', '_')
 
     params_dict = _dump_params(node_name, args.timeout)
     if params_dict is None:
         return  # _dump_params already called output({"error": ...})
 
-    preset_dir = os.path.join(_presets_base(), node_clean)
-    os.makedirs(preset_dir, exist_ok=True)
-    preset_path = os.path.join(preset_dir, f"{args.preset}.json")
+    preset_path = os.path.join(_presets_base(), f"{args.preset}.json")
 
     with open(preset_path, 'w') as f:
         json.dump(params_dict, f, indent=2)
@@ -548,11 +545,10 @@ def cmd_params_preset_load(args):
     node_name = args.node
     if not node_name.startswith('/'):
         node_name = '/' + node_name
-    node_clean = node_name.lstrip('/').replace('/', '_')
 
-    preset_path = os.path.join(_presets_base(), node_clean, f"{args.preset}.json")
+    preset_path = os.path.join(_presets_base(), f"{args.preset}.json")
     if not os.path.exists(preset_path):
-        return output({"error": f"Preset '{args.preset}' not found for {node_name}",
+        return output({"error": f"Preset '{args.preset}' not found",
                        "path": preset_path})
 
     load_args = types.SimpleNamespace(node=node_name, params=preset_path, timeout=args.timeout)
@@ -560,42 +556,26 @@ def cmd_params_preset_load(args):
 
 
 def cmd_params_preset_list(args):
-    """List all saved presets, optionally filtered by node."""
+    """List all saved presets."""
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.presets'))
-    node_filter = getattr(args, 'node', None)
-    if node_filter:
-        if not node_filter.startswith('/'):
-            node_filter = '/' + node_filter
 
     presets = []
     if os.path.isdir(base_dir):
-        for node_dir in sorted(os.listdir(base_dir)):
-            full_node = '/' + node_dir
-            if node_filter and full_node != node_filter:
-                continue
-            node_path = os.path.join(base_dir, node_dir)
-            if os.path.isdir(node_path):
-                for fname in sorted(os.listdir(node_path)):
-                    if fname.endswith('.json'):
-                        presets.append({
-                            "node": full_node,
-                            "preset": fname[:-5],
-                            "path": os.path.join(node_path, fname),
-                        })
+        for fname in sorted(os.listdir(base_dir)):
+            if fname.endswith('.json'):
+                presets.append({
+                    "preset": fname[:-5],
+                    "path": os.path.join(base_dir, fname),
+                })
 
     output({"presets": presets, "count": len(presets)})
 
 
 def cmd_params_preset_delete(args):
     """Delete a saved preset file."""
-    node_name = args.node
-    if not node_name.startswith('/'):
-        node_name = '/' + node_name
-    node_clean = node_name.lstrip('/').replace('/', '_')
-
-    preset_path = os.path.join(_presets_base(), node_clean, f"{args.preset}.json")
+    preset_path = os.path.join(_presets_base(), f"{args.preset}.json")
     if not os.path.exists(preset_path):
-        return output({"error": f"Preset '{args.preset}' not found for {node_name}"})
+        return output({"error": f"Preset '{args.preset}' not found"})
 
     os.remove(preset_path)
-    output({"node": node_name, "preset": args.preset, "deleted": True})
+    output({"preset": args.preset, "deleted": True})

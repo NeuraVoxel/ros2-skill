@@ -944,11 +944,8 @@ def build_parser():
     p.add_argument("preset", help="Preset name (e.g. indoor)")
     p.add_argument("--timeout", type=float, default=5.0,
                    help="Timeout in seconds (default: 5)")
-    p = psub.add_parser("preset-list", help="List all saved presets")
-    p.add_argument("node", nargs="?", default=None,
-                   help="Optional node filter (e.g. /turtlesim)")
+    psub.add_parser("preset-list", help="List all saved presets")
     p = psub.add_parser("preset-delete", help="Delete a saved preset")
-    p.add_argument("node", help="Node name (e.g. /turtlesim)")
     p.add_argument("preset", help="Preset name to delete")
 
     # ------------------------------------------------------------------

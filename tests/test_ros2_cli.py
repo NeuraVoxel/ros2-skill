@@ -945,23 +945,20 @@ class TestPresetParsing(unittest.TestCase):
         self.assertEqual(args.node, "/turtlesim")
         self.assertEqual(args.preset, "indoor")
 
-    def test_preset_list_no_filter(self):
+    def test_preset_list_no_args(self):
         args = self.parser.parse_args(["params", "preset-list"])
         self.assertEqual(args.command, "params")
         self.assertEqual(args.subcommand, "preset-list")
-        self.assertIsNone(args.node)
-
-    def test_preset_list_with_node_filter(self):
-        args = self.parser.parse_args(["params", "preset-list", "/turtlesim"])
-        self.assertEqual(args.subcommand, "preset-list")
-        self.assertEqual(args.node, "/turtlesim")
+        # preset-list takes no arguments (flat storage: no node filter)
+        self.assertFalse(hasattr(args, "node"))
 
     def test_preset_delete_args(self):
-        args = self.parser.parse_args(["params", "preset-delete", "/turtlesim", "indoor"])
+        # Flat storage: preset-delete only needs the preset name, no node arg
+        args = self.parser.parse_args(["params", "preset-delete", "indoor"])
         self.assertEqual(args.command, "params")
         self.assertEqual(args.subcommand, "preset-delete")
-        self.assertEqual(args.node, "/turtlesim")
         self.assertEqual(args.preset, "indoor")
+        self.assertFalse(hasattr(args, "node"))
 
     def test_preset_save_and_load_are_different_handlers(self):
         self.assertIsNot(
