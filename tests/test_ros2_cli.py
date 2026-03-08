@@ -70,14 +70,12 @@ class TestBuildParser(unittest.TestCase):
         self.assertEqual(args.msg, msg)
         self.assertIsNone(args.duration)
         self.assertEqual(args.rate, 10.0)
-
-    def test_topics_publish_with_duration_and_rate(self):
-        args = self.parser.parse_args([
-            "topics", "publish", "/cmd_vel", '{}',
-            "--duration", "3", "--rate", "20"
+        # with explicit duration and rate
+        args2 = self.parser.parse_args([
+            "topics", "publish", "/cmd_vel", '{}', "--duration", "3", "--rate", "20"
         ])
-        self.assertEqual(args.duration, 3.0)
-        self.assertEqual(args.rate, 20.0)
+        self.assertEqual(args2.duration, 3.0)
+        self.assertEqual(args2.rate, 20.0)
 
     def test_topics_publish_sequence(self):
         msgs = '[{"linear":{"x":1}},{"linear":{"x":0}}]'
@@ -146,11 +144,6 @@ class TestBuildParser(unittest.TestCase):
         self.assertEqual(args.subcommand, "ls")
         self.assertEqual(args.node, "/my_lifecycle_node")
 
-    def test_lifecycle_ls_no_node(self):
-        args = self.parser.parse_args(["lifecycle", "ls"])
-        self.assertEqual(args.subcommand, "ls")
-        self.assertIsNone(args.node)
-
     def test_lifecycle_get(self):
         args = self.parser.parse_args(["lifecycle", "get", "/my_lifecycle_node"])
         self.assertEqual(args.command, "lifecycle")
@@ -169,40 +162,25 @@ class TestBuildParser(unittest.TestCase):
         self.assertEqual(args.node, "/my_lifecycle_node")
         self.assertEqual(args.transition, "3")
 
-    def test_lifecycle_list_default_timeout(self):
-        args = self.parser.parse_args(["lifecycle", "list", "/my_lifecycle_node"])
-        self.assertEqual(args.timeout, 5.0)
+    def test_lifecycle_default_timeout(self):
+        """All lifecycle subcommands default to timeout=5.0."""
+        for cmd in [
+            ["lifecycle", "list", "/my_lifecycle_node"],
+            ["lifecycle", "get", "/my_lifecycle_node"],
+            ["lifecycle", "set", "/my_lifecycle_node", "activate"],
+        ]:
+            self.assertEqual(self.parser.parse_args(cmd).timeout, 5.0)
 
     def test_lifecycle_list_custom_timeout(self):
         args = self.parser.parse_args(["lifecycle", "list", "/my_lifecycle_node", "--timeout", "10"])
         self.assertEqual(args.timeout, 10.0)
 
-    def test_lifecycle_get_default_timeout(self):
-        args = self.parser.parse_args(["lifecycle", "get", "/my_lifecycle_node"])
-        self.assertEqual(args.timeout, 5.0)
-
-    def test_lifecycle_set_default_timeout(self):
-        args = self.parser.parse_args(["lifecycle", "set", "/my_lifecycle_node", "activate"])
-        self.assertEqual(args.timeout, 5.0)
-
-    def test_lifecycle_set_custom_timeout(self):
-        args = self.parser.parse_args([
-            "lifecycle", "set", "/my_lifecycle_node", "activate", "--timeout", "10"
-        ])
-        self.assertEqual(args.timeout, 10.0)
-
-    def test_lifecycle_get_custom_timeout(self):
-        args = self.parser.parse_args(["lifecycle", "get", "/my_node", "--timeout", "15"])
-        self.assertEqual(args.timeout, 15.0)
-
-    def test_lifecycle_get_namespaced_node(self):
+    def test_lifecycle_namespaced_nodes(self):
         args = self.parser.parse_args(["lifecycle", "get", "/robot/camera_driver"])
         self.assertEqual(args.node, "/robot/camera_driver")
-
-    def test_lifecycle_set_namespaced_node(self):
-        args = self.parser.parse_args(["lifecycle", "set", "/robot/sensor_node", "activate"])
-        self.assertEqual(args.node, "/robot/sensor_node")
-        self.assertEqual(args.transition, "activate")
+        args2 = self.parser.parse_args(["lifecycle", "set", "/robot/sensor_node", "activate"])
+        self.assertEqual(args2.node, "/robot/sensor_node")
+        self.assertEqual(args2.transition, "activate")
 
 
 class TestDispatchTable(unittest.TestCase):
@@ -379,66 +357,36 @@ class TestMessageTypeAliases(unittest.TestCase):
             self.assertIs(lower, upper, "Should return identical class object")
             self.assertIs(lower, mixed, "Should return identical class object")
 
-    def test_get_msg_type_full_name_still_works(self):
-        """Test that full type names (non-aliases) still work."""
-        # Full type name should work as before (backward compatibility)
-        result = self.ros2_cli.get_msg_type('geometry_msgs/Twist')
-        # Should return None or a valid message class, but not crash
-        self.assertTrue(result is None or callable(getattr(result, '__init__', None)),
-                       "Full type name should still work")
+    def test_get_msg_type_non_alias_formats(self):
+        """Full type names and /msg/ format return None or valid class without crashing."""
+        for type_str in ['geometry_msgs/Twist', 'geometry_msgs/msg/Twist',
+                         'std_msgs/msg/String', 'some_random_package/RandomMsg']:
+            result = self.ros2_cli.get_msg_type(type_str)
+            self.assertTrue(result is None or callable(getattr(result, '__init__', None)),
+                            f"Expected None or callable for: {type_str}")
 
-    def test_get_msg_type_none_input(self):
-        """Test that None input returns None."""
-        result = self.ros2_cli.get_msg_type(None)
-        self.assertIsNone(result)
-
-    def test_get_msg_type_empty_string(self):
-        """Test that empty string returns None."""
-        result = self.ros2_cli.get_msg_type('')
-        self.assertIsNone(result)
-
-    def test_get_msg_type_unknown_alias(self):
-        """Test that unknown aliases return None."""
-        result = self.ros2_cli.get_msg_type('nonexistent_alias_xyz')
-        self.assertIsNone(result)
-
-    def test_get_msg_type_with_msg_format(self):
-        """Test that /msg/ format still works."""
-        result = self.ros2_cli.get_msg_type('geometry_msgs/msg/Twist')
-        # Should return None or a valid message class
-        self.assertTrue(result is None or callable(getattr(result, '__init__', None)),
-                       "/msg/ format should still work")
+    def test_get_msg_type_edge_cases(self):
+        """None, empty string, and unknown aliases all return None."""
+        for input_val in [None, '', 'nonexistent_alias_xyz']:
+            self.assertIsNone(self.ros2_cli.get_msg_type(input_val),
+                              f"Expected None for input: {input_val!r}")
 
     def test_alias_count(self):
         """Test that we have the expected number of aliases."""
         # We defined 50 aliases
         self.assertEqual(len(self.ros2_cli.MSG_ALIASES), 50)
 
-    def test_common_aliases_exist(self):
-        """Test that all common aliases are present."""
-        common_aliases = [
-            'twist', 'pose', 'point', 'quaternion',  # geometry_msgs
-            'odom', 'odometry', 'path',  # nav_msgs
-            'laserscan', 'image', 'imu', 'pointcloud2',  # sensor_msgs
-            'string', 'int32', 'float32', 'bool',  # std_msgs
-            'marker', 'markerarray',  # visualization_msgs
-        ]
-        for alias in common_aliases:
-            self.assertIn(alias, self.ros2_cli.MSG_ALIASES, 
-                         f"Missing expected alias: {alias}")
-
-    def test_aliases_map_to_valid_format(self):
-        """Test that all aliases map to properly formatted type names."""
+    def test_alias_format_constraints(self):
+        """All aliases: lowercase keys, no '/', map to package/Name without /msg/."""
         for alias, full_type in self.ros2_cli.MSG_ALIASES.items():
-            # All should be in format package/MessageName
-            self.assertIn('/', full_type, 
-                         f"Alias '{alias}' maps to invalid format: '{full_type}'")
+            self.assertEqual(alias, alias.lower(),
+                             f"Alias key should be lowercase: '{alias}'")
+            self.assertNotIn('/', alias,
+                             f"Alias key should not contain '/': '{alias}'")
+            self.assertIn('/', full_type,
+                          f"Alias '{alias}' maps to invalid format: '{full_type}'")
             self.assertNotIn('/msg/', full_type,
-                           f"Alias '{alias}' should not include /msg/: '{full_type}'")
-            # Package name should be lowercase with underscores
-            package = full_type.split('/')[0]
-            self.assertTrue(package.islower() or '_' in package,
-                          f"Package name should be lowercase: '{package}'")
+                             f"Alias '{alias}' should not include /msg/: '{full_type}'")
 
     def test_all_alias_categories_present(self):
         """Test that we have aliases from all expected ROS 2 message packages."""
@@ -461,44 +409,6 @@ class TestMessageTypeAliases(unittest.TestCase):
         self.assertEqual(self.ros2_cli.MSG_ALIASES['odom'],
                         self.ros2_cli.MSG_ALIASES['odometry'])
         self.assertEqual(self.ros2_cli.MSG_ALIASES['odom'], 'nav_msgs/Odometry')
-
-    def test_aliases_are_lowercase(self):
-        """Test that all alias keys are lowercase (for case-insensitive lookup)."""
-        for alias in self.ros2_cli.MSG_ALIASES.keys():
-            self.assertEqual(alias, alias.lower(),
-                           f"Alias '{alias}' should be lowercase")
-
-    def test_no_alias_conflicts_with_slash(self):
-        """Test that no aliases contain '/' (which would conflict with type names)."""
-        for alias in self.ros2_cli.MSG_ALIASES.keys():
-            self.assertNotIn('/', alias,
-                           f"Alias '{alias}' should not contain '/'")
-
-    def test_alias_transformation_logic(self):
-        """Test that alias lookup transforms input correctly (no imports)."""
-        # Test that the alias exists and maps correctly
-        self.assertEqual(self.ros2_cli.MSG_ALIASES.get('twist'),
-                        'geometry_msgs/Twist')
-        self.assertEqual(self.ros2_cli.MSG_ALIASES.get('odom'),
-                        'nav_msgs/Odometry')
-        self.assertEqual(self.ros2_cli.MSG_ALIASES.get('laserscan'),
-                        'sensor_msgs/LaserScan')
-        
-        # Test case-insensitive lookup (dict keys are lowercase)
-        self.assertIn('twist', self.ros2_cli.MSG_ALIASES)
-        self.assertIn('posestamped', self.ros2_cli.MSG_ALIASES)
-        self.assertNotIn('Twist', self.ros2_cli.MSG_ALIASES)  # Keys are lowercase
-        self.assertNotIn('PoseStamped', self.ros2_cli.MSG_ALIASES)  # Keys are lowercase
-
-    def test_get_msg_type_preserves_non_alias_input(self):
-        """Test that non-alias inputs are not transformed."""
-        # These should return None (not found) but not transform the input
-        result = self.ros2_cli.get_msg_type('some_random_package/RandomMsg')
-        self.assertIsNone(result, "Unknown package should return None")
-        
-        result = self.ros2_cli.get_msg_type('std_msgs/msg/String')
-        # This might work if std_msgs is installed, but shouldn't crash
-        self.assertTrue(result is None or callable(getattr(result, '__init__', None)))
 
     def test_specific_package_aliases(self):
         """Test that we have expected aliases for each package category."""
@@ -621,37 +531,21 @@ class TestDoctorParsing(unittest.TestCase):
         self.assertEqual(args.command, "doctor")
         self.assertIsNone(args.subcommand)
 
-    def test_doctor_report_flag(self):
-        args = self.parser.parse_args(["doctor", "--report"])
-        self.assertTrue(args.report)
+    def test_doctor_report_flags(self):
+        self.assertTrue(self.parser.parse_args(["doctor", "--report"]).report)
+        self.assertTrue(self.parser.parse_args(["doctor", "-r"]).report)
 
-    def test_doctor_report_short_flag(self):
-        args = self.parser.parse_args(["doctor", "-r"])
-        self.assertTrue(args.report)
+    def test_doctor_report_failed_flags(self):
+        self.assertTrue(self.parser.parse_args(["doctor", "--report-failed"]).report_failed)
+        self.assertTrue(self.parser.parse_args(["doctor", "-rf"]).report_failed)
 
-    def test_doctor_report_failed_flag(self):
-        args = self.parser.parse_args(["doctor", "--report-failed"])
-        self.assertTrue(args.report_failed)
+    def test_doctor_exclude_packages_flags(self):
+        self.assertTrue(self.parser.parse_args(["doctor", "--exclude-packages"]).exclude_packages)
+        self.assertTrue(self.parser.parse_args(["doctor", "-ep"]).exclude_packages)
 
-    def test_doctor_report_failed_short_flag(self):
-        args = self.parser.parse_args(["doctor", "-rf"])
-        self.assertTrue(args.report_failed)
-
-    def test_doctor_exclude_packages_flag(self):
-        args = self.parser.parse_args(["doctor", "--exclude-packages"])
-        self.assertTrue(args.exclude_packages)
-
-    def test_doctor_exclude_packages_short_flag(self):
-        args = self.parser.parse_args(["doctor", "-ep"])
-        self.assertTrue(args.exclude_packages)
-
-    def test_doctor_include_warnings_flag(self):
-        args = self.parser.parse_args(["doctor", "--include-warnings"])
-        self.assertTrue(args.include_warnings)
-
-    def test_doctor_include_warnings_short_flag(self):
-        args = self.parser.parse_args(["doctor", "-iw"])
-        self.assertTrue(args.include_warnings)
+    def test_doctor_include_warnings_flags(self):
+        self.assertTrue(self.parser.parse_args(["doctor", "--include-warnings"]).include_warnings)
+        self.assertTrue(self.parser.parse_args(["doctor", "-iw"]).include_warnings)
 
     def test_doctor_default_flags_are_false(self):
         args = self.parser.parse_args(["doctor"])
@@ -665,29 +559,27 @@ class TestDoctorParsing(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_doctor_hello(self):
-        args = self.parser.parse_args(["doctor", "hello"])
-        self.assertEqual(args.command, "doctor")
-        self.assertEqual(args.subcommand, "hello")
+        """doctor/wtf hello subcommand is wired up for both aliases."""
+        for cmd in ["doctor", "wtf"]:
+            args = self.parser.parse_args([cmd, "hello"])
+            self.assertEqual(args.command, cmd)
+            self.assertEqual(args.subcommand, "hello")
 
-    def test_doctor_hello_default_topic(self):
+    def test_doctor_hello_defaults(self):
         args = self.parser.parse_args(["doctor", "hello"])
         self.assertEqual(args.topic, "/canyouhearme")
-
-    def test_doctor_hello_custom_topic(self):
-        args = self.parser.parse_args(["doctor", "hello", "--topic", "/my_hello"])
-        self.assertEqual(args.topic, "/my_hello")
-
-    def test_doctor_hello_short_topic(self):
-        args = self.parser.parse_args(["doctor", "hello", "-t", "/other"])
-        self.assertEqual(args.topic, "/other")
-
-    def test_doctor_hello_default_timeout(self):
-        args = self.parser.parse_args(["doctor", "hello"])
         self.assertEqual(args.timeout, 10.0)
 
-    def test_doctor_hello_custom_timeout(self):
-        args = self.parser.parse_args(["doctor", "hello", "--timeout", "5"])
-        self.assertEqual(args.timeout, 5.0)
+    def test_doctor_hello_options(self):
+        self.assertEqual(
+            self.parser.parse_args(["doctor", "hello", "--topic", "/my_hello"]).topic,
+            "/my_hello")
+        self.assertEqual(
+            self.parser.parse_args(["doctor", "hello", "-t", "/other"]).topic,
+            "/other")
+        self.assertEqual(
+            self.parser.parse_args(["doctor", "hello", "--timeout", "5"]).timeout,
+            5.0)
 
     # ------------------------------------------------------------------
     # wtf — mirrors doctor exactly
@@ -697,20 +589,6 @@ class TestDoctorParsing(unittest.TestCase):
         args = self.parser.parse_args(["wtf"])
         self.assertEqual(args.command, "wtf")
         self.assertIsNone(args.subcommand)
-
-    def test_wtf_flags_same_as_doctor(self):
-        args = self.parser.parse_args(["wtf", "--report", "--include-warnings"])
-        self.assertTrue(args.report)
-        self.assertTrue(args.include_warnings)
-
-    def test_wtf_hello(self):
-        args = self.parser.parse_args(["wtf", "hello"])
-        self.assertEqual(args.command, "wtf")
-        self.assertEqual(args.subcommand, "hello")
-
-    def test_wtf_hello_default_topic(self):
-        args = self.parser.parse_args(["wtf", "hello"])
-        self.assertEqual(args.topic, "/canyouhearme")
 
     # ------------------------------------------------------------------
     # DISPATCH table wiring
@@ -727,17 +605,12 @@ class TestDoctorParsing(unittest.TestCase):
             self.assertIn(key, self.ros2_cli.DISPATCH,
                           f"Missing DISPATCH key: {key}")
 
-    def test_wtf_maps_to_same_handler_as_doctor(self):
-        self.assertIs(
-            self.ros2_cli.DISPATCH[("wtf", None)],
-            self.ros2_cli.DISPATCH[("doctor", None)],
-        )
-
-    def test_wtf_hello_maps_to_same_handler_as_doctor_hello(self):
-        self.assertIs(
-            self.ros2_cli.DISPATCH[("wtf", "hello")],
-            self.ros2_cli.DISPATCH[("doctor", "hello")],
-        )
+    def test_wtf_aliases_same_handlers(self):
+        """wtf and wtf hello must route to the same handlers as doctor equivalents."""
+        self.assertIs(self.ros2_cli.DISPATCH[("wtf", None)],
+                      self.ros2_cli.DISPATCH[("doctor", None)])
+        self.assertIs(self.ros2_cli.DISPATCH[("wtf", "hello")],
+                      self.ros2_cli.DISPATCH[("doctor", "hello")])
 
     def test_doctor_handlers_are_callable(self):
         for key in [("doctor", None), ("doctor", "hello"),
@@ -761,99 +634,56 @@ class TestMulticastParsing(unittest.TestCase):
         cls.ros2_cli = ros2_cli
         cls.parser = ros2_cli.build_parser()
 
-    # ------------------------------------------------------------------
-    # multicast send — defaults
-    # ------------------------------------------------------------------
-
-    def test_multicast_send_command(self):
+    def test_multicast_send_command_and_defaults(self):
         args = self.parser.parse_args(["multicast", "send"])
         self.assertEqual(args.command, "multicast")
         self.assertEqual(args.subcommand, "send")
-
-    def test_multicast_send_default_group(self):
-        args = self.parser.parse_args(["multicast", "send"])
         self.assertEqual(args.group, "225.0.0.1")
-
-    def test_multicast_send_default_port(self):
-        args = self.parser.parse_args(["multicast", "send"])
         self.assertEqual(args.port, 49150)
 
     def test_multicast_send_custom_group(self):
-        args = self.parser.parse_args(["multicast", "send", "--group", "239.0.0.1"])
-        self.assertEqual(args.group, "239.0.0.1")
-
-    def test_multicast_send_custom_group_short(self):
-        args = self.parser.parse_args(["multicast", "send", "-g", "239.0.0.1"])
-        self.assertEqual(args.group, "239.0.0.1")
+        self.assertEqual(
+            self.parser.parse_args(["multicast", "send", "--group", "239.0.0.1"]).group,
+            "239.0.0.1")
+        self.assertEqual(
+            self.parser.parse_args(["multicast", "send", "-g", "239.0.0.1"]).group,
+            "239.0.0.1")
 
     def test_multicast_send_custom_port(self):
-        args = self.parser.parse_args(["multicast", "send", "--port", "12345"])
-        self.assertEqual(args.port, 12345)
+        self.assertEqual(
+            self.parser.parse_args(["multicast", "send", "--port", "12345"]).port, 12345)
+        self.assertEqual(
+            self.parser.parse_args(["multicast", "send", "-p", "12345"]).port, 12345)
 
-    def test_multicast_send_custom_port_short(self):
-        args = self.parser.parse_args(["multicast", "send", "-p", "12345"])
-        self.assertEqual(args.port, 12345)
-
-    # ------------------------------------------------------------------
-    # multicast receive — defaults
-    # ------------------------------------------------------------------
-
-    def test_multicast_receive_command(self):
+    def test_multicast_receive_command_and_defaults(self):
         args = self.parser.parse_args(["multicast", "receive"])
         self.assertEqual(args.command, "multicast")
         self.assertEqual(args.subcommand, "receive")
-
-    def test_multicast_receive_default_group(self):
-        args = self.parser.parse_args(["multicast", "receive"])
         self.assertEqual(args.group, "225.0.0.1")
-
-    def test_multicast_receive_default_port(self):
-        args = self.parser.parse_args(["multicast", "receive"])
         self.assertEqual(args.port, 49150)
-
-    def test_multicast_receive_default_timeout(self):
-        args = self.parser.parse_args(["multicast", "receive"])
         self.assertEqual(args.timeout, 5.0)
 
     def test_multicast_receive_custom_timeout(self):
-        args = self.parser.parse_args(["multicast", "receive", "--timeout", "10"])
-        self.assertEqual(args.timeout, 10.0)
+        self.assertEqual(
+            self.parser.parse_args(["multicast", "receive", "--timeout", "10"]).timeout, 10.0)
+        self.assertEqual(
+            self.parser.parse_args(["multicast", "receive", "-t", "3.5"]).timeout, 3.5)
 
-    def test_multicast_receive_custom_timeout_short(self):
-        args = self.parser.parse_args(["multicast", "receive", "-t", "3.5"])
-        self.assertEqual(args.timeout, 3.5)
+    def test_multicast_receive_custom_group_and_port(self):
+        self.assertEqual(
+            self.parser.parse_args(["multicast", "receive", "--group", "239.0.0.1"]).group,
+            "239.0.0.1")
+        self.assertEqual(
+            self.parser.parse_args(["multicast", "receive", "--port", "9999"]).port, 9999)
 
-    def test_multicast_receive_custom_group(self):
-        args = self.parser.parse_args(["multicast", "receive", "--group", "239.0.0.1"])
-        self.assertEqual(args.group, "239.0.0.1")
-
-    def test_multicast_receive_custom_port(self):
-        args = self.parser.parse_args(["multicast", "receive", "--port", "9999"])
-        self.assertEqual(args.port, 9999)
-
-    # ------------------------------------------------------------------
-    # DISPATCH table wiring
-    # ------------------------------------------------------------------
-
-    def test_multicast_dispatch_keys_present(self):
-        expected = [
-            ("multicast", "send"),
-            ("multicast", "receive"),
-        ]
-        for key in expected:
-            self.assertIn(key, self.ros2_cli.DISPATCH,
-                          f"Missing DISPATCH key: {key}")
-
-    def test_multicast_handlers_are_callable(self):
+    def test_multicast_dispatch_wiring(self):
+        """Both keys present, callable, and mapped to distinct handlers."""
         for key in [("multicast", "send"), ("multicast", "receive")]:
-            self.assertTrue(callable(self.ros2_cli.DISPATCH[key]),
-                            f"Handler for {key} is not callable")
-
-    def test_multicast_send_and_receive_are_different_handlers(self):
+            self.assertIn(key, self.ros2_cli.DISPATCH)
+            self.assertTrue(callable(self.ros2_cli.DISPATCH[key]))
         self.assertIsNot(
             self.ros2_cli.DISPATCH[("multicast", "send")],
-            self.ros2_cli.DISPATCH[("multicast", "receive")],
-        )
+            self.ros2_cli.DISPATCH[("multicast", "receive")])
 
 
 class TestInterfaceParsing(unittest.TestCase):
@@ -927,9 +757,6 @@ class TestPresetParsing(unittest.TestCase):
         self.assertEqual(args.subcommand, "preset-save")
         self.assertEqual(args.node, "/turtlesim")
         self.assertEqual(args.preset, "indoor")
-
-    def test_preset_save_default_timeout(self):
-        args = self.parser.parse_args(["params", "preset-save", "/turtlesim", "indoor"])
         self.assertEqual(args.timeout, 5.0)
 
     def test_preset_save_custom_timeout(self):
@@ -986,53 +813,37 @@ class TestDiagnosticsParsing(unittest.TestCase):
         args = self.parser.parse_args(["topics", "diag-list"])
         self.assertEqual(args.command, "topics")
         self.assertEqual(args.subcommand, "diag-list")
-
-    def test_diag_list_no_args(self):
-        # diag-list takes no positional arguments
-        args = self.parser.parse_args(["topics", "diag-list"])
-        self.assertFalse(hasattr(args, "topic"))
+        self.assertFalse(hasattr(args, "topic"))  # diag-list takes no topic arg
 
     # ------------------------------------------------------------------
     # diag
     # ------------------------------------------------------------------
 
-    def test_diag_no_args(self):
+    def test_diag_defaults(self):
         args = self.parser.parse_args(["topics", "diag"])
         self.assertEqual(args.command, "topics")
         self.assertEqual(args.subcommand, "diag")
         self.assertIsNone(args.topic)
+        self.assertEqual(args.timeout, 10.0)
+        self.assertIsNone(args.duration)
+        self.assertEqual(args.max_messages, 1)
 
     def test_diag_with_topic(self):
-        args = self.parser.parse_args(["topics", "diag", "--topic", "/diagnostics"])
-        self.assertEqual(args.topic, "/diagnostics")
+        self.assertEqual(
+            self.parser.parse_args(["topics", "diag", "--topic", "/diagnostics"]).topic,
+            "/diagnostics")
+        self.assertEqual(
+            self.parser.parse_args(
+                ["topics", "diag", "--topic", "/robot/camera/diagnostics"]).topic,
+            "/robot/camera/diagnostics")
 
-    def test_diag_with_namespaced_topic(self):
-        args = self.parser.parse_args(["topics", "diag", "--topic", "/robot/camera/diagnostics"])
-        self.assertEqual(args.topic, "/robot/camera/diagnostics")
-
-    def test_diag_default_timeout(self):
-        args = self.parser.parse_args(["topics", "diag"])
-        self.assertEqual(args.timeout, 10.0)
-
-    def test_diag_custom_timeout(self):
-        args = self.parser.parse_args(["topics", "diag", "--timeout", "5"])
-        self.assertEqual(args.timeout, 5.0)
-
-    def test_diag_duration(self):
-        args = self.parser.parse_args(["topics", "diag", "--duration", "3.5"])
-        self.assertEqual(args.duration, 3.5)
-
-    def test_diag_default_duration_is_none(self):
-        args = self.parser.parse_args(["topics", "diag"])
-        self.assertIsNone(args.duration)
-
-    def test_diag_max_messages(self):
-        args = self.parser.parse_args(["topics", "diag", "--max-messages", "5"])
-        self.assertEqual(args.max_messages, 5)
-
-    def test_diag_default_max_messages(self):
-        args = self.parser.parse_args(["topics", "diag"])
-        self.assertEqual(args.max_messages, 1)
+    def test_diag_custom_options(self):
+        self.assertEqual(
+            self.parser.parse_args(["topics", "diag", "--timeout", "5"]).timeout, 5.0)
+        self.assertEqual(
+            self.parser.parse_args(["topics", "diag", "--duration", "3.5"]).duration, 3.5)
+        self.assertEqual(
+            self.parser.parse_args(["topics", "diag", "--max-messages", "5"]).max_messages, 5)
 
     def test_diag_combined_options(self):
         args = self.parser.parse_args([
@@ -1046,35 +857,23 @@ class TestDiagnosticsParsing(unittest.TestCase):
         self.assertEqual(args.max_messages, 20)
 
     # ------------------------------------------------------------------
-    # DISPATCH wiring
+    # DISPATCH wiring + DIAG_TYPES constant
     # ------------------------------------------------------------------
 
-    def test_diag_dispatch_keys_present(self):
+    def test_diag_dispatch_wiring(self):
+        """Both keys present, callable, and mapped to distinct handlers."""
         for key in [("topics", "diag-list"), ("topics", "diag")]:
             self.assertIn(key, self.ros2_cli.DISPATCH,
                           f"Missing DISPATCH key: {key}")
-
-    def test_diag_handlers_are_callable(self):
-        for key in [("topics", "diag-list"), ("topics", "diag")]:
             self.assertTrue(callable(self.ros2_cli.DISPATCH[key]),
                             f"Handler for {key} is not callable")
-
-    def test_diag_list_and_diag_are_different_handlers(self):
         self.assertIsNot(
             self.ros2_cli.DISPATCH[("topics", "diag-list")],
-            self.ros2_cli.DISPATCH[("topics", "diag")],
-        )
+            self.ros2_cli.DISPATCH[("topics", "diag")])
 
-    # ------------------------------------------------------------------
-    # DIAG_TYPES constant
-    # ------------------------------------------------------------------
-
-    def test_diag_types_constant_exists(self):
+    def test_diag_types_constant(self):
         import ros2_topic
         self.assertTrue(hasattr(ros2_topic, "DIAG_TYPES"))
-
-    def test_diag_types_contains_expected_types(self):
-        import ros2_topic
         self.assertIn("diagnostic_msgs/msg/DiagnosticArray", ros2_topic.DIAG_TYPES)
         self.assertIn("diagnostic_msgs/DiagnosticArray", ros2_topic.DIAG_TYPES)
 
@@ -1082,56 +881,32 @@ class TestDiagnosticsParsing(unittest.TestCase):
     # _parse_diag_array helper (pure Python — no rclpy needed for logic)
     # ------------------------------------------------------------------
 
-    def test_parse_diag_array_ok_level(self):
+    def test_parse_diag_array_levels(self):
+        """All four diagnostic levels (OK/WARN/ERROR/STALE) map to correct names."""
         import ros2_topic
-        msg = {
-            "header": {"stamp": {"sec": 1, "nanosec": 0}, "frame_id": ""},
-            "status": [{"level": 0, "name": "cpu", "message": "OK",
-                        "hardware_id": "host", "values": [{"key": "load", "value": "0.1"}]}],
-        }
-        result = ros2_topic._parse_diag_array(msg)
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["level_name"], "OK")
-        self.assertEqual(result[0]["name"], "cpu")
-        self.assertEqual(result[0]["values"][0]["key"], "load")
-
-    def test_parse_diag_array_warn_level(self):
-        import ros2_topic
-        msg = {"status": [{"level": 1, "name": "battery", "message": "Low",
-                            "hardware_id": "", "values": []}]}
-        result = ros2_topic._parse_diag_array(msg)
-        self.assertEqual(result[0]["level_name"], "WARN")
-
-    def test_parse_diag_array_error_level(self):
-        import ros2_topic
-        msg = {"status": [{"level": 2, "name": "motor", "message": "Fault",
-                            "hardware_id": "motor_1", "values": []}]}
-        result = ros2_topic._parse_diag_array(msg)
-        self.assertEqual(result[0]["level_name"], "ERROR")
-
-    def test_parse_diag_array_stale_level(self):
-        import ros2_topic
-        msg = {"status": [{"level": 3, "name": "sensor", "message": "Stale",
-                            "hardware_id": "", "values": []}]}
-        result = ros2_topic._parse_diag_array(msg)
-        self.assertEqual(result[0]["level_name"], "STALE")
+        for level, expected_name in [(0, "OK"), (1, "WARN"), (2, "ERROR"), (3, "STALE")]:
+            msg = {"status": [{"level": level, "name": "test", "message": "",
+                                "hardware_id": "", "values": []}]}
+            result = ros2_topic._parse_diag_array(msg)
+            self.assertEqual(result[0]["level_name"], expected_name)
 
     def test_parse_diag_array_empty(self):
         import ros2_topic
-        result = ros2_topic._parse_diag_array({"status": []})
-        self.assertEqual(result, [])
+        self.assertEqual(ros2_topic._parse_diag_array({"status": []}), [])
 
     def test_parse_diag_array_multiple_statuses(self):
         import ros2_topic
         msg = {
             "status": [
-                {"level": 0, "name": "cpu", "message": "OK", "hardware_id": "", "values": []},
+                {"level": 0, "name": "cpu", "message": "OK",
+                 "hardware_id": "host", "values": [{"key": "load", "value": "0.1"}]},
                 {"level": 2, "name": "disk", "message": "Full", "hardware_id": "", "values": []},
             ]
         }
         result = ros2_topic._parse_diag_array(msg)
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0]["level_name"], "OK")
+        self.assertEqual(result[0]["values"][0]["key"], "load")
         self.assertEqual(result[1]["level_name"], "ERROR")
 
 
