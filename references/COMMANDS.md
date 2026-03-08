@@ -4,11 +4,44 @@ Full reference for all `ros2_cli.py` commands with arguments, options, ROS 2 CLI
 
 All commands output JSON. Errors return `{"error": "..."}`.
 
-Commands marked ★ are agent-only features — they have no equivalent in the standard `ros2` CLI. They are: `topics capture-image`, `discord_tools.py send-image`, `topics diag-list`, `topics diag`, `topics battery-list`, `topics battery`, `topics publish-until`, and `params preset-*`.
+---
+
+## Agent Features
+
+Commands that go beyond standard `ros2` CLI parity — designed specifically for AI agents operating on mobile robots.
 
 ---
 
-## ★ topics capture-image
+## estop
+
+Emergency stop for mobile robots. Auto-detects the velocity command topic and message type, then publishes zero velocity.
+
+**Note:** For mobile robots only (differential drive, omnidirectional, etc.). Does NOT work for robotic arms or manipulators.
+
+**ROS 2 CLI equivalent:** `ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist '{}'`
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--topic TOPIC` | auto-detect | Override velocity topic (auto-detected by scanning for `Twist`/`TwistStamped` topics; prefers `cmd_vel`-named topics when multiple exist) |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py estop
+python3 {baseDir}/scripts/ros2_cli.py estop --topic /cmd_vel_nav
+```
+
+Output:
+```json
+{"success": true, "topic": "/cmd_vel", "type": "geometry_msgs/Twist", "message": "Emergency stop activated (mobile robot stopped)"}
+```
+
+Error (no velocity topic found):
+```json
+{"error": "Could not find velocity command topic", "hint": "This command is for mobile robots only (not arms). Ensure the robot has a /cmd_vel topic."}
+```
+
+---
+
+## topics capture-image
 
 Capture an image from a ROS 2 image topic and save to the .artifacts/ folder.
 
@@ -35,7 +68,7 @@ Output (error):
 
 ---
 
-## ★ discord_tools.py send-image
+## discord_tools.py send-image
 
 Send an image file to a Discord channel. The bot token is read from the config file specified by `--config` at `config["channels"]["discord"]["token"]`. Both the config path and channel ID must be provided as CLI arguments by the agent.
 
@@ -78,6 +111,398 @@ Error: --channel-id argument is required
 
 ---
 
+## topics publish-sequence `<topic>` `<json_messages>` `<json_durations>` [options] / topics pub-seq
+
+Publish a sequence of messages in order. Each message is repeated at `--rate` Hz for its corresponding duration before moving to the next. Arrays must be the same length. The final message should usually be all-zeros to stop the robot.
+
+**Aliases:** `topics pub-seq`
+
+**ROS 2 CLI equivalent:** No direct equivalent (requires scripting multiple `ros2 topic pub` calls)
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `topic` | Yes | Topic to publish to |
+| `json_messages` | Yes | JSON array of message objects, published in order |
+| `json_durations` | Yes | JSON array of durations in seconds — one per message |
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--msg-type TYPE` | auto-detect | Override message type |
+| `--rate HZ` | `10` | Publish rate in Hz for each step |
+
+**Move forward 3 seconds, then stop:**
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics publish-sequence /cmd_vel \
+  '[{"linear":{"x":1.0,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0}},{"linear":{"x":0,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0}}]' \
+  '[3.0, 0.5]'
+```
+
+**Forward 2s, turn left 1s, forward 2s, stop:**
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics pub-seq /cmd_vel \
+  '[{"linear":{"x":0.5},"angular":{"z":0}},{"linear":{"x":0},"angular":{"z":0.8}},{"linear":{"x":0.5},"angular":{"z":0}},{"linear":{"x":0},"angular":{"z":0}}]' \
+  '[2.0, 1.0, 2.0, 0.5]'
+```
+
+**Draw a square (turtlesim):**
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics publish-sequence /turtle1/cmd_vel \
+  '[{"linear":{"x":2},"angular":{"z":0}},{"linear":{"x":0},"angular":{"z":1.5708}},{"linear":{"x":2},"angular":{"z":0}},{"linear":{"x":0},"angular":{"z":1.5708}},{"linear":{"x":2},"angular":{"z":0}},{"linear":{"x":0},"angular":{"z":1.5708}},{"linear":{"x":2},"angular":{"z":0}},{"linear":{"x":0},"angular":{"z":1.5708}},{"linear":{"x":0},"angular":{"z":0}}]' \
+  '[1,1,1,1,1,1,1,1,0.5]'
+```
+
+Output:
+```json
+{"success": true, "published_count": 35, "topic": "/cmd_vel", "rate": 10.0}
+```
+
+Error (array length mismatch):
+```json
+{"error": "messages and durations arrays must have the same length"}
+```
+
+---
+
+## topics publish-until `<topic>` `<json_message>` [options]
+
+Publish a message at a fixed rate while simultaneously monitoring a second topic. Stops as soon as a condition on the monitored field is satisfied, or after the safety timeout. Supports single-field conditions and N-dimensional Euclidean distance.
+
+**ROS 2 CLI equivalent:** No equivalent (requires custom scripting)
+
+**Discovery workflow:** Before running, always introspect the robot:
+1. `topics find nav_msgs/msg/Odometry` — find the feedback topic
+2. `topics message nav_msgs/msg/Odometry` — inspect field paths
+3. `topics subscribe /odom --duration 2` — read current value (baseline for `--delta`)
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `topic` | Yes | Topic to publish command messages to |
+| `json_message` | Yes | JSON string of the message payload |
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `--monitor TOPIC` | Yes | — | Topic to watch for the stop condition |
+| `--field PATH [PATH...]` | Yes | — | One or more dot-separated field paths in the monitor message (e.g. `pose.pose.position.x`). Provide multiple paths with `--euclidean`. |
+| `--euclidean` | No | off | Compute Euclidean distance across all `--field` paths; requires `--delta`. Works for any number of numeric fields (2D, 3D, joint-space, etc.) |
+| `--delta N` | One required | — | Stop when field changes by ±N from first observed value; or when Euclidean distance ≥ N with `--euclidean` |
+| `--above N` | One required | — | Stop when field value > N (single-field only) |
+| `--below N` | One required | — | Stop when field value < N (single-field only) |
+| `--equals V` | One required | — | Stop when field value == V (single-field only) |
+| `--rate HZ` | No | `10` | Publish rate in Hz |
+| `--timeout SECONDS` | No | `60` | Safety stop if condition not met within this time |
+| `--msg-type TYPE` | No | auto-detect | Override publish topic message type |
+| `--monitor-msg-type TYPE` | No | auto-detect | Override monitor topic message type |
+
+**Move forward until x-position increases by 1 m (straight path):**
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics publish-until /cmd_vel \
+  '{"linear":{"x":0.3,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0}}' \
+  --monitor /odom --field pose.pose.position.x --delta 1.0 --timeout 30
+```
+
+**Move 2 m in XY plane (Euclidean — works for curved/diagonal paths):**
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics publish-until /cmd_vel \
+  '{"linear":{"x":0.2,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0.3}}' \
+  --monitor /odom \
+  --field pose.pose.position.x pose.pose.position.y \
+  --euclidean --delta 2.0 --timeout 60
+```
+
+**Move until joint_3 reaches 1.5 rad:**
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics publish-until /arm/cmd \
+  '{"joint_3_velocity":0.2}' \
+  --monitor /joint_states --field position.2 --equals 1.5 --timeout 20
+```
+
+**Stop when front lidar range drops below 0.5 m:**
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics publish-until /cmd_vel \
+  '{"linear":{"x":0.2,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0}}' \
+  --monitor /scan --field ranges.0 --below 0.5 --timeout 60
+```
+
+**Stop when temperature exceeds 50°C:**
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics publish-until /heater/cmd \
+  '{"power":1.0}' \
+  --monitor /temperature --field temperature --above 50.0 --timeout 120
+```
+
+Output — single-field condition met:
+```json
+{
+  "success": true, "condition_met": true,
+  "topic": "/cmd_vel", "monitor_topic": "/odom",
+  "field": "pose.pose.position.x", "operator": "delta", "threshold": 1.0,
+  "start_value": 0.12, "end_value": 1.15,
+  "duration": 4.2, "published_count": 42,
+  "start_msg": {}, "end_msg": {}
+}
+```
+
+Output — Euclidean condition met:
+```json
+{
+  "success": true, "condition_met": true,
+  "topic": "/cmd_vel", "monitor_topic": "/odom",
+  "fields": ["pose.pose.position.x", "pose.pose.position.y"],
+  "operator": "euclidean_delta", "threshold": 2.0,
+  "start_values": [0.0, 0.0], "end_values": [1.42, 1.41],
+  "euclidean_distance": 2.003,
+  "duration": 9.8, "published_count": 98,
+  "start_msg": {}, "end_msg": {}
+}
+```
+
+Output — timeout (condition not met):
+```json
+{
+  "success": false, "condition_met": false,
+  "error": "Timeout after 30s: condition not met",
+  "start_value": 0.12, "end_value": 0.43,
+  "duration": 30.0, "published_count": 298
+}
+```
+
+---
+
+## topics diag-list
+
+List all topics that publish `DiagnosticArray` messages, discovered by **type** rather than by name. Handles `/diagnostics`, `<node>/diagnostics`, `<namespace>/diagnostics`, or any other naming convention.
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics diag-list
+```
+
+Output:
+```json
+{"topics": [{"topic": "/diagnostics", "type": "diagnostic_msgs/msg/DiagnosticArray"}, {"topic": "/camera/diagnostics", "type": "diagnostic_msgs/msg/DiagnosticArray"}], "count": 2}
+```
+
+---
+
+## topics diag [options]
+
+Subscribe to diagnostic topics and return parsed `DiagnosticStatus` entries with human-readable level names. Auto-discovers all diagnostic topics by type unless `--topic` is specified.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--topic TOPIC` | auto-discover all | Specific diagnostic topic to read from |
+| `--duration SEC` | one-shot | Collect messages for N seconds |
+| `--max-messages N` | `1` | Max messages per topic in `--duration` mode |
+| `--timeout SEC` | `10` | Timeout waiting for first message (one-shot mode) |
+
+```bash
+# One-shot: read latest diagnostics from all discovered topics
+python3 {baseDir}/scripts/ros2_cli.py topics diag
+
+# Read from a specific (non-standard) diagnostic topic
+python3 {baseDir}/scripts/ros2_cli.py topics diag --topic /my_node/diagnostics
+
+# Collect 5 messages per topic over 10 seconds
+python3 {baseDir}/scripts/ros2_cli.py topics diag --duration 10 --max-messages 5
+```
+
+Output:
+```json
+{
+  "results": [
+    {
+      "topic": "/diagnostics",
+      "stamp": {"sec": 1234567890, "nanosec": 0},
+      "status": [
+        {
+          "level": 0, "level_name": "OK",
+          "name": "motor_driver: left", "message": "OK",
+          "hardware_id": "motor_driver",
+          "values": [{"key": "temperature", "value": "38.5"}]
+        },
+        {
+          "level": 1, "level_name": "WARN",
+          "name": "battery", "message": "Low charge",
+          "hardware_id": "power_board",
+          "values": [{"key": "voltage", "value": "11.2"}]
+        }
+      ]
+    }
+  ],
+  "topic_count": 1
+}
+```
+
+Level values: `0` = OK, `1` = WARN, `2` = ERROR, `3` = STALE.
+
+---
+
+## topics battery-list
+
+List all topics that publish `BatteryState` messages, discovered by **type** rather than by name. Handles `/battery_state`, `<robot>/battery_state`, or any other naming convention.
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics battery-list
+```
+
+Output:
+```json
+{"topics": [{"topic": "/battery_state", "type": "sensor_msgs/msg/BatteryState"}], "count": 1}
+```
+
+---
+
+## topics battery [options]
+
+Subscribe to battery topics and return a decoded `BatteryState` summary. Auto-discovers all battery topics by type unless `--topic` is specified.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--topic TOPIC` | auto-discover all | Specific battery topic to read from |
+| `--duration SEC` | one-shot | Collect messages for N seconds |
+| `--max-messages N` | `1` | Max messages per topic in `--duration` mode |
+| `--timeout SEC` | `10` | Timeout waiting for first message (one-shot mode) |
+
+```bash
+# One-shot: read latest battery state from all discovered topics
+python3 {baseDir}/scripts/ros2_cli.py topics battery
+
+# Read from a specific battery topic
+python3 {baseDir}/scripts/ros2_cli.py topics battery --topic /my_robot/battery_state
+
+# Collect 3 messages per topic over 5 seconds
+python3 {baseDir}/scripts/ros2_cli.py topics battery --duration 5 --max-messages 3
+```
+
+Output:
+```json
+{
+  "results": [
+    {
+      "topic": "/battery_state",
+      "battery": {
+        "percentage": 75.0,
+        "voltage": 12.4,
+        "current": -2.1,
+        "charge": 3.5,
+        "capacity": 5.0,
+        "design_capacity": 5.2,
+        "temperature": 25.0,
+        "present": true,
+        "power_supply_status": 2,
+        "status_name": "DISCHARGING",
+        "power_supply_health": 1,
+        "health_name": "GOOD",
+        "power_supply_technology": 3,
+        "technology_name": "LIPO",
+        "location": "slot_0",
+        "serial_number": "SN-001"
+      }
+    }
+  ],
+  "topic_count": 1
+}
+```
+
+`status_name` values: UNKNOWN, CHARGING, DISCHARGING, NOT_CHARGING, FULL.
+`health_name` values: UNKNOWN, GOOD, OVERHEAT, DEAD, OVERVOLTAGE, UNSPEC_FAILURE, COLD, WATCHDOG_TIMER_EXPIRE, SAFETY_TIMER_EXPIRE.
+`technology_name` values: UNKNOWN, NIMH, LION, LIPO, LIFE, NICD, LIMN.
+
+---
+
+## params preset-save `<node>` `<preset>` [options]
+
+Save the current parameters of a node as a named preset. Internally calls `ListParameters` + `GetParameters` and writes a `{param_name: value}` JSON file to `.presets/{preset}.json` (beside the skill directory, created automatically — flat storage, no subdirectories). Requires the node to be running.
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `node` | Yes | Node name (e.g. `/turtlesim`) |
+| `preset` | Yes | Preset name (e.g. `turtlesim_indoor`) |
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--timeout SECONDS` | `5` | Service call timeout |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py params preset-save /turtlesim turtlesim_indoor
+python3 {baseDir}/scripts/ros2_cli.py params preset-save /turtlesim turtlesim_outdoor --timeout 10
+```
+
+Output:
+```json
+{"node": "/turtlesim", "preset": "turtlesim_indoor", "path": "/path/to/ros2-skill/.presets/turtlesim_indoor.json", "count": 3}
+```
+
+---
+
+## params preset-load `<node>` `<preset>` [options]
+
+Restore a named preset onto a node by reading the saved JSON file and calling `SetParameters`. Per-parameter success and failure reasons are reported individually.
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `node` | Yes | Node name (e.g. `/turtlesim`) |
+| `preset` | Yes | Preset name to restore (e.g. `turtlesim_indoor`) |
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--timeout SECONDS` | `5` | Service call timeout |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py params preset-load /turtlesim turtlesim_indoor
+```
+
+Output (success):
+```json
+{"node": "/turtlesim", "results": [{"name": "background_r", "success": true}, {"name": "background_g", "success": true}, {"name": "background_b", "success": true}]}
+```
+
+Output (preset not found):
+```json
+{"error": "Preset 'turtlesim_indoor' not found", "path": "/path/to/ros2-skill/.presets/turtlesim_indoor.json"}
+```
+
+---
+
+## params preset-list
+
+List all saved presets. Reads from `.presets/` (beside the skill directory) — no running ROS 2 graph required. Presets are stored flat; use descriptive names (e.g. `turtlesim_indoor`) to identify the node.
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py params preset-list
+```
+
+Output:
+```json
+{"presets": [{"preset": "turtlesim_indoor", "path": "/path/to/ros2-skill/.presets/turtlesim_indoor.json"}, {"preset": "turtlesim_outdoor", "path": "/path/to/ros2-skill/.presets/turtlesim_outdoor.json"}], "count": 2}
+```
+
+---
+
+## params preset-delete `<preset>`
+
+Delete a saved preset file from `.presets/`. No running ROS 2 graph required.
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `preset` | Yes | Preset name to delete (e.g. `turtlesim_indoor`) |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py params preset-delete turtlesim_indoor
+```
+
+Output:
+```json
+{"preset": "turtlesim_indoor", "deleted": true}
+```
+
+---
+
+## ROS 2 CLI Commands
+
+Commands that provide parity with the standard `ros2` CLI.
+
+---
+
 ## version
 
 Detect the ROS 2 version and distro name.
@@ -91,35 +516,6 @@ python3 {baseDir}/scripts/ros2_cli.py version
 Output:
 ```json
 {"version": "2", "distro": "humble", "domain_id": 0}
-```
-
----
-
-## estop
-
-Emergency stop for mobile robots. Auto-detects the velocity command topic and message type, then publishes zero velocity.
-
-**Note:** For mobile robots only (differential drive, omnidirectional, etc.). Does NOT work for robotic arms or manipulators.
-
-**ROS 2 CLI equivalent:** `ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist '{}'`
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--topic TOPIC` | auto-detect | Override velocity topic (auto-detected by scanning for `Twist`/`TwistStamped` topics; prefers `cmd_vel`-named topics when multiple exist) |
-
-```bash
-python3 {baseDir}/scripts/ros2_cli.py estop
-python3 {baseDir}/scripts/ros2_cli.py estop --topic /cmd_vel_nav
-```
-
-Output:
-```json
-{"success": true, "topic": "/cmd_vel", "type": "geometry_msgs/Twist", "message": "Emergency stop activated (mobile robot stopped)"}
-```
-
-Error (no velocity topic found):
-```json
-{"error": "Could not find velocity command topic", "hint": "This command is for mobile robots only (not arms). Ensure the robot has a /cmd_vel topic."}
 ```
 
 ---
@@ -351,163 +747,6 @@ Output (duration mode):
 
 ---
 
-## topics publish-sequence `<topic>` `<json_messages>` `<json_durations>` [options] / topics pub-seq
-
-Publish a sequence of messages in order. Each message is repeated at `--rate` Hz for its corresponding duration before moving to the next. Arrays must be the same length. The final message should usually be all-zeros to stop the robot.
-
-**Aliases:** `topics pub-seq`
-
-**ROS 2 CLI equivalent:** No direct equivalent (requires scripting multiple `ros2 topic pub` calls)
-
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `topic` | Yes | Topic to publish to |
-| `json_messages` | Yes | JSON array of message objects, published in order |
-| `json_durations` | Yes | JSON array of durations in seconds — one per message |
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--msg-type TYPE` | auto-detect | Override message type |
-| `--rate HZ` | `10` | Publish rate in Hz for each step |
-
-**Move forward 3 seconds, then stop:**
-```bash
-python3 {baseDir}/scripts/ros2_cli.py topics publish-sequence /cmd_vel \
-  '[{"linear":{"x":1.0,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0}},{"linear":{"x":0,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0}}]' \
-  '[3.0, 0.5]'
-```
-
-**Forward 2s, turn left 1s, forward 2s, stop:**
-```bash
-python3 {baseDir}/scripts/ros2_cli.py topics pub-seq /cmd_vel \
-  '[{"linear":{"x":0.5},"angular":{"z":0}},{"linear":{"x":0},"angular":{"z":0.8}},{"linear":{"x":0.5},"angular":{"z":0}},{"linear":{"x":0},"angular":{"z":0}}]' \
-  '[2.0, 1.0, 2.0, 0.5]'
-```
-
-**Draw a square (turtlesim):**
-```bash
-python3 {baseDir}/scripts/ros2_cli.py topics publish-sequence /turtle1/cmd_vel \
-  '[{"linear":{"x":2},"angular":{"z":0}},{"linear":{"x":0},"angular":{"z":1.5708}},{"linear":{"x":2},"angular":{"z":0}},{"linear":{"x":0},"angular":{"z":1.5708}},{"linear":{"x":2},"angular":{"z":0}},{"linear":{"x":0},"angular":{"z":1.5708}},{"linear":{"x":2},"angular":{"z":0}},{"linear":{"x":0},"angular":{"z":1.5708}},{"linear":{"x":0},"angular":{"z":0}}]' \
-  '[1,1,1,1,1,1,1,1,0.5]'
-```
-
-Output:
-```json
-{"success": true, "published_count": 35, "topic": "/cmd_vel", "rate": 10.0}
-```
-
-Error (array length mismatch):
-```json
-{"error": "messages and durations arrays must have the same length"}
-```
-
----
-
-## ★ topics publish-until `<topic>` `<json_message>` [options]
-
-Publish a message at a fixed rate while simultaneously monitoring a second topic. Stops as soon as a condition on the monitored field is satisfied, or after the safety timeout. Supports single-field conditions and N-dimensional Euclidean distance.
-
-**ROS 2 CLI equivalent:** No equivalent (requires custom scripting)
-
-**Discovery workflow:** Before running, always introspect the robot:
-1. `topics find nav_msgs/msg/Odometry` — find the feedback topic
-2. `topics message nav_msgs/msg/Odometry` — inspect field paths
-3. `topics subscribe /odom --duration 2` — read current value (baseline for `--delta`)
-
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `topic` | Yes | Topic to publish command messages to |
-| `json_message` | Yes | JSON string of the message payload |
-
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `--monitor TOPIC` | Yes | — | Topic to watch for the stop condition |
-| `--field PATH [PATH...]` | Yes | — | One or more dot-separated field paths in the monitor message (e.g. `pose.pose.position.x`). Provide multiple paths with `--euclidean`. |
-| `--euclidean` | No | off | Compute Euclidean distance across all `--field` paths; requires `--delta`. Works for any number of numeric fields (2D, 3D, joint-space, etc.) |
-| `--delta N` | One required | — | Stop when field changes by ±N from first observed value; or when Euclidean distance ≥ N with `--euclidean` |
-| `--above N` | One required | — | Stop when field value > N (single-field only) |
-| `--below N` | One required | — | Stop when field value < N (single-field only) |
-| `--equals V` | One required | — | Stop when field value == V (single-field only) |
-| `--rate HZ` | No | `10` | Publish rate in Hz |
-| `--timeout SECONDS` | No | `60` | Safety stop if condition not met within this time |
-| `--msg-type TYPE` | No | auto-detect | Override publish topic message type |
-| `--monitor-msg-type TYPE` | No | auto-detect | Override monitor topic message type |
-
-**Move forward until x-position increases by 1 m (straight path):**
-```bash
-python3 {baseDir}/scripts/ros2_cli.py topics publish-until /cmd_vel \
-  '{"linear":{"x":0.3,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0}}' \
-  --monitor /odom --field pose.pose.position.x --delta 1.0 --timeout 30
-```
-
-**Move 2 m in XY plane (Euclidean — works for curved/diagonal paths):**
-```bash
-python3 {baseDir}/scripts/ros2_cli.py topics publish-until /cmd_vel \
-  '{"linear":{"x":0.2,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0.3}}' \
-  --monitor /odom \
-  --field pose.pose.position.x pose.pose.position.y \
-  --euclidean --delta 2.0 --timeout 60
-```
-
-**Move until joint_3 reaches 1.5 rad:**
-```bash
-python3 {baseDir}/scripts/ros2_cli.py topics publish-until /arm/cmd \
-  '{"joint_3_velocity":0.2}' \
-  --monitor /joint_states --field position.2 --equals 1.5 --timeout 20
-```
-
-**Stop when front lidar range drops below 0.5 m:**
-```bash
-python3 {baseDir}/scripts/ros2_cli.py topics publish-until /cmd_vel \
-  '{"linear":{"x":0.2,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0}}' \
-  --monitor /scan --field ranges.0 --below 0.5 --timeout 60
-```
-
-**Stop when temperature exceeds 50°C:**
-```bash
-python3 {baseDir}/scripts/ros2_cli.py topics publish-until /heater/cmd \
-  '{"power":1.0}' \
-  --monitor /temperature --field temperature --above 50.0 --timeout 120
-```
-
-Output — single-field condition met:
-```json
-{
-  "success": true, "condition_met": true,
-  "topic": "/cmd_vel", "monitor_topic": "/odom",
-  "field": "pose.pose.position.x", "operator": "delta", "threshold": 1.0,
-  "start_value": 0.12, "end_value": 1.15,
-  "duration": 4.2, "published_count": 42,
-  "start_msg": {}, "end_msg": {}
-}
-```
-
-Output — Euclidean condition met:
-```json
-{
-  "success": true, "condition_met": true,
-  "topic": "/cmd_vel", "monitor_topic": "/odom",
-  "fields": ["pose.pose.position.x", "pose.pose.position.y"],
-  "operator": "euclidean_delta", "threshold": 2.0,
-  "start_values": [0.0, 0.0], "end_values": [1.42, 1.41],
-  "euclidean_distance": 2.003,
-  "duration": 9.8, "published_count": 98,
-  "start_msg": {}, "end_msg": {}
-}
-```
-
-Output — timeout (condition not met):
-```json
-{
-  "success": false, "condition_met": false,
-  "error": "Timeout after 30s: condition not met",
-  "start_value": 0.12, "end_value": 0.43,
-  "duration": 30.0, "published_count": 298
-}
-```
-
----
-
 ## topics hz `<topic>` [options]
 
 Measure the publish rate of a topic. Collects inter-message intervals over a sliding window and reports rate, min/max delta, and standard deviation.
@@ -657,147 +896,6 @@ All delay values in seconds. Error if no `header.stamp`:
 ```json
 {"error": "Messages on '/cmd_vel' have no header.stamp field"}
 ```
-
----
-
-## ★ topics diag-list
-
-List all topics that publish `DiagnosticArray` messages, discovered by **type** rather than by name. Handles `/diagnostics`, `<node>/diagnostics`, `<namespace>/diagnostics`, or any other naming convention.
-
-```bash
-python3 {baseDir}/scripts/ros2_cli.py topics diag-list
-```
-
-Output:
-```json
-{"topics": [{"topic": "/diagnostics", "type": "diagnostic_msgs/msg/DiagnosticArray"}, {"topic": "/camera/diagnostics", "type": "diagnostic_msgs/msg/DiagnosticArray"}], "count": 2}
-```
-
----
-
-## ★ topics diag [options]
-
-Subscribe to diagnostic topics and return parsed `DiagnosticStatus` entries with human-readable level names. Auto-discovers all diagnostic topics by type unless `--topic` is specified.
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--topic TOPIC` | auto-discover all | Specific diagnostic topic to read from |
-| `--duration SEC` | one-shot | Collect messages for N seconds |
-| `--max-messages N` | `1` | Max messages per topic in `--duration` mode |
-| `--timeout SEC` | `10` | Timeout waiting for first message (one-shot mode) |
-
-```bash
-# One-shot: read latest diagnostics from all discovered topics
-python3 {baseDir}/scripts/ros2_cli.py topics diag
-
-# Read from a specific (non-standard) diagnostic topic
-python3 {baseDir}/scripts/ros2_cli.py topics diag --topic /my_node/diagnostics
-
-# Collect 5 messages per topic over 10 seconds
-python3 {baseDir}/scripts/ros2_cli.py topics diag --duration 10 --max-messages 5
-```
-
-Output:
-```json
-{
-  "results": [
-    {
-      "topic": "/diagnostics",
-      "stamp": {"sec": 1234567890, "nanosec": 0},
-      "status": [
-        {
-          "level": 0, "level_name": "OK",
-          "name": "motor_driver: left", "message": "OK",
-          "hardware_id": "motor_driver",
-          "values": [{"key": "temperature", "value": "38.5"}]
-        },
-        {
-          "level": 1, "level_name": "WARN",
-          "name": "battery", "message": "Low charge",
-          "hardware_id": "power_board",
-          "values": [{"key": "voltage", "value": "11.2"}]
-        }
-      ]
-    }
-  ],
-  "topic_count": 1
-}
-```
-
-Level values: `0` = OK, `1` = WARN, `2` = ERROR, `3` = STALE.
-
----
-
-## ★ topics battery-list
-
-List all topics that publish `BatteryState` messages, discovered by **type** rather than by name. Handles `/battery_state`, `<robot>/battery_state`, or any other naming convention.
-
-```bash
-python3 {baseDir}/scripts/ros2_cli.py topics battery-list
-```
-
-Output:
-```json
-{"topics": [{"topic": "/battery_state", "type": "sensor_msgs/msg/BatteryState"}], "count": 1}
-```
-
----
-
-## ★ topics battery [options]
-
-Subscribe to battery topics and return a decoded `BatteryState` summary. Auto-discovers all battery topics by type unless `--topic` is specified.
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--topic TOPIC` | auto-discover all | Specific battery topic to read from |
-| `--duration SEC` | one-shot | Collect messages for N seconds |
-| `--max-messages N` | `1` | Max messages per topic in `--duration` mode |
-| `--timeout SEC` | `10` | Timeout waiting for first message (one-shot mode) |
-
-```bash
-# One-shot: read latest battery state from all discovered topics
-python3 {baseDir}/scripts/ros2_cli.py topics battery
-
-# Read from a specific battery topic
-python3 {baseDir}/scripts/ros2_cli.py topics battery --topic /my_robot/battery_state
-
-# Collect 3 messages per topic over 5 seconds
-python3 {baseDir}/scripts/ros2_cli.py topics battery --duration 5 --max-messages 3
-```
-
-Output:
-```json
-{
-  "results": [
-    {
-      "topic": "/battery_state",
-      "battery": {
-        "percentage": 75.0,
-        "voltage": 12.4,
-        "current": -2.1,
-        "charge": 3.5,
-        "capacity": 5.0,
-        "design_capacity": 5.2,
-        "temperature": 25.0,
-        "present": true,
-        "power_supply_status": 2,
-        "status_name": "DISCHARGING",
-        "power_supply_health": 1,
-        "health_name": "GOOD",
-        "power_supply_technology": 3,
-        "technology_name": "LIPO",
-        "location": "slot_0",
-        "serial_number": "SN-001"
-      }
-    }
-  ],
-  "topic_count": 1
-}
-```
-
-`status_name` values: UNKNOWN, CHARGING, DISCHARGING, NOT_CHARGING, FULL.
-`health_name` values: UNKNOWN, GOOD, OVERHEAT, DEAD, OVERVOLTAGE, UNSPEC_FAILURE, COLD, WATCHDOG_TIMER_EXPIRE, SAFETY_TIMER_EXPIRE.
-`technology_name` values: UNKNOWN, NIMH, LION, LIPO, LIFE, NICD, LIMN.
 
 ---
 
@@ -1324,94 +1422,6 @@ Output (rejected — node disallows undeclaring):
 
 ---
 
-## ★ params preset-save `<node>` `<preset>` [options]
-
-Save the current parameters of a node as a named preset. Internally calls `ListParameters` + `GetParameters` and writes a `{param_name: value}` JSON file to `.presets/{preset}.json` (beside the skill directory, created automatically — flat storage, no subdirectories). Requires the node to be running.
-
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `node` | Yes | Node name (e.g. `/turtlesim`) |
-| `preset` | Yes | Preset name (e.g. `turtlesim_indoor`) |
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--timeout SECONDS` | `5` | Service call timeout |
-
-```bash
-python3 {baseDir}/scripts/ros2_cli.py params preset-save /turtlesim turtlesim_indoor
-python3 {baseDir}/scripts/ros2_cli.py params preset-save /turtlesim turtlesim_outdoor --timeout 10
-```
-
-Output:
-```json
-{"node": "/turtlesim", "preset": "turtlesim_indoor", "path": "/path/to/ros2-skill/.presets/turtlesim_indoor.json", "count": 3}
-```
-
----
-
-## ★ params preset-load `<node>` `<preset>` [options]
-
-Restore a named preset onto a node by reading the saved JSON file and calling `SetParameters`. Per-parameter success and failure reasons are reported individually.
-
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `node` | Yes | Node name (e.g. `/turtlesim`) |
-| `preset` | Yes | Preset name to restore (e.g. `turtlesim_indoor`) |
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--timeout SECONDS` | `5` | Service call timeout |
-
-```bash
-python3 {baseDir}/scripts/ros2_cli.py params preset-load /turtlesim turtlesim_indoor
-```
-
-Output (success):
-```json
-{"node": "/turtlesim", "results": [{"name": "background_r", "success": true}, {"name": "background_g", "success": true}, {"name": "background_b", "success": true}]}
-```
-
-Output (preset not found):
-```json
-{"error": "Preset 'turtlesim_indoor' not found", "path": "/path/to/ros2-skill/.presets/turtlesim_indoor.json"}
-```
-
----
-
-## ★ params preset-list
-
-List all saved presets. Reads from `.presets/` (beside the skill directory) — no running ROS 2 graph required. Presets are stored flat; use descriptive names (e.g. `turtlesim_indoor`) to identify the node.
-
-```bash
-python3 {baseDir}/scripts/ros2_cli.py params preset-list
-```
-
-Output:
-```json
-{"presets": [{"preset": "turtlesim_indoor", "path": "/path/to/ros2-skill/.presets/turtlesim_indoor.json"}, {"preset": "turtlesim_outdoor", "path": "/path/to/ros2-skill/.presets/turtlesim_outdoor.json"}], "count": 2}
-```
-
----
-
-## ★ params preset-delete `<preset>`
-
-Delete a saved preset file from `.presets/`. No running ROS 2 graph required.
-
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `preset` | Yes | Preset name to delete (e.g. `turtlesim_indoor`) |
-
-```bash
-python3 {baseDir}/scripts/ros2_cli.py params preset-delete turtlesim_indoor
-```
-
-Output:
-```json
-{"preset": "turtlesim_indoor", "deleted": true}
-```
-
----
-
 ## actions list / actions ls
 
 List all available action servers.
@@ -1701,6 +1711,8 @@ No matches:
 
 The ROS 2 skill supports message type aliases for commonly used message types. Instead of using the full message type name (e.g., `geometry_msgs/Twist`), you can use a short alias (e.g., `twist`). Aliases are case-insensitive.
 
+---
+
 ## Supported Aliases
 
 ### std_msgs
@@ -1766,6 +1778,8 @@ The ROS 2 skill supports message type aliases for commonly used message types. I
 ### trajectory_msgs
 - `jointtrajectory` → `trajectory_msgs/JointTrajectory`
 - `jointtrajectorypoint` → `trajectory_msgs/JointTrajectoryPoint`
+
+---
 
 ## Usage Examples
 
@@ -2824,4 +2838,3 @@ Output (unknown package):
 ```json
 {"error": "Package 'nonexistent_pkg' not found or has no interfaces"}
 ```
-

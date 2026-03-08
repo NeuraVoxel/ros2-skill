@@ -49,12 +49,11 @@ python3 {baseDir}/scripts/ros2_cli.py version
 
 ---
 
-## Command Quick Reference
+## ROS 2 CLI Quick Reference
 
 | Category | Command | Description |
 |----------|---------|-------------|
 | Connection | `version` | Detect ROS 2 distro |
-| Safety | `estop` | Emergency stop for mobile robots |
 | Topics | `topics list` | List all active topics with types |
 | Topics | `topics ls` | Alias for `topics list` |
 | Topics | `topics type <topic>` | Get message type of a topic |
@@ -68,20 +67,11 @@ python3 {baseDir}/scripts/ros2_cli.py version
 | Topics | `topics sub <topic>` | Alias for `topics subscribe` |
 | Topics | `topics publish <topic> <json>` | Publish a message to a topic |
 | Topics | `topics pub <topic> <json>` | Alias for `topics publish` |
-| Topics | `topics publish-sequence <topic> <msgs> <durs>` | Publish message sequence |
-| Topics | `topics pub-seq <topic> <msgs> <durs>` | Alias for `topics publish-sequence` |
-| Topics | `topics publish-until <topic> <json>` ★ | Publish while monitoring; stop on condition (supports `--euclidean` for N-D distance) |
 | Topics | `topics publish-continuous <topic> <json>` | Alias for `topics publish` |
 | Topics | `topics hz <topic>` | Measure topic publish rate |
 | Topics | `topics find <msg_type>` | Find topics by message type |
 | Topics | `topics bw <topic>` | Measure topic bandwidth (bytes/s) |
 | Topics | `topics delay <topic>` | Measure header-stamp end-to-end latency |
-| Topics | `topics capture-image` ★ | Capture image from ROS 2 topic and save to .artifacts/ |
-| Topics | `topics diag-list` ★ | List all topics publishing DiagnosticArray (by type) |
-| Topics | `topics diag` ★ | Subscribe to diagnostic topics (auto-discovered by type) |
-| Topics | `topics battery-list` ★ | List all topics publishing BatteryState (by type) |
-| Topics | `topics battery` ★ | Subscribe to battery topics (auto-discovered by type) |
-| Discord | `send-image`★ (discord_tools.py) | Send image to Discord channel |
 | Services | `services list` | List all available services |
 | Services | `services ls` | Alias for `services list` |
 | Services | `services type <service>` | Get service type |
@@ -107,10 +97,6 @@ python3 {baseDir}/scripts/ros2_cli.py version
 | Params | `params dump <node>` | Export all parameters for a node as JSON |
 | Params | `params load <node> <json>` | Bulk-set parameters from JSON |
 | Params | `params delete <node> <param>` | Delete a parameter |
-| Params | `params preset-save <node> <name>` ★ | Save node parameters as a named preset |
-| Params | `params preset-load <node> <name>` ★ | Restore a named preset onto a node |
-| Params | `params preset-list` ★ | List all saved presets |
-| Params | `params preset-delete <name>` ★ | Delete a saved preset |
 | Actions | `actions list` | List action servers |
 | Actions | `actions ls` | Alias for `actions list` |
 | Actions | `actions details <action>` | Get action goal/result/feedback fields |
@@ -157,7 +143,26 @@ python3 {baseDir}/scripts/ros2_cli.py version
 | Interface | `interface packages` | List packages that define at least one interface type |
 | Interface | `interface package <pkg>` | List all interface types for a single package |
 
-★ Agent-only feature — no equivalent in the standard `ros2` CLI.
+---
+
+## Agent Features Quick Reference
+
+| Feature | Command | Description |
+|---------|---------|-------------|
+| Emergency Stop | `estop` | Send zero-velocity command to halt mobile robots safely |
+| Publish Sequence | `topics publish-sequence <topic> <msgs> <durs>` | Publish a timed sequence of different messages in one call |
+| Publish Sequence | `topics pub-seq <topic> <msgs> <durs>` | Alias for `topics publish-sequence` |
+| Publish-Until | `topics publish-until <topic> <json>` | Publish repeatedly and stop automatically when a condition is met (supports `--euclidean` for N-D distance) |
+| Image Capture | `topics capture-image` | Capture image from ROS 2 topic and save to `.artifacts/` |
+| Diagnostics | `topics diag-list` | List all topics publishing DiagnosticArray (by type) |
+| Diagnostics | `topics diag` | Subscribe to diagnostic topics (auto-discovered by type) |
+| Battery | `topics battery-list` | List all topics publishing BatteryState (by type) |
+| Battery | `topics battery` | Subscribe to battery topics (auto-discovered by type) |
+| Parameter Presets | `params preset-save <node> <name>` | Save node parameters as a named preset |
+| Parameter Presets | `params preset-load <node> <name>` | Restore a named preset onto a node |
+| Parameter Presets | `params preset-list` | List all saved presets |
+| Parameter Presets | `params preset-delete <name>` | Delete a saved preset |
+| Discord | `discord_tools.py send-image` | Send image (or PDF) to a Discord channel via bot token |
 
 ---
 
@@ -678,7 +683,7 @@ python3 {baseDir}/scripts/ros2_cli.py topics diag --duration 10 --max-messages 5
 
 Output from `topics diag` includes `level_name` (OK / WARN / ERROR / STALE), `name`, `message`, `hardware_id`, and `values` (key-value pairs) for each `DiagnosticStatus` entry in the array.
 
-### topics battery-list / topics battery — Battery monitoring ★
+### topics battery-list / topics battery — Battery monitoring
 
 Battery topics are discovered by **message type** (`sensor_msgs/BatteryState`), not by name. Works with `/battery_state`, `<robot>/battery_state`, or any other naming convention automatically.
 

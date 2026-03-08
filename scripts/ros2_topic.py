@@ -1515,20 +1515,37 @@ def _discover_battery_topics(node):
     return sorted(results, key=lambda x: x["topic"])
 
 
+def _nan_to_none(v):
+    """Return None for float NaN (which is invalid JSON); pass other values through."""
+    if isinstance(v, float) and v != v:
+        return None
+    return v
+
+
 def _parse_battery_state(msg_dict):
-    """Convert a msg_to_dict() BatteryState into a clean summary dict."""
+    """Convert a msg_to_dict() BatteryState into a clean summary dict.
+
+    All float fields use NaN to signal 'unmeasured' per the sensor_msgs spec;
+    those are converted to null so the output is valid JSON.  percentage is
+    scaled from the 0.0–1.0 ROS convention to 0–100 for readability.
+    """
     pct = msg_dict.get("percentage", float("nan"))
     status_code = msg_dict.get("power_supply_status", 0)
     health_code = msg_dict.get("power_supply_health", 0)
     tech_code = msg_dict.get("power_supply_technology", 0)
+
+    # cell arrays: filter per-element NaN → None
+    raw_cell_v = msg_dict.get("cell_voltage", []) or []
+    raw_cell_t = msg_dict.get("cell_temperature", []) or []
+
     return {
-        "percentage": pct * 100 if pct == pct else None,  # NaN guard
-        "voltage": msg_dict.get("voltage"),
-        "current": msg_dict.get("current"),
-        "charge": msg_dict.get("charge"),
-        "capacity": msg_dict.get("capacity"),
-        "design_capacity": msg_dict.get("design_capacity"),
-        "temperature": msg_dict.get("temperature"),
+        "percentage": (pct * 100) if pct == pct else None,  # NaN guard + scale
+        "voltage": _nan_to_none(msg_dict.get("voltage")),
+        "current": _nan_to_none(msg_dict.get("current")),
+        "charge": _nan_to_none(msg_dict.get("charge")),
+        "capacity": _nan_to_none(msg_dict.get("capacity")),
+        "design_capacity": _nan_to_none(msg_dict.get("design_capacity")),
+        "temperature": _nan_to_none(msg_dict.get("temperature")),
         "present": msg_dict.get("present"),
         "power_supply_status": status_code,
         "status_name": _BATTERY_POWER_SUPPLY_STATUS.get(status_code, str(status_code)),
@@ -1536,6 +1553,8 @@ def _parse_battery_state(msg_dict):
         "health_name": _BATTERY_POWER_SUPPLY_HEALTH.get(health_code, str(health_code)),
         "power_supply_technology": tech_code,
         "technology_name": _BATTERY_POWER_SUPPLY_TECHNOLOGY.get(tech_code, str(tech_code)),
+        "cell_voltage": [_nan_to_none(v) for v in raw_cell_v],
+        "cell_temperature": [_nan_to_none(v) for v in raw_cell_t],
         "location": msg_dict.get("location", ""),
         "serial_number": msg_dict.get("serial_number", ""),
     }
@@ -1634,6 +1653,7 @@ def cmd_topics_battery(args):
                 for msg_dict in msgs:
                     results.append({
                         "topic": topic_name,
+                        "stamp": msg_dict.get("header", {}).get("stamp", {}),
                         "battery": _parse_battery_state(msg_dict),
                     })
             output({"results": results, "topic_count": len(battery_topics)})
@@ -1657,9 +1677,11 @@ def cmd_topics_battery(args):
                 with sub.lock:
                     msgs = sub.messages[:]
                 if msgs:
+                    msg_dict = msgs[0]
                     results.append({
                         "topic": topic_name,
-                        "battery": _parse_battery_state(msgs[0]),
+                        "stamp": msg_dict.get("header", {}).get("stamp", {}),
+                        "battery": _parse_battery_state(msg_dict),
                     })
                 else:
                     results.append({

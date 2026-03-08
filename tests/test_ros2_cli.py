@@ -1032,6 +1032,8 @@ class TestBatteryParsing(unittest.TestCase):
             "power_supply_status": 2,
             "power_supply_health": 1,
             "power_supply_technology": 3,
+            "cell_voltage": [4.1, 4.0, float("nan")],
+            "cell_temperature": [24.5, 25.0],
             "location": "slot_0",
             "serial_number": "SN-001",
         }
@@ -1047,8 +1049,32 @@ class TestBatteryParsing(unittest.TestCase):
         self.assertEqual(r["status_name"], "DISCHARGING")
         self.assertEqual(r["health_name"], "GOOD")
         self.assertEqual(r["technology_name"], "LIPO")
+        # cell arrays: NaN entries become None
+        self.assertEqual(r["cell_voltage"], [4.1, 4.0, None])
+        self.assertEqual(r["cell_temperature"], [24.5, 25.0])
         self.assertEqual(r["location"], "slot_0")
         self.assertEqual(r["serial_number"], "SN-001")
+
+    def test_parse_battery_state_nan_fields(self):
+        """Unmeasured float fields (NaN per spec) are converted to null."""
+        import ros2_topic
+        nan = float("nan")
+        r = ros2_topic._parse_battery_state({
+            "percentage": nan,
+            "voltage": nan,
+            "current": nan,
+            "charge": nan,
+            "capacity": nan,
+            "design_capacity": nan,
+            "temperature": nan,
+        })
+        self.assertIsNone(r["percentage"])
+        self.assertIsNone(r["voltage"])
+        self.assertIsNone(r["current"])
+        self.assertIsNone(r["charge"])
+        self.assertIsNone(r["capacity"])
+        self.assertIsNone(r["design_capacity"])
+        self.assertIsNone(r["temperature"])
 
 
 if __name__ == "__main__":
