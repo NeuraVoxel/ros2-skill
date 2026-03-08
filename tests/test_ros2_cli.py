@@ -232,7 +232,7 @@ class TestDispatchTable(unittest.TestCase):
             ("lifecycle", "nodes"), ("lifecycle", "list"), ("lifecycle", "ls"),
             ("lifecycle", "get"), ("lifecycle", "set"),
             # interface
-            ("interface", "list"), ("interface", "show"),
+            ("interface", "list"), ("interface", "ls"), ("interface", "show"),
             ("interface", "packages"), ("interface", "package"),
         ]
         for key in expected_keys:

@@ -1025,6 +1025,7 @@ def build_parser():
     ifsub = iface.add_subparsers(dest="subcommand")
 
     ifsub.add_parser("list", help="List all installed interface types (msgs, srvs, actions)")
+    ifsub.add_parser("ls",   help="Alias for list")
 
     p = ifsub.add_parser("show", help="Show field structure of a message, service, or action")
     p.add_argument("type_str", metavar="type",
@@ -1154,6 +1155,7 @@ DISPATCH = {
     ("multicast", "receive"): cmd_multicast_receive,
     # interface
     ("interface", "list"):     cmd_interface_list,
+    ("interface", "ls"):       cmd_interface_list,
     ("interface", "show"):     cmd_interface_show,
     ("interface", "packages"): cmd_interface_packages,
     ("interface", "package"):  cmd_interface_package,
