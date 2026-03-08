@@ -62,6 +62,7 @@ python3 scripts/ros2_cli.py topics subscribe /scan --duration 3
 | Doctor | `check` (default), `hello` |
 | Wtf | alias for `doctor` — same commands |
 | Multicast | `send`, `receive` |
+| Interface | `list`, `show`, `packages`, `package` |
 | Discord | `send-image` (in `discord_tools.py`) |
 
 All commands output JSON. See [`SKILL.md`](SKILL.md) for quick reference and [`references/COMMANDS.md`](references/COMMANDS.md) for full details with examples.
@@ -131,6 +132,7 @@ ros2-skill/
 │   ├── ros2_service.py        # Service commands
 │   ├── ros2_action.py         # Action commands
 │   ├── ros2_lifecycle.py      # Lifecycle (managed node) commands
+│   ├── ros2_interface.py      # Interface type discovery commands
 │   ├── ros2_control.py        # Controller manager commands
 │   └── discord_tools.py       # Discord integration
 ├── references/

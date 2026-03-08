@@ -231,6 +231,9 @@ class TestDispatchTable(unittest.TestCase):
             # lifecycle
             ("lifecycle", "nodes"), ("lifecycle", "list"), ("lifecycle", "ls"),
             ("lifecycle", "get"), ("lifecycle", "set"),
+            # interface
+            ("interface", "list"), ("interface", "show"),
+            ("interface", "packages"), ("interface", "package"),
         ]
         for key in expected_keys:
             self.assertIn(key, self.ros2_cli.DISPATCH, f"Missing dispatch key: {key}")
@@ -847,6 +850,54 @@ class TestMulticastParsing(unittest.TestCase):
             self.ros2_cli.DISPATCH[("multicast", "send")],
             self.ros2_cli.DISPATCH[("multicast", "receive")],
         )
+
+
+class TestInterfaceParsing(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if not check_rclpy_available():
+            raise unittest.SkipTest("rclpy not available - requires ROS 2 environment")
+        import ros2_cli
+        cls.ros2_cli = ros2_cli
+
+    def setUp(self):
+        self.parser = self.ros2_cli.build_parser()
+
+    def test_interface_list(self):
+        args = self.parser.parse_args(["interface", "list"])
+        self.assertEqual(args.command, "interface")
+        self.assertEqual(args.subcommand, "list")
+
+    def test_interface_show_message(self):
+        args = self.parser.parse_args(["interface", "show", "std_msgs/msg/String"])
+        self.assertEqual(args.command, "interface")
+        self.assertEqual(args.subcommand, "show")
+        self.assertEqual(args.type_str, "std_msgs/msg/String")
+
+    def test_interface_show_service(self):
+        args = self.parser.parse_args(["interface", "show", "std_srvs/srv/SetBool"])
+        self.assertEqual(args.subcommand, "show")
+        self.assertEqual(args.type_str, "std_srvs/srv/SetBool")
+
+    def test_interface_show_action(self):
+        args = self.parser.parse_args(["interface", "show", "nav2_msgs/action/NavigateToPose"])
+        self.assertEqual(args.subcommand, "show")
+        self.assertEqual(args.type_str, "nav2_msgs/action/NavigateToPose")
+
+    def test_interface_show_shorthand(self):
+        args = self.parser.parse_args(["interface", "show", "std_msgs/String"])
+        self.assertEqual(args.type_str, "std_msgs/String")
+
+    def test_interface_packages(self):
+        args = self.parser.parse_args(["interface", "packages"])
+        self.assertEqual(args.command, "interface")
+        self.assertEqual(args.subcommand, "packages")
+
+    def test_interface_package(self):
+        args = self.parser.parse_args(["interface", "package", "std_msgs"])
+        self.assertEqual(args.command, "interface")
+        self.assertEqual(args.subcommand, "package")
+        self.assertEqual(args.package, "std_msgs")
 
 
 if __name__ == "__main__":

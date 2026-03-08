@@ -387,6 +387,28 @@ Examples:
     --timeout / -t   How long to listen in seconds (default: 5.0)
     $ python3 ros2_cli.py multicast receive
     $ python3 ros2_cli.py multicast receive --timeout 10
+
+  interface list
+    List all interface types (messages, services, actions) installed on this system.
+    No ROS 2 graph required — reads from the ament resource index.
+    $ python3 ros2_cli.py interface list
+
+  interface show <type>
+    Show the field structure of a message, service, or action type.
+    Accepts pkg/msg/Name, pkg/srv/Name, pkg/action/Name, or shorthand pkg/Name.
+    $ python3 ros2_cli.py interface show std_msgs/msg/String
+    $ python3 ros2_cli.py interface show std_srvs/srv/SetBool
+    $ python3 ros2_cli.py interface show nav2_msgs/action/NavigateToPose
+    $ python3 ros2_cli.py interface show std_msgs/String
+
+  interface packages
+    List all packages that define at least one interface type.
+    $ python3 ros2_cli.py interface packages
+
+  interface package <package>
+    List all interface types (messages, services, actions) for a package.
+    $ python3 ros2_cli.py interface package std_msgs
+    $ python3 ros2_cli.py interface package geometry_msgs
 """
 
 import argparse
@@ -477,6 +499,12 @@ from ros2_lifecycle import (
     cmd_lifecycle_list,
     cmd_lifecycle_get,
     cmd_lifecycle_set,
+)
+from ros2_interface import (
+    cmd_interface_list,
+    cmd_interface_show,
+    cmd_interface_packages,
+    cmd_interface_package,
 )
 from ros2_control import (
     cmd_control_list_controller_types,
@@ -990,6 +1018,24 @@ def build_parser():
     mc_recv.add_argument("--timeout", "-t", type=float, default=5.0,
                          help="How long to listen in seconds (default: 5.0)")
 
+    # ------------------------------------------------------------------
+    # interface
+    # ------------------------------------------------------------------
+    iface = sub.add_parser("interface", help="Interface type discovery (ros2 interface)")
+    ifsub = iface.add_subparsers(dest="subcommand")
+
+    ifsub.add_parser("list", help="List all installed interface types (msgs, srvs, actions)")
+
+    p = ifsub.add_parser("show", help="Show field structure of a message, service, or action")
+    p.add_argument("type_str", metavar="type",
+                   help="Interface type, e.g. std_msgs/msg/String, std_srvs/srv/SetBool, "
+                        "nav2_msgs/action/NavigateToPose, or shorthand std_msgs/String")
+
+    ifsub.add_parser("packages", help="List packages that contain at least one interface")
+
+    p = ifsub.add_parser("package", help="List all interface types for a single package")
+    p.add_argument("package", help="Package name (e.g. std_msgs, geometry_msgs)")
+
     return parser
 
 
@@ -1106,6 +1152,11 @@ DISPATCH = {
     # multicast
     ("multicast", "send"):    cmd_multicast_send,
     ("multicast", "receive"): cmd_multicast_receive,
+    # interface
+    ("interface", "list"):     cmd_interface_list,
+    ("interface", "show"):     cmd_interface_show,
+    ("interface", "packages"): cmd_interface_packages,
+    ("interface", "package"):  cmd_interface_package,
 }
 
 

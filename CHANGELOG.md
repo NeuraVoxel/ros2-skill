@@ -4,7 +4,14 @@ All notable changes to ros2-skill will be documented in this file.
 
 ## [1.0.2] - 2026-03-07
 
-Added `doctor`, `wtf`, and `multicast` commands for ROS 2 system health checking and UDP multicast diagnostics.
+Added `doctor`, `wtf`, `multicast`, and `interface` commands for ROS 2 system health checking, UDP multicast diagnostics, and interface type discovery.
+
+### Interface
+
+- `interface list` — list all installed interface types across all packages; output groups by `messages`, `services`, `actions` with a `total` count; reads from the ament resource index, no running ROS 2 graph required
+- `interface show <type>` — show the field structure of any message, service, or action type; accepts canonical formats (`pkg/msg/Name`, `pkg/srv/Name`, `pkg/action/Name`) and shorthand (`pkg/Name`); output includes `"kind"` (`message`/`service`/`action`) and the appropriate field dicts (`fields` for messages, `request`/`response` for services, `goal`/`result`/`feedback` for actions)
+- `interface packages` — list all packages that define at least one interface type
+- `interface package <pkg>` — list all interface types (messages, services, actions) for a specific package
 
 ### Doctor / Wtf
 

@@ -143,6 +143,10 @@ python3 {baseDir}/scripts/ros2_cli.py version
 | Wtf | `wtf [...]` | Alias for `doctor` — identical flags and subcommands |
 | Multicast | `multicast send [--group GROUP] [--port PORT]` | Send one UDP multicast datagram to GROUP:PORT (default 225.0.0.1:49150) |
 | Multicast | `multicast receive [--group GROUP] [--port PORT] [--timeout SECS]` | Listen for UDP multicast packets; return all received within timeout |
+| Interface | `interface list` | List all installed interface types (messages, services, actions) |
+| Interface | `interface show <type>` | Show field structure; accepts `pkg/msg/Name`, `pkg/srv/Name`, `pkg/action/Name`, or shorthand `pkg/Name` |
+| Interface | `interface packages` | List packages that define at least one interface type |
+| Interface | `interface package <pkg>` | List all interface types for a single package |
 
 ---
 
@@ -661,6 +665,36 @@ python3 {baseDir}/scripts/ros2_cli.py params load /turtlesim \
 # Delete a parameter
 python3 {baseDir}/scripts/ros2_cli.py params delete /turtlesim background_r
 ```
+
+### interface — Interface Type Discovery
+
+**Terminology:** Use `interface` commands when the user asks "what fields does X message have?", "show me the structure of Y service", "what interfaces does std_msgs provide?", or when you need to discover a type's structure before calling a service or publishing a message. These commands read the local ament index — **no running ROS 2 graph required**.
+
+```bash
+# List every installed interface type on this system
+python3 {baseDir}/scripts/ros2_cli.py interface list
+
+# Show the fields of a message type
+python3 {baseDir}/scripts/ros2_cli.py interface show std_msgs/msg/String
+python3 {baseDir}/scripts/ros2_cli.py interface show std_msgs/String   # shorthand also works
+
+# Show a service's request and response structure
+python3 {baseDir}/scripts/ros2_cli.py interface show std_srvs/srv/SetBool
+
+# Show an action's goal, result, and feedback structure
+python3 {baseDir}/scripts/ros2_cli.py interface show nav2_msgs/action/NavigateToPose
+
+# List all packages that define interfaces
+python3 {baseDir}/scripts/ros2_cli.py interface packages
+
+# List all interfaces provided by a specific package
+python3 {baseDir}/scripts/ros2_cli.py interface package std_msgs
+```
+
+**Output format for `interface show`:**
+- `"kind": "message"` → `"fields": {"field_name": "field_type_string", ...}`
+- `"kind": "service"` → `"request": {...}`, `"response": {...}`
+- `"kind": "action"` → `"goal": {...}`, `"result": {...}`, `"feedback": {...}`
 
 ---
 

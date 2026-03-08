@@ -2377,3 +2377,171 @@ Output (nothing received):
 }
 ```
 
+---
+
+## interface list
+
+List all interface types (messages, services, actions) installed on this ROS 2 system. Reads from the ament resource index — no running ROS 2 graph required.
+
+**ROS 2 CLI equivalent:** `ros2 interface list`
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| (none) | — | No arguments |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py interface list
+```
+
+Output:
+```json
+{
+  "messages": [
+    "geometry_msgs/msg/Twist",
+    "std_msgs/msg/Bool",
+    "std_msgs/msg/String"
+  ],
+  "services": [
+    "std_srvs/srv/Empty",
+    "std_srvs/srv/SetBool"
+  ],
+  "actions": [
+    "nav2_msgs/action/NavigateToPose"
+  ],
+  "total": 6
+}
+```
+
+---
+
+## interface show `<type>`
+
+Show the field structure of a message, service, or action type. Accepts canonical formats (`pkg/msg/Name`, `pkg/srv/Name`, `pkg/action/Name`) and shorthand (`pkg/Name` — tries message, then service, then action).
+
+**ROS 2 CLI equivalent:** `ros2 interface show <type>`
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `type` | Yes | Interface type string |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py interface show std_msgs/msg/String
+python3 {baseDir}/scripts/ros2_cli.py interface show std_srvs/srv/SetBool
+python3 {baseDir}/scripts/ros2_cli.py interface show nav2_msgs/action/NavigateToPose
+python3 {baseDir}/scripts/ros2_cli.py interface show std_msgs/String
+```
+
+Output (message):
+```json
+{
+  "type": "std_msgs/msg/String",
+  "kind": "message",
+  "fields": {"data": "string"}
+}
+```
+
+Output (service):
+```json
+{
+  "type": "std_srvs/srv/SetBool",
+  "kind": "service",
+  "request": {"data": "boolean"},
+  "response": {"success": "boolean", "message": "string"}
+}
+```
+
+Output (action):
+```json
+{
+  "type": "nav2_msgs/action/NavigateToPose",
+  "kind": "action",
+  "goal": {
+    "pose": "geometry_msgs/PoseStamped",
+    "behavior_tree": "string"
+  },
+  "result": {"result": "nav2_msgs/NavigationResult"},
+  "feedback": {
+    "current_pose": "geometry_msgs/PoseStamped",
+    "navigation_time": "builtin_interfaces/Duration",
+    "number_of_recoveries": "int16",
+    "distance_remaining": "float32"
+  }
+}
+```
+
+Output (unknown type):
+```json
+{"error": "Unknown interface type: bad_pkg/msg/Nope", "hint": "Use formats like std_msgs/msg/String, std_srvs/srv/SetBool, nav2_msgs/action/NavigateToPose, or shorthand std_msgs/String"}
+```
+
+---
+
+## interface packages
+
+List all packages that define at least one ROS 2 interface. Reads from the ament resource index — no running ROS 2 graph required.
+
+**ROS 2 CLI equivalent:** `ros2 interface packages`
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| (none) | — | No arguments |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py interface packages
+```
+
+Output:
+```json
+{
+  "packages": [
+    "action_msgs",
+    "builtin_interfaces",
+    "geometry_msgs",
+    "nav2_msgs",
+    "rcl_interfaces",
+    "sensor_msgs",
+    "std_msgs",
+    "std_srvs"
+  ],
+  "count": 8
+}
+```
+
+---
+
+## interface package `<package>`
+
+List all interface types (messages, services, actions) defined by a single package. Reads from the ament resource index — no running ROS 2 graph required.
+
+**ROS 2 CLI equivalent:** `ros2 interface package <package>`
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `package` | Yes | Package name (e.g. `std_msgs`, `geometry_msgs`) |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py interface package std_msgs
+python3 {baseDir}/scripts/ros2_cli.py interface package geometry_msgs
+```
+
+Output:
+```json
+{
+  "package": "std_msgs",
+  "messages": [
+    "std_msgs/msg/Bool",
+    "std_msgs/msg/Float32",
+    "std_msgs/msg/Int32",
+    "std_msgs/msg/String"
+  ],
+  "services": [],
+  "actions": [],
+  "total": 4
+}
+```
+
+Output (unknown package):
+```json
+{"error": "Package 'nonexistent_pkg' not found or has no interfaces"}
+```
+
