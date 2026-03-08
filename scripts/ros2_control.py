@@ -323,7 +323,7 @@ def _generate_dot(controllers):
 
 
 def cmd_control_view_controller_chains(args):
-    """Generate a DOT diagram of loaded chained controllers, save to artifacts/, send via Discord."""
+    """Generate a DOT diagram of loaded chained controllers, save to .artifacts/, send via Discord."""
     try:
         from controller_manager_msgs.srv import ListControllers
         rclpy.init()
@@ -339,7 +339,7 @@ def cmd_control_view_controller_chains(args):
         controllers = [msg_to_dict(c) for c in svc_result.controller]
         dot_source = _generate_dot(controllers)
 
-        # Resolve output paths; resolve_output_path creates artifacts/ if needed.
+        # Resolve output paths; resolve_output_path creates .artifacts/ if needed.
         pdf_path = resolve_output_path(args.output)
         gv_path  = os.path.splitext(pdf_path)[0] + ".gv"
 

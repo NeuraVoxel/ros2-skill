@@ -8,9 +8,9 @@ Added parameter preset commands for saving and restoring named parameter snapsho
 
 ### Parameters
 
-- `params preset-save <node> <preset>` — save the current live parameters of a node to `~/.ros2_presets/{node}/{preset}.json`; uses `ListParameters` + `GetParameters` and writes a plain `{param_name: value}` JSON file
+- `params preset-save <node> <preset>` — save the current live parameters of a node to `.presets/{node}/{preset}.json` (beside the skill directory, created automatically); uses `ListParameters` + `GetParameters` and writes a plain `{param_name: value}` JSON file
 - `params preset-load <node> <preset>` — restore a named preset onto a node via `SetParameters`; reports per-parameter success and failure reasons
-- `params preset-list [node]` — list all saved presets from `~/.ros2_presets/`; accepts an optional node filter; no running ROS 2 graph required
+- `params preset-list [node]` — list all saved presets from `.presets/`; accepts an optional node filter; no running ROS 2 graph required
 - `params preset-delete <node> <preset>` — remove a saved preset file; no running ROS 2 graph required
 
 ### Internal
@@ -56,7 +56,7 @@ Refactored the CLI into separate domain modules and added two new command domain
 
 ### Topics
 
-- `topics capture-image` — capture a single frame from a ROS 2 image topic (compressed or raw), save to `artifacts/`; optional Discord send via `--channel-id` and `--config`
+- `topics capture-image` — capture a single frame from a ROS 2 image topic (compressed or raw), save to `.artifacts/`; optional Discord send via `--channel-id` and `--config`
 
 ### Lifecycle
 
@@ -77,7 +77,7 @@ Refactored the CLI into separate domain modules and added two new command domain
 - `control set-controller-state` / `scs` — activate or deactivate a single controller via `SwitchController`
 - `control set-hardware-component-state` / `shcs` — drive a hardware component through its lifecycle (`unconfigured`, `inactive`, `active`, `finalized`)
 - `control switch-controllers` / `sc` — atomically activate and/or deactivate multiple controllers in a single `SwitchController` call; `--strictness STRICT|BEST_EFFORT`
-- `control view-controller-chains` / `vcc` — generate a Graphviz DOT diagram of loaded chained controllers, render to PDF in `artifacts/`, optionally send to Discord
+- `control view-controller-chains` / `vcc` — generate a Graphviz DOT diagram of loaded chained controllers, render to PDF in `.artifacts/`, optionally send to Discord
 - `control configure-controller` / `cc` — explicitly configure a loaded controller (`unconfigured → inactive`) via the `ConfigureController` service; surfaces `on_configure()` errors that `SwitchController`'s silent auto-configure hides
 
 ### Fixes
@@ -87,7 +87,7 @@ Refactored the CLI into separate domain modules and added two new command domain
 
 ### Utilities
 
-- `resolve_output_path()` added to `ros2_utils.py` — shared helper for `--output` arguments; plain filename → `artifacts/` (created if absent), explicit path → used as-is
+- `resolve_output_path()` added to `ros2_utils.py` — shared helper for `--output` arguments; plain filename → `.artifacts/` (created if absent), explicit path → used as-is
 
 ---
 

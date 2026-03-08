@@ -1079,7 +1079,7 @@ def cmd_topics_delay(args):
 # ---------------------------------------------------------------------------
 
 def cmd_topics_capture_image(args):
-    """Capture an image from a ROS 2 image topic and save to artifacts/ folder."""
+    """Capture an image from a ROS 2 image topic and save to .artifacts/ folder."""
     try:
         from sensor_msgs.msg import CompressedImage, Image
         import cv2

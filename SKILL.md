@@ -76,7 +76,7 @@ python3 {baseDir}/scripts/ros2_cli.py version
 | Topics | `topics find <msg_type>` | Find topics by message type |
 | Topics | `topics bw <topic>` | Measure topic bandwidth (bytes/s) |
 | Topics | `topics delay <topic>` | Measure header-stamp end-to-end latency |
-| Topics | `topics capture-image` | Capture image from ROS 2 topic and save to artifacts/ |
+| Topics | `topics capture-image` | Capture image from ROS 2 topic and save to .artifacts/ |
 | Discord | `send-image` (discord_tools.py) | Send image to Discord channel |
 | Services | `services list` | List all available services |
 | Services | `services ls` | Alias for `services list` |
@@ -140,7 +140,7 @@ python3 {baseDir}/scripts/ros2_cli.py version
 | Control | `control switch-controllers` | Atomically switch multiple controllers in one call |
 | Control | `control sc` | Alias for `control switch-controllers` |
 | Control | `control swc` | Alias for `control switch-controllers` |
-| Control | `control view-controller-chains` | Generate Graphviz diagram of chained controllers, save to artifacts/ |
+| Control | `control view-controller-chains` | Generate Graphviz diagram of chained controllers, save to .artifacts/ |
 | Control | `control vcc` | Alias for `control view-controller-chains` |
 | Doctor | `doctor [--report] [--report-failed] [--exclude-packages] [--include-warnings]` | Run ROS 2 system health checks; output JSON summary with pass/warn/fail per checker |
 | Doctor | `doctor hello [--topic TOPIC] [--timeout SECS]` | Check cross-host connectivity via ROS topic and UDP multicast |
@@ -162,11 +162,11 @@ python3 {baseDir}/scripts/ros2_cli.py version
 
 ### Artifacts Folder
 
-Images captured from ROS 2 topics are automatically saved to the `artifacts/` folder in the skill directory. The folder is created automatically if it doesn't exist.
+Images captured from ROS 2 topics are automatically saved to the `.artifacts/` folder in the skill directory. The folder is created automatically if it doesn't exist.
 
 **`--output` path behaviour** for `topics capture-image` and `control view-controller-chains`:
 
-- **Plain filename** (e.g., `robot_view.jpg`, `my_diagram.pdf`) → saved to `artifacts/` automatically (folder is created if it doesn't exist).
+- **Plain filename** (e.g., `robot_view.jpg`, `my_diagram.pdf`) → saved to `.artifacts/` automatically (folder is created if it doesn't exist).
 - **Explicit path** (e.g., `/tmp/robot_view.jpg`, `~/captures/view.jpg`) → saved to that exact location. The parent directory must already exist.
 
 ### Discord Configuration
@@ -192,7 +192,7 @@ The Discord bot token is read from a config file whose path is provided via the 
 ```bash
 python3 {baseDir}/scripts/ros2_cli.py topics capture-image \
   --topic /camera/image_raw/compressed \
-  --output robot_view.jpg \  # plain filename → artifacts/robot_view.jpg; or use a full path
+  --output robot_view.jpg \  # plain filename → .artifacts/robot_view.jpg; or use a full path
   --timeout 5.0 \
   --type auto
 ```
@@ -201,7 +201,7 @@ python3 {baseDir}/scripts/ros2_cli.py topics capture-image \
 
 ```bash
 python3 {baseDir}/scripts/discord_tools.py send-image \
-  --path {baseDir}/artifacts/robot_view.jpg \
+  --path {baseDir}/.artifacts/robot_view.jpg \
   --channel-id 123456789012345678 \
   --config ~/.nanobot/config.json \
   --delete
@@ -552,10 +552,10 @@ python3 {baseDir}/scripts/ros2_cli.py control set-hardware-component-state my_ro
 # Reload controller libraries (--force-kill stops running controllers first)
 python3 {baseDir}/scripts/ros2_cli.py control reload-controller-libraries --force-kill
 
-# Generate Graphviz diagram of chained controllers (saved to artifacts/)
+# Generate Graphviz diagram of chained controllers (saved to .artifacts/)
 python3 {baseDir}/scripts/ros2_cli.py control view-controller-chains
 python3 {baseDir}/scripts/ros2_cli.py control view-controller-chains \
-  --output my_diagram.pdf \  # plain filename → artifacts/my_diagram.pdf; or use a full path
+  --output my_diagram.pdf \  # plain filename → .artifacts/my_diagram.pdf; or use a full path
   --channel-id 1234567890 --config ~/.nanobot/config.json
 ```
 
@@ -673,7 +673,7 @@ python3 {baseDir}/scripts/ros2_cli.py params delete /turtlesim background_r
 
 ### params preset — Parameter Presets
 
-**Terminology:** Use preset commands when the user wants to save a configuration ("save these settings as 'indoor'"), switch between named configurations, or restore a previous parameter state. Presets are stored as JSON files in `~/.ros2_presets/` — no ROS 2 graph required for `preset-list` and `preset-delete`.
+**Terminology:** Use preset commands when the user wants to save a configuration ("save these settings as 'indoor'"), switch between named configurations, or restore a previous parameter state. Presets are stored as JSON files in `.presets/` (beside the skill directory, created automatically) — no ROS 2 graph required for `preset-list` and `preset-delete`.
 
 ```bash
 # Save the current parameters of /turtlesim as the 'indoor' preset

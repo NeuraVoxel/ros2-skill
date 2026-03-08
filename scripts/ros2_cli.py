@@ -346,7 +346,7 @@ Examples:
 
   control view-controller-chains [--output FILE] [--channel-id ID] [--config PATH]
   control vcc
-    Write a Graphviz diagram of chained controllers to artifacts/ and optionally
+    Write a Graphviz diagram of chained controllers to .artifacts/ and optionally
     send the PDF to Discord. Requires graphviz: sudo apt install graphviz
     $ python3 ros2_cli.py control view-controller-chains
     $ python3 ros2_cli.py control view-controller-chains \
@@ -599,7 +599,7 @@ def build_parser():
     p = tsub.add_parser("capture-image", help="Capture image from ROS 2 topic")
     p.add_argument("--topic", required=True,
                    help="ROS 2 image topic (e.g., /camera/image_raw/compressed)")
-    p.add_argument("--output", required=True, help="Output filename (saved in artifacts/)")
+    p.add_argument("--output", required=True, help="Output filename (saved in .artifacts/)")
     p.add_argument("--timeout", type=float, default=5.0, help="Seconds to wait for image")
     p.add_argument("--type", choices=["auto", "compressed", "raw"], default="auto",
                    help="Image type: compressed, raw, or auto")
@@ -877,7 +877,7 @@ def build_parser():
             help="Generate a diagram of loaded chained controllers"
             if _name == "view-controller-chains" else "Alias for view-controller-chains")
         p.add_argument("--output", default="controller_diagram.pdf",
-                       help="Output filename saved in artifacts/ (default: controller_diagram.pdf)")
+                       help="Output filename saved in .artifacts/ (default: controller_diagram.pdf)")
         p.add_argument("--channel-id", dest="channel_id", default=None,
                        help="Discord channel ID; if provided, sends the PDF via discord_tools")
         p.add_argument("--config", default="~/.nanobot/config.json",

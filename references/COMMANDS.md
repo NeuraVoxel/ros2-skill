@@ -8,12 +8,12 @@ All commands output JSON. Errors return `{"error": "..."}`.
 
 ## topics capture-image
 
-Capture an image from a ROS 2 image topic and save to the artifacts/ folder.
+Capture an image from a ROS 2 image topic and save to the .artifacts/ folder.
 
 | Option | Required | Description |
 |--------|----------|-------------|
 | --topic | Yes | ROS 2 image topic (e.g. /camera/image_raw/compressed) |
-| --output | Yes | Output filename (saved in artifacts/) |
+| --output | Yes | Output filename (saved in .artifacts/) |
 | --timeout | No | Seconds to wait for image (default: 5.0) |
 | --type | No | Image type: compressed, raw, or auto (default: auto) |
 
@@ -24,7 +24,7 @@ python3 scripts/ros2_cli.py topics capture-image --topic /camera/image_raw/compr
 
 Output (success):
 ```json
-{"success": true, "path": "/path/to/artifacts/test.jpg"}
+{"success": true, "path": "/path/to/.artifacts/test.jpg"}
 ```
 Output (error):
 ```json
@@ -57,13 +57,13 @@ Send an image file to a Discord channel. The bot token is read from the config f
 
 Example:
 ```bash
-python3 scripts/discord_tools.py send-image --path artifacts/test.jpg --channel-id 123456789012345678 --config ~/.nanobot/config.json --delete
+python3 scripts/discord_tools.py send-image --path .artifacts/test.jpg --channel-id 123456789012345678 --config ~/.nanobot/config.json --delete
 ```
 
 Output (success):
 ```
 Image sent to Discord channel 123456789012345678 successfully.
-Deleted image: artifacts/test.jpg
+Deleted image: .artifacts/test.jpg
 ```
 Output (error):
 ```
@@ -1183,7 +1183,7 @@ Output (rejected — node disallows undeclaring):
 
 ## params preset-save `<node>` `<preset>` [options]
 
-Save the current parameters of a node as a named preset. Internally calls `ListParameters` + `GetParameters` and writes a `{param_name: value}` JSON file to `~/.ros2_presets/{node}/{preset}.json`. Requires the node to be running.
+Save the current parameters of a node as a named preset. Internally calls `ListParameters` + `GetParameters` and writes a `{param_name: value}` JSON file to `.presets/{node}/{preset}.json` (beside the skill directory, created automatically). Requires the node to be running.
 
 | Argument | Required | Description |
 |----------|----------|-------------|
@@ -1201,7 +1201,7 @@ python3 {baseDir}/scripts/ros2_cli.py params preset-save /turtlesim outdoor --ti
 
 Output:
 ```json
-{"node": "/turtlesim", "preset": "indoor", "path": "/home/user/.ros2_presets/turtlesim/indoor.json", "count": 3}
+{"node": "/turtlesim", "preset": "indoor", "path": "/path/to/ros2-skill/.presets/turtlesim/indoor.json", "count": 3}
 ```
 
 ---
@@ -1230,14 +1230,14 @@ Output (success):
 
 Output (preset not found):
 ```json
-{"error": "Preset 'indoor' not found for /turtlesim", "path": "/home/user/.ros2_presets/turtlesim/indoor.json"}
+{"error": "Preset 'indoor' not found for /turtlesim", "path": "/path/to/ros2-skill/.presets/turtlesim/indoor.json"}
 ```
 
 ---
 
 ## params preset-list [`<node>`]
 
-List all saved presets, optionally filtered to a single node. Reads from `~/.ros2_presets/` — no running ROS 2 graph required.
+List all saved presets, optionally filtered to a single node. Reads from `.presets/` (beside the skill directory) — no running ROS 2 graph required.
 
 | Argument | Required | Description |
 |----------|----------|-------------|
@@ -1253,14 +1253,14 @@ python3 {baseDir}/scripts/ros2_cli.py params preset-list /turtlesim
 
 Output:
 ```json
-{"presets": [{"node": "/turtlesim", "preset": "indoor", "path": "/home/user/.ros2_presets/turtlesim/indoor.json"}, {"node": "/turtlesim", "preset": "outdoor", "path": "/home/user/.ros2_presets/turtlesim/outdoor.json"}], "count": 2}
+{"presets": [{"node": "/turtlesim", "preset": "indoor", "path": "/path/to/ros2-skill/.presets/turtlesim/indoor.json"}, {"node": "/turtlesim", "preset": "outdoor", "path": "/path/to/ros2-skill/.presets/turtlesim/outdoor.json"}], "count": 2}
 ```
 
 ---
 
 ## params preset-delete `<node>` `<preset>`
 
-Delete a saved preset file from `~/.ros2_presets/`. No running ROS 2 graph required.
+Delete a saved preset file from `.presets/`. No running ROS 2 graph required.
 
 | Argument | Required | Description |
 |----------|----------|-------------|
@@ -2233,7 +2233,7 @@ Output (error):
 
 ## control view-controller-chains
 
-Generate a Graphviz diagram of loaded chained controllers, save as PDF to `artifacts/`, and optionally send to Discord.
+Generate a Graphviz diagram of loaded chained controllers, save as PDF to `.artifacts/`, and optionally send to Discord.
 
 **Alias:** `vcc`
 
@@ -2241,7 +2241,7 @@ Requires graphviz: `sudo apt install graphviz`
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| --output | No | Output PDF filename saved in artifacts/ (default: controller_diagram.pdf) |
+| --output | No | Output PDF filename saved in .artifacts/ (default: controller_diagram.pdf) |
 | --channel-id | No | Discord channel ID; if provided, sends the PDF via discord_tools |
 | --config | No | Path to nanobot config for Discord (default: ~/.nanobot/config.json) |
 | --controller-manager | No | Controller manager node name (default: /controller_manager) |
@@ -2256,16 +2256,16 @@ python3 scripts/ros2_cli.py control vcc --output my_diagram.pdf --channel-id 123
 Output (success):
 ```json
 {
-  "gv_path": "/path/to/artifacts/controller_diagram.gv",
-  "pdf_path": "/path/to/artifacts/controller_diagram.pdf",
+  "gv_path": "/path/to/.artifacts/controller_diagram.gv",
+  "pdf_path": "/path/to/.artifacts/controller_diagram.pdf",
   "controllers": 3
 }
 ```
 Output (success with Discord):
 ```json
 {
-  "gv_path": "/path/to/artifacts/controller_diagram.gv",
-  "pdf_path": "/path/to/artifacts/controller_diagram.pdf",
+  "gv_path": "/path/to/.artifacts/controller_diagram.gv",
+  "pdf_path": "/path/to/.artifacts/controller_diagram.pdf",
   "controllers": 3,
   "discord_sent": true
 }
@@ -2273,7 +2273,7 @@ Output (success with Discord):
 Output (graphviz not installed):
 ```json
 {
-  "gv_path": "/path/to/artifacts/controller_diagram.gv",
+  "gv_path": "/path/to/.artifacts/controller_diagram.gv",
   "pdf_path": null,
   "warning": "graphviz 'dot' not installed; .gv written but PDF not generated. Install with: sudo apt install graphviz",
   "controllers": 3

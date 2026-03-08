@@ -510,8 +510,16 @@ def cmd_params_delete(args):
 # ---------------------------------------------------------------------------
 # Parameter preset commands
 # Presets are stored as plain {param_name: value} JSON files under
-# ~/.ros2_presets/{node_clean}/{preset_name}.json
+# .presets/{node_clean}/{preset_name}.json  (beside the scripts/ directory,
+# created automatically — same pattern as the artifacts/ folder)
 # ---------------------------------------------------------------------------
+
+def _presets_base():
+    """Return the absolute path to the .presets/ directory, creating it if needed."""
+    base = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.presets'))
+    os.makedirs(base, exist_ok=True)
+    return base
+
 
 def cmd_params_preset_save(args):
     """Save the current parameters of a node as a named preset."""
@@ -524,7 +532,7 @@ def cmd_params_preset_save(args):
     if params_dict is None:
         return  # _dump_params already called output({"error": ...})
 
-    preset_dir = os.path.expanduser(f"~/.ros2_presets/{node_clean}")
+    preset_dir = os.path.join(_presets_base(), node_clean)
     os.makedirs(preset_dir, exist_ok=True)
     preset_path = os.path.join(preset_dir, f"{args.preset}.json")
 
@@ -542,7 +550,7 @@ def cmd_params_preset_load(args):
         node_name = '/' + node_name
     node_clean = node_name.lstrip('/').replace('/', '_')
 
-    preset_path = os.path.expanduser(f"~/.ros2_presets/{node_clean}/{args.preset}.json")
+    preset_path = os.path.join(_presets_base(), node_clean, f"{args.preset}.json")
     if not os.path.exists(preset_path):
         return output({"error": f"Preset '{args.preset}' not found for {node_name}",
                        "path": preset_path})
@@ -553,7 +561,7 @@ def cmd_params_preset_load(args):
 
 def cmd_params_preset_list(args):
     """List all saved presets, optionally filtered by node."""
-    base_dir = os.path.expanduser("~/.ros2_presets")
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.presets'))
     node_filter = getattr(args, 'node', None)
     if node_filter:
         if not node_filter.startswith('/'):
@@ -585,7 +593,7 @@ def cmd_params_preset_delete(args):
         node_name = '/' + node_name
     node_clean = node_name.lstrip('/').replace('/', '_')
 
-    preset_path = os.path.expanduser(f"~/.ros2_presets/{node_clean}/{args.preset}.json")
+    preset_path = os.path.join(_presets_base(), node_clean, f"{args.preset}.json")
     if not os.path.exists(preset_path):
         return output({"error": f"Preset '{args.preset}' not found for {node_name}"})
 
