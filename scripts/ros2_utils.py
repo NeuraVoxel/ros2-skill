@@ -349,15 +349,15 @@ def resolve_output_path(filename_or_path):
     """Resolve an --output argument to an absolute path.
 
     If *filename_or_path* contains no directory component (plain filename),
-    the file is placed in the ``artifacts/`` directory next to this package,
+    the file is placed in the ``.artifacts/`` directory next to this package,
     creating it when necessary.  Otherwise the value is treated as an explicit
     path and returned as an absolute path (parent directories are not created).
     """
     if os.path.dirname(filename_or_path):
         # Caller supplied an explicit directory — honour it as-is.
         return os.path.abspath(filename_or_path)
-    # Plain filename: resolve to artifacts/ beside this script.
-    artifacts_dir = os.path.join(os.path.dirname(__file__), '..', 'artifacts')
+    # Plain filename: resolve to .artifacts/ beside this script.
+    artifacts_dir = os.path.join(os.path.dirname(__file__), '..', '.artifacts')
     artifacts_dir = os.path.abspath(artifacts_dir)
     os.makedirs(artifacts_dir, exist_ok=True)
     return os.path.join(artifacts_dir, filename_or_path)

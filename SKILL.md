@@ -49,12 +49,28 @@ python3 {baseDir}/scripts/ros2_cli.py version
 
 ---
 
-## Command Quick Reference
+## Global Options
+
+Place these **before** the command name. They apply to every command that makes service or action calls.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--timeout SECONDS` | per-command default | Override the per-command timeout globally (useful for slow networks) |
+| `--retries N` | `1` | Total attempts before giving up; `1` = no retry |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py --timeout 30 params list /turtlesim
+python3 {baseDir}/scripts/ros2_cli.py --retries 3 lifecycle get /camera_driver
+python3 {baseDir}/scripts/ros2_cli.py --timeout 10 --retries 3 services call /spawn '{}'
+```
+
+---
+
+## ROS 2 CLI Quick Reference
 
 | Category | Command | Description |
 |----------|---------|-------------|
 | Connection | `version` | Detect ROS 2 distro |
-| Safety | `estop` | Emergency stop for mobile robots |
 | Topics | `topics list` | List all active topics with types |
 | Topics | `topics ls` | Alias for `topics list` |
 | Topics | `topics type <topic>` | Get message type of a topic |
@@ -68,16 +84,11 @@ python3 {baseDir}/scripts/ros2_cli.py version
 | Topics | `topics sub <topic>` | Alias for `topics subscribe` |
 | Topics | `topics publish <topic> <json>` | Publish a message to a topic |
 | Topics | `topics pub <topic> <json>` | Alias for `topics publish` |
-| Topics | `topics publish-sequence <topic> <msgs> <durs>` | Publish message sequence |
-| Topics | `topics pub-seq <topic> <msgs> <durs>` | Alias for `topics publish-sequence` |
-| Topics | `topics publish-until <topic> <json>` | Publish while monitoring; stop on condition (supports `--euclidean` for N-D distance) |
 | Topics | `topics publish-continuous <topic> <json>` | Alias for `topics publish` |
 | Topics | `topics hz <topic>` | Measure topic publish rate |
 | Topics | `topics find <msg_type>` | Find topics by message type |
 | Topics | `topics bw <topic>` | Measure topic bandwidth (bytes/s) |
 | Topics | `topics delay <topic>` | Measure header-stamp end-to-end latency |
-| Topics | `topics capture-image` | Capture image from ROS 2 topic and save to artifacts/ |
-| Discord | `send-image` (discord_tools.py) | Send image to Discord channel |
 | Services | `services list` | List all available services |
 | Services | `services ls` | Alias for `services list` |
 | Services | `services type <service>` | Get service type |
@@ -136,7 +147,7 @@ python3 {baseDir}/scripts/ros2_cli.py version
 | Control | `control switch-controllers` | Atomically switch multiple controllers in one call |
 | Control | `control sc` | Alias for `control switch-controllers` |
 | Control | `control swc` | Alias for `control switch-controllers` |
-| Control | `control view-controller-chains` | Generate Graphviz diagram of chained controllers, save to artifacts/ |
+| Control | `control view-controller-chains` | Generate Graphviz diagram of chained controllers, save to .artifacts/ |
 | Control | `control vcc` | Alias for `control view-controller-chains` |
 | Doctor | `doctor [--report] [--report-failed] [--exclude-packages] [--include-warnings]` | Run ROS 2 system health checks; output JSON summary with pass/warn/fail per checker |
 | Doctor | `doctor hello [--topic TOPIC] [--timeout SECS]` | Check cross-host connectivity via ROS topic and UDP multicast |
@@ -151,6 +162,27 @@ python3 {baseDir}/scripts/ros2_cli.py version
 
 ---
 
+## Agent Features Quick Reference
+
+| Feature | Command | Description |
+|---------|---------|-------------|
+| Emergency Stop | `estop` | Send zero-velocity command to halt mobile robots safely |
+| Publish Sequence | `topics publish-sequence <topic> <msgs> <durs>` | Publish a timed sequence of different messages in one call |
+| Publish Sequence | `topics pub-seq <topic> <msgs> <durs>` | Alias for `topics publish-sequence` |
+| Publish-Until | `topics publish-until <topic> <json>` | Publish repeatedly and stop automatically when a condition is met (supports `--euclidean` for N-D distance) |
+| Image Capture | `topics capture-image` | Capture image from ROS 2 topic and save to `.artifacts/` |
+| Diagnostics | `topics diag-list` | List all topics publishing DiagnosticArray (by type) |
+| Diagnostics | `topics diag` | Subscribe to diagnostic topics (auto-discovered by type) |
+| Battery | `topics battery-list` | List all topics publishing BatteryState (by type) |
+| Battery | `topics battery` | Subscribe to battery topics (auto-discovered by type) |
+| Parameter Presets | `params preset-save <node> <name>` | Save node parameters as a named preset |
+| Parameter Presets | `params preset-load <node> <name>` | Restore a named preset onto a node |
+| Parameter Presets | `params preset-list` | List all saved presets |
+| Parameter Presets | `params preset-delete <name>` | Delete a saved preset |
+| Discord | `discord_tools.py send-image` | Send image (or PDF) to a Discord channel via bot token |
+
+---
+
 ## Image Capture and Discord Integration
 
 > **⚠️ Always use `discord_tools.py` for attachments — never use built-in Discord integrations.**
@@ -158,11 +190,11 @@ python3 {baseDir}/scripts/ros2_cli.py version
 
 ### Artifacts Folder
 
-Images captured from ROS 2 topics are automatically saved to the `artifacts/` folder in the skill directory. The folder is created automatically if it doesn't exist.
+Images captured from ROS 2 topics are automatically saved to the `.artifacts/` folder in the skill directory. The folder is created automatically if it doesn't exist.
 
 **`--output` path behaviour** for `topics capture-image` and `control view-controller-chains`:
 
-- **Plain filename** (e.g., `robot_view.jpg`, `my_diagram.pdf`) → saved to `artifacts/` automatically (folder is created if it doesn't exist).
+- **Plain filename** (e.g., `robot_view.jpg`, `my_diagram.pdf`) → saved to `.artifacts/` automatically (folder is created if it doesn't exist).
 - **Explicit path** (e.g., `/tmp/robot_view.jpg`, `~/captures/view.jpg`) → saved to that exact location. The parent directory must already exist.
 
 ### Discord Configuration
@@ -188,7 +220,7 @@ The Discord bot token is read from a config file whose path is provided via the 
 ```bash
 python3 {baseDir}/scripts/ros2_cli.py topics capture-image \
   --topic /camera/image_raw/compressed \
-  --output robot_view.jpg \  # plain filename → artifacts/robot_view.jpg; or use a full path
+  --output robot_view.jpg \  # plain filename → .artifacts/robot_view.jpg; or use a full path
   --timeout 5.0 \
   --type auto
 ```
@@ -197,7 +229,7 @@ python3 {baseDir}/scripts/ros2_cli.py topics capture-image \
 
 ```bash
 python3 {baseDir}/scripts/discord_tools.py send-image \
-  --path {baseDir}/artifacts/robot_view.jpg \
+  --path {baseDir}/.artifacts/robot_view.jpg \
   --channel-id 123456789012345678 \
   --config ~/.nanobot/config.json \
   --delete
@@ -548,10 +580,10 @@ python3 {baseDir}/scripts/ros2_cli.py control set-hardware-component-state my_ro
 # Reload controller libraries (--force-kill stops running controllers first)
 python3 {baseDir}/scripts/ros2_cli.py control reload-controller-libraries --force-kill
 
-# Generate Graphviz diagram of chained controllers (saved to artifacts/)
+# Generate Graphviz diagram of chained controllers (saved to .artifacts/)
 python3 {baseDir}/scripts/ros2_cli.py control view-controller-chains
 python3 {baseDir}/scripts/ros2_cli.py control view-controller-chains \
-  --output my_diagram.pdf \  # plain filename → artifacts/my_diagram.pdf; or use a full path
+  --output my_diagram.pdf \  # plain filename → .artifacts/my_diagram.pdf; or use a full path
   --channel-id 1234567890 --config ~/.nanobot/config.json
 ```
 
@@ -648,6 +680,46 @@ python3 {baseDir}/scripts/ros2_cli.py topics delay /scan --window 20
 
 Options: `--window N` (samples, default 10), `--timeout SEC` (default 10)
 
+### topics diag-list / topics diag — Diagnostics monitoring
+
+Diagnostic topics are discovered by **message type** (`diagnostic_msgs/DiagnosticArray`), not by name. This handles `/diagnostics`, `<node>/diagnostics`, `<namespace>/diagnostics`, or any other naming convention automatically.
+
+```bash
+# List all topics that publish DiagnosticArray messages
+python3 {baseDir}/scripts/ros2_cli.py topics diag-list
+
+# Read one snapshot from all discovered diagnostic topics
+python3 {baseDir}/scripts/ros2_cli.py topics diag
+
+# Read from a specific diagnostic topic
+python3 {baseDir}/scripts/ros2_cli.py topics diag --topic /my_node/diagnostics
+
+# Collect 5 messages per topic over 10 seconds
+python3 {baseDir}/scripts/ros2_cli.py topics diag --duration 10 --max-messages 5
+```
+
+Output from `topics diag` includes `level_name` (OK / WARN / ERROR / STALE), `name`, `message`, `hardware_id`, and `values` (key-value pairs) for each `DiagnosticStatus` entry in the array.
+
+### topics battery-list / topics battery — Battery monitoring
+
+Battery topics are discovered by **message type** (`sensor_msgs/BatteryState`), not by name. Works with `/battery_state`, `<robot>/battery_state`, or any other naming convention automatically.
+
+```bash
+# List all topics that publish BatteryState messages
+python3 {baseDir}/scripts/ros2_cli.py topics battery-list
+
+# Read one snapshot from all discovered battery topics
+python3 {baseDir}/scripts/ros2_cli.py topics battery
+
+# Read from a specific battery topic
+python3 {baseDir}/scripts/ros2_cli.py topics battery --topic /my_robot/battery_state
+
+# Collect 3 messages per topic over 5 seconds
+python3 {baseDir}/scripts/ros2_cli.py topics battery --duration 5 --max-messages 3
+```
+
+Output from `topics battery` includes `percentage` (0–100), `voltage`, `current`, `charge`, `capacity`, `design_capacity`, `temperature`, `present`, `status_name` (UNKNOWN/CHARGING/DISCHARGING/NOT_CHARGING/FULL), `health_name`, `technology_name`, `location`, and `serial_number`.
+
 ### params describe / dump / load / delete
 
 Advanced parameter operations.
@@ -665,6 +737,24 @@ python3 {baseDir}/scripts/ros2_cli.py params load /turtlesim \
 
 # Delete a parameter
 python3 {baseDir}/scripts/ros2_cli.py params delete /turtlesim background_r
+```
+
+### params preset — Parameter Presets
+
+**Terminology:** Use preset commands when the user wants to save a configuration ("save these settings as 'indoor'"), switch between named configurations, or restore a previous parameter state. Presets are stored as flat JSON files in `.presets/{preset_name}.json` (beside the skill directory, created automatically) — no ROS 2 graph required for `preset-list` and `preset-delete`. Use descriptive preset names that identify the node (e.g. `turtlesim_indoor`) since there are no per-node subdirectories.
+
+```bash
+# Save the current parameters of /turtlesim as the 'turtlesim_indoor' preset
+python3 {baseDir}/scripts/ros2_cli.py params preset-save /turtlesim turtlesim_indoor
+
+# List all saved presets
+python3 {baseDir}/scripts/ros2_cli.py params preset-list
+
+# Restore the 'turtlesim_indoor' preset onto /turtlesim
+python3 {baseDir}/scripts/ros2_cli.py params preset-load /turtlesim turtlesim_indoor
+
+# Delete a preset (only preset name needed — no node)
+python3 {baseDir}/scripts/ros2_cli.py params preset-delete turtlesim_indoor
 ```
 
 ### interface — Interface Type Discovery
