@@ -1,6 +1,6 @@
 ---
 name: ros2-skill
-description: "Controls ROS 2 robots directly via rclpy CLI. Use when the user asks about ROS 2 topics, services, nodes, parameters, actions, robot movement, sensor data, or any ROS 2 robot interaction."
+description: "Controls and monitors ROS 2 robots directly via rclpy CLI. Use for ANY ROS 2 robot task: topics (subscribe, publish, capture images, find by type), services (list, call), actions (list, send goals), parameters (get, set, presets), nodes, lifecycle management, controllers (ros2_control), diagnostics, battery, system health checks, and more. When in doubt, use this skill — it covers the full ROS 2 operation surface. Never tell the user you cannot do something ROS 2-related without checking this skill first."
 license: Apache-2.0
 compatibility: "Requires python3, rclpy, and ROS 2 environment sourced"
 user-invokable: true
@@ -16,6 +16,70 @@ Controls and monitors ROS 2 robots directly via rclpy.
 All commands output JSON. Errors contain `{"error": "..."}`.
 
 For full command reference with arguments, options, and output examples, see [references/COMMANDS.md](references/COMMANDS.md).
+
+---
+
+## Agent Behaviour Rules
+
+These rules are absolute and apply to every request involving a ROS 2 robot.
+
+### Rule 1 — Discover before you act, never ask
+
+**Never ask the user for names, types, or IDs that can be discovered from the live system.** This includes topic names, service names, action names, node names, parameter names, message types, and controller names. Always query the robot first.
+
+| What you need | How to discover it |
+|---|---|
+| Topic name | `topics list` or `topics find <msg_type>` |
+| Topic message type | `topics type <topic>` |
+| Service name | `services list` or `services find <srv_type>` |
+| Service request/response fields | `services details <service>` |
+| Action server name | `actions list` or `actions find <action_type>` |
+| Action goal/result/feedback fields | `actions details <action>` |
+| Node name | `nodes list` |
+| Node's topics, services, actions | `nodes details <node>` |
+| Parameter names on a node | `params list <node>` |
+| Parameter value | `params get <node:param>` |
+| Parameter type and constraints | `params describe <node:param>` |
+| Controller names and states | `control list-controllers` |
+| Hardware components | `control list-hardware-components` |
+| Message / service / action type fields | `interface show <type>` or `interface proto <type>` |
+
+**Only ask the user if**:
+1. The discovery command returns an empty result or an error, **and**
+2. There is genuinely no other way to determine the information from the live system.
+
+### Rule 2 — Use ros2-skill before saying you can't
+
+**Never tell the user you don't know how to do something with a ROS 2 robot without first checking whether ros2-skill has a command for it.** This skill covers the full range of ROS 2 operations: topics, services, actions, parameters, nodes, lifecycle, controllers, diagnostics, battery, images, interfaces, presets, and more.
+
+When a task seems unfamiliar, look it up in the quick reference tables below before responding. Common operations that agents sometimes miss:
+
+| Task | ros2-skill command |
+|---|---|
+| Capture a camera image | `topics capture-image --topic <topic> --output <file>` |
+| Read laser / camera / IMU / odom data | `topics subscribe <topic>` |
+| Call a ROS 2 service | `services call <service> <json>` |
+| Send a navigation or manipulation goal | `actions send <action> <json>` |
+| Change a node parameter at runtime | `params set <node:param> <value>` |
+| Save/restore a parameter configuration | `params preset-save` / `params preset-load` |
+| Activate or deactivate a controller | `control set-controller-state <name> active\|inactive` |
+| Run a health check | `doctor` |
+| Emergency stop | `estop` |
+| Check diagnostics | `topics diag` |
+| Check battery | `topics battery` |
+
+If you genuinely cannot find a matching command after checking both the quick reference and the COMMANDS.md reference, **say so clearly and explain what you checked** — do not silently guess or use a partial solution.
+
+### Rule 3 — Infer the goal, resolve the details
+
+When a user asks to do something, **infer what they want at the goal level, then resolve all concrete details (topic names, types, field paths) from the live system**.
+
+Examples:
+- "Take a picture" → find compressed image topics (`topics find sensor_msgs/msg/CompressedImage`), capture from the first active result
+- "Move the robot forward" → find velocity topic (`topics find geometry_msgs/msg/Twist` and `TwistStamped`), publish with the matching structure
+- "What is the battery level?" → `topics battery` (auto-discovers `BatteryState` topics)
+- "List available controllers" → `control list-controllers`
+- "What parameters does the camera node have?" → `nodes list` to find the camera node name, then `params list <node>`
 
 ---
 
