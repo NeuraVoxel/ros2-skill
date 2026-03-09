@@ -752,6 +752,8 @@ python3 {baseDir}/scripts/ros2_cli.py params delete /turtlesim background_r
 
 **Terminology:** Use preset commands when the user wants to save a configuration ("save these settings as 'indoor'"), switch between named configurations, or restore a previous parameter state. Presets are stored as flat JSON files in `.presets/{preset_name}.json` (beside the skill directory, created automatically) — no ROS 2 graph required for `preset-list` and `preset-delete`. Use descriptive preset names that identify the node (e.g. `turtlesim_indoor`) since there are no per-node subdirectories.
 
+**NEVER create, read, write, or delete preset files directly using file system tools.** Do not create directories named `params_presets`, `presets`, `.presets`, or anything similar yourself. ALL preset operations — save, load, list, delete — must go through the CLI commands below. The CLI manages the `.presets/` directory automatically.
+
 **IMPORTANT — do not confuse these two commands:**
 - `params load <node> <json>` — applies a raw JSON string or file directly to a node (one-shot, no saved file involved)
 - `params preset-load <node> <preset_name>` — restores a previously saved preset by name from `.presets/{preset_name}.json`
