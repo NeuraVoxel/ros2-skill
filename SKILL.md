@@ -113,8 +113,6 @@ python3 {baseDir}/scripts/ros2_cli.py version
 
 ---
 
----
-
 ## Quick Decision Card
 
 **Every user request follows this pattern:**
@@ -178,6 +176,8 @@ Agent does:
 | "Test connectivity" | Run multicast test | Run `doctor hello` |
 | "What parameters?" | List params | Find node → `params list` |
 | "What is the max speed?" | Get params | Find controller → get velocity limits |
+| "Save/load parameter config" | Use presets | Run `params preset-save` / `params preset-load` |
+| "Check battery level" | Subscribe to BatteryState | Run `topics battery` or find BatteryState topic |
 
 ### Step 2: Find What Exists
 
