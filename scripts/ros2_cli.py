@@ -219,6 +219,23 @@ Commands:
     $ python3 ros2_cli.py topics delay /odom
     $ python3 ros2_cli.py topics delay /scan --window 20
 
+  topics diag-list
+    List all topics that publish DiagnosticArray messages, discovered by type
+    (not by name — works with /diagnostics, <node>/diagnostics, or any name).
+    $ python3 ros2_cli.py topics diag-list
+
+  topics diag [--topic TOPIC] [--duration SEC] [--max-messages N] [--timeout SEC]
+    Subscribe to diagnostic topics (auto-discovered by DiagnosticArray type) and
+    return human-readable status with level_name (OK/WARN/ERROR/STALE), name,
+    message, hardware_id, and key-value pairs.
+    --topic TOPIC         Subscribe to this specific topic only
+    --duration SEC        Collect for N seconds (default: one-shot)
+    --max-messages N      Max messages per topic in --duration mode (default: 1)
+    --timeout SEC         Timeout waiting for first message (default: 10)
+    $ python3 ros2_cli.py topics diag
+    $ python3 ros2_cli.py topics diag --topic /my_node/diagnostics
+    $ python3 ros2_cli.py topics diag --duration 5 --max-messages 3
+
   lifecycle nodes
     List all managed (lifecycle) nodes in the ROS 2 graph.
     $ python3 ros2_cli.py lifecycle nodes
@@ -346,7 +363,7 @@ Examples:
 
   control view-controller-chains [--output FILE] [--channel-id ID] [--config PATH]
   control vcc
-    Write a Graphviz diagram of chained controllers to artifacts/ and optionally
+    Write a Graphviz diagram of chained controllers to .artifacts/ and optionally
     send the PDF to Discord. Requires graphviz: sudo apt install graphviz
     $ python3 ros2_cli.py control view-controller-chains
     $ python3 ros2_cli.py control view-controller-chains \
@@ -457,6 +474,10 @@ from ros2_topic import (
     cmd_topics_bw,
     cmd_topics_delay,
     cmd_topics_capture_image,
+    cmd_topics_diag_list,
+    cmd_topics_diag,
+    cmd_topics_battery_list,
+    cmd_topics_battery,
     cmd_services_echo,
     cmd_actions_echo,
 )
@@ -474,6 +495,10 @@ from ros2_param import (
     cmd_params_dump,
     cmd_params_load,
     cmd_params_delete,
+    cmd_params_preset_save,
+    cmd_params_preset_load,
+    cmd_params_preset_list,
+    cmd_params_preset_delete,
 )
 
 from ros2_service import (
@@ -564,6 +589,18 @@ def build_parser():
     parser = argparse.ArgumentParser(
         description="ROS 2 Skill CLI - Control ROS 2 robots directly via rclpy"
     )
+    parser.add_argument(
+        "--timeout", type=float, default=None, dest="global_timeout",
+        metavar="SECONDS",
+        help="Global timeout override in seconds — overrides the per-command default "
+             "for any command that supports --timeout",
+    )
+    parser.add_argument(
+        "--retries", type=int, default=1, dest="global_retries",
+        metavar="N",
+        help="Number of attempts for service/action calls before giving up "
+             "(default: 1, no retry)",
+    )
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("version", help="Detect ROS 2 version")
@@ -595,7 +632,7 @@ def build_parser():
     p = tsub.add_parser("capture-image", help="Capture image from ROS 2 topic")
     p.add_argument("--topic", required=True,
                    help="ROS 2 image topic (e.g., /camera/image_raw/compressed)")
-    p.add_argument("--output", required=True, help="Output filename (saved in artifacts/)")
+    p.add_argument("--output", required=True, help="Output filename (saved in .artifacts/)")
     p.add_argument("--timeout", type=float, default=5.0, help="Seconds to wait for image")
     p.add_argument("--type", choices=["auto", "compressed", "raw"], default="auto",
                    help="Image type: compressed, raw, or auto")
@@ -623,6 +660,30 @@ def build_parser():
                    help="Number of messages to sample (default: 10)")
     p.add_argument("--timeout", type=float, default=10.0,
                    help="Max wait time in seconds (default: 10)")
+    tsub.add_parser("diag-list",
+                    help="List all topics publishing DiagnosticArray messages (by type)")
+    p = tsub.add_parser("diag",
+                        help="Subscribe to diagnostic topics (auto-discovered by type)")
+    p.add_argument("--topic", default=None,
+                   help="Specific diagnostic topic (default: auto-discover all by type)")
+    p.add_argument("--duration", type=float, default=None,
+                   help="Collect for N seconds (default: one-shot)")
+    p.add_argument("--max-messages", dest="max_messages", type=int, default=1,
+                   help="Max messages per topic in --duration mode (default: 1)")
+    p.add_argument("--timeout", type=float, default=10.0,
+                   help="Timeout waiting for messages (default: 10s)")
+    tsub.add_parser("battery-list",
+                    help="List all topics publishing BatteryState messages (by type)")
+    p = tsub.add_parser("battery",
+                        help="Subscribe to battery topics (auto-discovered by type)")
+    p.add_argument("--topic", default=None,
+                   help="Specific battery topic (default: auto-discover all by type)")
+    p.add_argument("--duration", type=float, default=None,
+                   help="Collect for N seconds (default: one-shot)")
+    p.add_argument("--max-messages", dest="max_messages", type=int, default=1,
+                   help="Max messages per topic in --duration mode (default: 1)")
+    p.add_argument("--timeout", type=float, default=10.0,
+                   help="Timeout waiting for messages (default: 10s)")
     for _pub_name in ("publish", "pub"):
         p = tsub.add_parser(_pub_name,
                             help="Publish a message" if _pub_name == "publish"
@@ -718,6 +779,8 @@ def build_parser():
                         "e.g. std_srvs/srv/SetBool)")
     p.add_argument("--timeout", type=float, default=5.0,
                    help="Timeout in seconds (default: 5)")
+    p.add_argument("--retries", type=int, default=None,
+                   help="Number of attempts before giving up (overrides global --retries)")
     p = ssub.add_parser("echo",
                         help="Echo service events (requires service introspection enabled)")
     p.add_argument("service")
@@ -873,7 +936,7 @@ def build_parser():
             help="Generate a diagram of loaded chained controllers"
             if _name == "view-controller-chains" else "Alias for view-controller-chains")
         p.add_argument("--output", default="controller_diagram.pdf",
-                       help="Output filename saved in artifacts/ (default: controller_diagram.pdf)")
+                       help="Output filename saved in .artifacts/ (default: controller_diagram.pdf)")
         p.add_argument("--channel-id", dest="channel_id", default=None,
                        help="Discord channel ID; if provided, sends the PDF via discord_tools")
         p.add_argument("--config", default="~/.nanobot/config.json",
@@ -930,6 +993,19 @@ def build_parser():
                    help="Additional parameter names to delete")
     p.add_argument("--timeout", type=float, default=5.0,
                    help="Timeout in seconds (default: 5)")
+    p = psub.add_parser("preset-save", help="Save node parameters as a named preset")
+    p.add_argument("node", help="Node name (e.g. /turtlesim)")
+    p.add_argument("preset", help="Preset name (e.g. indoor)")
+    p.add_argument("--timeout", type=float, default=5.0,
+                   help="Timeout in seconds (default: 5)")
+    p = psub.add_parser("preset-load", help="Restore a named preset onto a node")
+    p.add_argument("node", help="Node name (e.g. /turtlesim)")
+    p.add_argument("preset", help="Preset name (e.g. indoor)")
+    p.add_argument("--timeout", type=float, default=5.0,
+                   help="Timeout in seconds (default: 5)")
+    psub.add_parser("preset-list", help="List all saved presets")
+    p = psub.add_parser("preset-delete", help="Delete a saved preset")
+    p.add_argument("preset", help="Preset name to delete")
 
     # ------------------------------------------------------------------
     # actions
@@ -954,6 +1030,8 @@ def build_parser():
         p.add_argument("goal", help="JSON goal")
         p.add_argument("--timeout", type=float, default=30.0,
                        help="Timeout in seconds (default: 30)")
+        p.add_argument("--retries", type=int, default=None,
+                       help="Number of attempts before giving up (overrides global --retries)")
         p.add_argument("--feedback", action="store_true", default=False,
                        help="Collect and return feedback messages alongside the result")
     p = asub.add_parser("cancel",
@@ -961,6 +1039,8 @@ def build_parser():
     p.add_argument("action", nargs="?")
     p.add_argument("--timeout", type=float, default=5.0,
                    help="Timeout in seconds (default: 5)")
+    p.add_argument("--retries", type=int, default=None,
+                   help="Number of attempts before giving up (overrides global --retries)")
     p = asub.add_parser("echo", help="Echo action feedback and status messages")
     p.add_argument("action")
     p.add_argument("--duration", type=float, default=None,
@@ -1074,6 +1154,10 @@ DISPATCH = {
     ("topics", "hz"): cmd_topics_hz,
     ("topics", "find"): cmd_topics_find,
     ("topics", "capture-image"): cmd_topics_capture_image,
+    ("topics", "diag-list"): cmd_topics_diag_list,
+    ("topics", "diag"): cmd_topics_diag,
+    ("topics", "battery-list"): cmd_topics_battery_list,
+    ("topics", "battery"): cmd_topics_battery,
     # topics — aliases
     ("topics", "echo"): cmd_topics_subscribe,
     ("topics", "sub"): cmd_topics_subscribe,
@@ -1142,6 +1226,10 @@ DISPATCH = {
     ("params", "dump"): cmd_params_dump,
     ("params", "load"): cmd_params_load,
     ("params", "delete"): cmd_params_delete,
+    ("params", "preset-save"):   cmd_params_preset_save,
+    ("params", "preset-load"):   cmd_params_preset_load,
+    ("params", "preset-list"):   cmd_params_preset_list,
+    ("params", "preset-delete"): cmd_params_preset_delete,
     # params — alias
     ("params", "ls"): cmd_params_list,
     # actions — canonical
@@ -1176,12 +1264,42 @@ DISPATCH = {
 
 
 # ---------------------------------------------------------------------------
+# Global override helpers
+# ---------------------------------------------------------------------------
+
+def _apply_global_overrides(args):
+    """Apply top-level ``--timeout`` / ``--retries`` to the args namespace.
+
+    ``--timeout`` (stored as ``args.global_timeout``) overrides whatever
+    per-command ``--timeout`` default the subparser set.  This lets callers
+    write ``ros2_cli.py --timeout 30 services call …`` to raise the budget
+    for a single invocation without editing every subcommand.
+
+    ``--retries``: some subparsers (services call, actions send/cancel) also
+    define ``--retries`` with ``default=None`` so the flag is accepted when
+    placed *after* the subcommand.  When the subparser value is None it means
+    the user did not pass the flag there, so we fall back to the global value
+    from the main parser (which defaults to 1).
+    """
+    if getattr(args, "global_timeout", None) is not None and hasattr(args, "timeout"):
+        args.timeout = args.global_timeout
+    # Resolve retries: subparsers that accept --retries use default=None so the
+    # flag works when placed *after* the subcommand.  When it is None (not given
+    # after the subcommand), fall back to the global value from the main parser
+    # (global_retries, default 1).  A subparser value of non-None takes priority.
+    global_retries = getattr(args, "global_retries", 1)
+    if getattr(args, "retries", None) is None:
+        args.retries = global_retries
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
 def main():
     parser = build_parser()
     args = parser.parse_args()
+    _apply_global_overrides(args)
 
     if not args.command:
         parser.print_help()

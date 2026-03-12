@@ -1,6 +1,6 @@
 ---
 name: ros2-skill
-description: "Controls ROS 2 robots directly via rclpy CLI. Use when the user asks about ROS 2 topics, services, nodes, parameters, actions, robot movement, sensor data, or any ROS 2 robot interaction."
+description: "Controls and monitors ROS 2 robots directly via rclpy CLI. Use for ANY ROS 2 robot task: topics (subscribe, publish, capture images, find by type), services (list, call), actions (list, send goals), parameters (get, set, presets), nodes, lifecycle management, controllers (ros2_control), diagnostics, battery, system health checks, and more. When in doubt, use this skill — it covers the full ROS 2 operation surface. Never tell the user you cannot do something ROS 2-related without checking this skill first."
 license: Apache-2.0
 compatibility: "Requires python3, rclpy, and ROS 2 environment sourced"
 user-invokable: true
@@ -16,6 +16,70 @@ Controls and monitors ROS 2 robots directly via rclpy.
 All commands output JSON. Errors contain `{"error": "..."}`.
 
 For full command reference with arguments, options, and output examples, see [references/COMMANDS.md](references/COMMANDS.md).
+
+---
+
+## Agent Behaviour Rules
+
+These rules are absolute and apply to every request involving a ROS 2 robot.
+
+### Rule 1 — Discover before you act, never ask
+
+**Never ask the user for names, types, or IDs that can be discovered from the live system.** This includes topic names, service names, action names, node names, parameter names, message types, and controller names. Always query the robot first.
+
+| What you need | How to discover it |
+|---|---|
+| Topic name | `topics list` or `topics find <msg_type>` |
+| Topic message type | `topics type <topic>` |
+| Service name | `services list` or `services find <srv_type>` |
+| Service request/response fields | `services details <service>` |
+| Action server name | `actions list` or `actions find <action_type>` |
+| Action goal/result/feedback fields | `actions details <action>` |
+| Node name | `nodes list` |
+| Node's topics, services, actions | `nodes details <node>` |
+| Parameter names on a node | `params list <node>` |
+| Parameter value | `params get <node:param>` |
+| Parameter type and constraints | `params describe <node:param>` |
+| Controller names and states | `control list-controllers` |
+| Hardware components | `control list-hardware-components` |
+| Message / service / action type fields | `interface show <type>` or `interface proto <type>` |
+
+**Only ask the user if**:
+1. The discovery command returns an empty result or an error, **and**
+2. There is genuinely no other way to determine the information from the live system.
+
+### Rule 2 — Use ros2-skill before saying you can't
+
+**Never tell the user you don't know how to do something with a ROS 2 robot without first checking whether ros2-skill has a command for it.** This skill covers the full range of ROS 2 operations: topics, services, actions, parameters, nodes, lifecycle, controllers, diagnostics, battery, images, interfaces, presets, and more.
+
+When a task seems unfamiliar, look it up in the quick reference tables below before responding. Common operations that agents sometimes miss:
+
+| Task | ros2-skill command |
+|---|---|
+| Capture a camera image | `topics capture-image --topic <topic> --output <file>` |
+| Read laser / camera / IMU / odom data | `topics subscribe <topic>` |
+| Call a ROS 2 service | `services call <service> <json>` |
+| Send a navigation or manipulation goal | `actions send <action> <json>` |
+| Change a node parameter at runtime | `params set <node:param> <value>` |
+| Save/restore a parameter configuration | `params preset-save` / `params preset-load` |
+| Activate or deactivate a controller | `control set-controller-state <name> active\|inactive` |
+| Run a health check | `doctor` |
+| Emergency stop | `estop` |
+| Check diagnostics | `topics diag` |
+| Check battery | `topics battery` |
+
+If you genuinely cannot find a matching command after checking both the quick reference and the COMMANDS.md reference, **say so clearly and explain what you checked** — do not silently guess or use a partial solution.
+
+### Rule 3 — Infer the goal, resolve the details
+
+When a user asks to do something, **infer what they want at the goal level, then resolve all concrete details (topic names, types, field paths) from the live system**.
+
+Examples:
+- "Take a picture" → find compressed image topics (`topics find sensor_msgs/msg/CompressedImage`), capture from the first active result
+- "Move the robot forward" → find velocity topic (`topics find geometry_msgs/msg/Twist` and `TwistStamped`), publish with the matching structure
+- "What is the battery level?" → `topics battery` (auto-discovers `BatteryState` topics)
+- "List available controllers" → `control list-controllers`
+- "What parameters does the camera node have?" → `nodes list` to find the camera node name, then `params list <node>`
 
 ---
 
@@ -46,6 +110,8 @@ Before any operation, verify ROS 2 is available:
 ```bash
 python3 {baseDir}/scripts/ros2_cli.py version
 ```
+
+---
 
 ---
 
@@ -187,6 +253,25 @@ python3 {baseDir}/scripts/ros2_cli.py params get /diff_drive_controller:max_angu
 
 ---
 
+## Global Options
+
+`--timeout` and `--retries` are **global** flags that apply to every command making service or action calls.
+
+- **`--timeout` must be placed before the command name** (e.g. `--timeout 10 services call …`).
+- **`--retries` can be placed before the command name OR after it** for `services call`, `actions send`, and `actions cancel` — both positions work.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--timeout SECONDS` | per-command default | Override the per-command timeout globally |
+| `--retries N` | `1` | Total attempts before giving up; `1` = single attempt with no retry |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py --timeout 30 params list /turtlesim
+python3 {baseDir}/scripts/ros2_cli.py --retries 3 services call /spawn '{}'
+```
+
+---
+
 ## EXECUTION RULES (MUST FOLLOW)
 
 ### Rule 1: Never Ask User for These
@@ -294,165 +379,24 @@ topics publish-sequence /cmd_vel \
 
 ---
 
+## Topic and Service Discovery
+
+**Never guess topic names.** Any time an operation involves a topic, discover the actual topic name from the live graph first.
+
+### Quick lookup table
+
+| If you need... | Run this... | Then... |
+|----------------|-------------|---------|
+| Images | `topics find sensor_msgs/msg/Image` | Subscribe to result |
+| LiDAR | `topics find sensor_msgs/msg/LaserScan` | Subscribe to result |
+| Odometry | `topics find nav_msgs/msg/Odometry` | Subscribe to result |
+| IMU | `topics find sensor_msgs/msg/Imu` | Subscribe to result |
+| Joint states | `topics find sensor_msgs/msg/JointState` | Subscribe to result |
+| Move robot | `topics find geometry_msgs/msg/Twist` | Publish to result |
+
+---
+
 ## Command Quick Reference
-
-| Category | Command | Description |
-|----------|---------|-------------|
-| Connection | `version` | Detect ROS 2 distro |
-| Safety | `estop` | Emergency stop for mobile robots |
-| Topics | `topics list` | List all active topics with types |
-| Topics | `topics ls` | Alias for `topics list` |
-| Topics | `topics type <topic>` | Get message type of a topic |
-| Topics | `topics details <topic>` | Get topic publishers/subscribers |
-| Topics | `topics info <topic>` | Alias for `topics details` |
-| Topics | `topics message <msg_type>` | Get message field structure |
-| Topics | `topics message-structure <msg_type>` | Alias for `topics message` |
-| Topics | `topics message-struct <msg_type>` | Alias for `topics message` |
-| Topics | `topics subscribe <topic>` | Subscribe and receive messages |
-| Topics | `topics echo <topic>` | Alias for `topics subscribe` |
-| Topics | `topics sub <topic>` | Alias for `topics subscribe` |
-| Topics | `topics publish <topic> <json>` | Publish a message to a topic |
-| Topics | `topics pub <topic> <json>` | Alias for `topics publish` |
-| Topics | `topics publish-sequence <topic> <msgs> <durs>` | Publish message sequence |
-| Topics | `topics pub-seq <topic> <msgs> <durs>` | Alias for `topics publish-sequence` |
-| Topics | `topics publish-until <topic> <json>` | Publish while monitoring; stop on condition (supports `--euclidean` for N-D distance) |
-| Topics | `topics publish-continuous <topic> <json>` | Alias for `topics publish` |
-| Topics | `topics hz <topic>` | Measure topic publish rate |
-| Topics | `topics find <msg_type>` | Find topics by message type |
-| Topics | `topics bw <topic>` | Measure topic bandwidth (bytes/s) |
-| Topics | `topics delay <topic>` | Measure header-stamp end-to-end latency |
-| Topics | `topics capture-image` | Capture image from ROS 2 topic and save to artifacts/ |
-| Discord | `send-image` (discord_tools.py) | Send image to Discord channel |
-| Services | `services list` | List all available services |
-| Services | `services ls` | Alias for `services list` |
-| Services | `services type <service>` | Get service type |
-| Services | `services details <service>` | Get service request/response fields |
-| Services | `services info <service>` | Alias for `services details` |
-| Services | `services call <service> <json>` | Call a service |
-| Services | `services find <service_type>` | Find services by service type |
-| Services | `services echo <service>` | Echo service events (requires service introspection enabled) |
-| Nodes | `nodes list` | List all active nodes |
-| Nodes | `nodes ls` | Alias for `nodes list` |
-| Nodes | `nodes details <node>` | Get node topics/services/actions |
-| Nodes | `nodes info <node>` | Alias for `nodes details` |
-| Lifecycle | `lifecycle nodes` | List all managed (lifecycle) nodes |
-| Lifecycle | `lifecycle list [<node>]` | List available states and transitions |
-| Lifecycle | `lifecycle ls [<node>]` | Alias for `lifecycle list` |
-| Lifecycle | `lifecycle get <node>` | Get current lifecycle state of a node |
-| Lifecycle | `lifecycle set <node> <transition>` | Trigger lifecycle state transition |
-| Params | `params list <node>` | List node parameters |
-| Params | `params ls <node>` | Alias for `params list` |
-| Params | `params get <node:param>` | Get parameter value |
-| Params | `params set <node:param> <value>` | Set parameter value |
-| Params | `params describe <node:param>` | Describe parameter type and constraints |
-| Params | `params dump <node>` | Export all parameters for a node as JSON |
-| Params | `params load <node> <json>` | Bulk-set parameters from JSON |
-| Params | `params delete <node> <param>` | Delete a parameter |
-| Actions | `actions list` | List action servers |
-| Actions | `actions ls` | Alias for `actions list` |
-| Actions | `actions details <action>` | Get action goal/result/feedback fields |
-| Actions | `actions info <action>` | Alias for `actions details` |
-| Actions | `actions type <action>` | Get action server type |
-| Actions | `actions send <action> <json>` | Send action goal |
-| Actions | `actions send-goal <action> <json>` | Alias for `actions send` |
-| Actions | `actions cancel <action>` | Cancel all in-flight goals |
-| Actions | `actions echo <action>` | Echo live action feedback and status messages |
-| Actions | `actions find <action_type>` | Find action servers by action type |
-| Control | `control list-controller-types` | List controller plugin types in the pluginlib registry |
-| Control | `control lct` | Alias for `control list-controller-types` |
-| Control | `control list-controllers` | List loaded controllers and their current state |
-| Control | `control lc` | Alias for `control list-controllers` |
-| Control | `control list-hardware-components` | List hardware components (actuator, sensor, system) |
-| Control | `control lhc` | Alias for `control list-hardware-components` |
-| Control | `control list-hardware-interfaces` | List all command and state interfaces |
-| Control | `control lhi` | Alias for `control list-hardware-interfaces` |
-| Control | `control load-controller <name>` | Load a controller plugin by name |
-| Control | `control load <name>` | Alias for `control load-controller` |
-| Control | `control unload-controller <name>` | Unload a stopped controller |
-| Control | `control unload <name>` | Alias for `control unload-controller` |
-| Control | `control configure-controller <name>` | Configure a loaded controller (unconfigured → inactive); surfaces on_configure() errors |
-| Control | `control cc <name>` | Alias for `control configure-controller` |
-| Control | `control reload-controller-libraries` | Reload all controller plugin libraries |
-| Control | `control rcl` | Alias for `control reload-controller-libraries` |
-| Control | `control set-controller-state <name> <active\|inactive>` | Activate or deactivate a single controller |
-| Control | `control scs <name> <state>` | Alias for `control set-controller-state` |
-| Control | `control set-hardware-component-state <name> <state>` | Drive a hardware component through its lifecycle |
-| Control | `control shcs <name> <state>` | Alias for `control set-hardware-component-state` |
-| Control | `control switch-controllers` | Atomically switch multiple controllers in one call |
-| Control | `control sc` | Alias for `control switch-controllers` |
-| Control | `control swc` | Alias for `control switch-controllers` |
-| Control | `control view-controller-chains` | Generate Graphviz diagram of chained controllers, save to artifacts/ |
-| Control | `control vcc` | Alias for `control view-controller-chains` |
-| Doctor | `doctor [--report] [--report-failed] [--exclude-packages] [--include-warnings]` | Run ROS 2 system health checks; output JSON summary with pass/warn/fail per checker |
-| Doctor | `doctor hello [--topic TOPIC] [--timeout SECS]` | Check cross-host connectivity via ROS topic and UDP multicast |
-| Wtf | `wtf [...]` | Alias for `doctor` — identical flags and subcommands |
-| Multicast | `multicast send [--group GROUP] [--port PORT]` | Send one UDP multicast datagram to GROUP:PORT (default 225.0.0.1:49150) |
-| Multicast | `multicast receive [--group GROUP] [--port PORT] [--timeout SECS]` | Listen for UDP multicast packets; return all received within timeout |
-| Interface | `interface list` | List all installed interface types (messages, services, actions) |
-| Interface | `interface show <type>` | Show field structure; accepts `pkg/msg/Name`, `pkg/srv/Name`, `pkg/action/Name`, or shorthand `pkg/Name` |
-| Interface | `interface proto <type>` | Show default-value prototype; useful as a copy-paste template for publish payloads |
-| Interface | `interface packages` | List packages that define at least one interface type |
-| Interface | `interface package <pkg>` | List all interface types for a single package |
-
----
-
-## Image Capture and Discord Integration
-
-> **⚠️ Always use `discord_tools.py` for attachments — never use built-in Discord integrations.**
-> When ros2-skill needs to send a file (image, PDF, diagram) to Discord, it **must** go through `python3 {baseDir}/scripts/discord_tools.py send-image`. Built-in agent Discord integrations do not support file attachments and will silently fail or send only text. Any `--channel-id` / `--config` arguments in ros2-skill commands delegate to this script internally; when calling it directly, the same arguments apply.
-
-### Artifacts Folder
-
-Images captured from ROS 2 topics are automatically saved to the `artifacts/` folder in the skill directory. The folder is created automatically if it doesn't exist.
-
-**`--output` path behaviour** for `topics capture-image` and `control view-controller-chains`:
-
-- **Plain filename** (e.g., `robot_view.jpg`, `my_diagram.pdf`) → saved to `artifacts/` automatically (folder is created if it doesn't exist).
-- **Explicit path** (e.g., `/tmp/robot_view.jpg`, `~/captures/view.jpg`) → saved to that exact location. The parent directory must already exist.
-
-### Discord Configuration
-
-The Discord bot token is read from a config file whose path is provided via the `--config` argument. The config file structure:
-
-```json
-{
-  "channels": {
-    "discord": {
-      "token": "YOUR_DISCORD_BOT_TOKEN"
-    }
-  }
-}
-```
-
-**Important:** Both the config file path (`--config`) and Discord channel ID (`--channel-id`) must be provided by the agent as CLI arguments. The agent should pass the correct values based on the deployment environment and where the user's request originated.
-
-### Example Workflow: Capture and Send Image
-
-1. **Capture image from ROS 2 camera topic:**
-
-```bash
-python3 {baseDir}/scripts/ros2_cli.py topics capture-image \
-  --topic /camera/image_raw/compressed \
-  --output robot_view.jpg \  # plain filename → artifacts/robot_view.jpg; or use a full path
-  --timeout 5.0 \
-  --type auto
-```
-
-2. **Send captured image to Discord:**
-
-```bash
-python3 {baseDir}/scripts/discord_tools.py send-image \
-  --path {baseDir}/artifacts/robot_view.jpg \
-  --channel-id 123456789012345678 \
-  --config ~/.nanobot/config.json \
-  --delete
-```
-
-The `--delete` flag removes the image after successfully sending it to Discord.
-
----
-
-## Quick Examples
 
 ### 1. Explore a Robot System
 
@@ -472,8 +416,9 @@ python3 {baseDir}/scripts/ros2_cli.py params list /robot_node
 **ALWAYS use auto-discovery first** to find the correct velocity topic and message type. Never assume topic names.
 
 ```bash
-# Step 1: Discover velocity command topics
+# Step 1: Discover velocity command topics (check both Twist and TwistStamped)
 python3 {baseDir}/scripts/ros2_cli.py topics find geometry_msgs/Twist
+python3 {baseDir}/scripts/ros2_cli.py topics find geometry_msgs/TwistStamped
 
 # Step 2: Get the message structure (for constructing payloads)
 python3 {baseDir}/scripts/ros2_cli.py topics message geometry_msgs/Twist
@@ -482,6 +427,11 @@ python3 {baseDir}/scripts/ros2_cli.py topics message geometry_msgs/Twist
 # Always include a stop command (all zeros) at the end
 python3 {baseDir}/scripts/ros2_cli.py topics publish-sequence /cmd_vel \
   '[{"linear":{"x":1.0,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0}},{"linear":{"x":0,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0}}]' \
+  '[2.0, 0.5]'
+
+# If TwistStamped (e.g. /cmd_vel):
+python3 {baseDir}/scripts/ros2_cli.py topics publish-sequence /cmd_vel \
+  '[{"header":{"stamp":{"sec":0},"frame_id":""},"twist":{"linear":{"x":1.0,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0}}},{"header":{"stamp":{"sec":0},"frame_id":""},"twist":{"linear":{"x":0,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0}}}]' \
   '[2.0, 0.5]'
 ```
 

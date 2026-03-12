@@ -250,7 +250,7 @@ BenchmarkDotNet.Artifacts/
 # .NET Core
 project.lock.json
 project.fragment.lock.json
-artifacts/
+.artifacts/
 
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt
@@ -587,3 +587,7 @@ docs/plans/
 
 # Git worktrees
 .worktrees/
+
+# Runtime output directories
+.artifacts/
+.presets/

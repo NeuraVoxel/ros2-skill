@@ -2,6 +2,42 @@
 
 All notable changes to ros2-skill will be documented in this file.
 
+## [1.0.3] - 2026-03-09
+
+Added parameter preset commands, diagnostics monitoring, battery monitoring, and global timeout/retry configuration.
+
+### Global Options
+
+- `--timeout SECONDS` — override the per-command timeout for every ROS 2 call in the session; accepted before any subcommand (e.g. `--timeout 10 params get /node param`)
+- `--retries N` — total number of attempts before giving up (default: `1`, i.e. no retry); applies to `wait_for_service`, `wait_for_server`, and async call spin loops across all command handlers
+- `_apply_global_overrides(args)` propagates the global values onto per-command `timeout`/`retries` attributes after argparse; commands that have no `--timeout` arg (e.g. `topics list`) are explicitly guarded with `hasattr`
+
+### Internal — Retry hardening
+
+- `future.cancel()` is now called before every retry `continue` in all spin loops (18 sites across `ros2_action`, `ros2_control`, `ros2_lifecycle`, `ros2_param`, `ros2_service`) — prevents stale futures from a timed-out attempt delivering results to the next attempt
+- `cmd_actions_send`: moved `wait_for_server` inside the retry loop so server unavailability is actually retried
+- `cmd_actions_cancel`: added full retry loop (was missing entirely)
+
+### Topics — Diagnostics
+
+- `topics diag-list` — list all topics publishing `DiagnosticArray` messages, discovered by **type** (not by name); works with `/diagnostics`, `<node>/diagnostics`, `<namespace>/diagnostics`, or any other convention
+- `topics diag` — subscribe to all discovered diagnostic topics simultaneously (or a specific `--topic`); returns parsed status with `level_name` (OK/WARN/ERROR/STALE), `name`, `message`, `hardware_id`, and key-value `values`; supports `--duration` + `--max-messages` for multi-message collection and `--timeout` for one-shot mode
+
+### Parameters — Presets
+
+- `params preset-save <node> <preset>` — save the current live parameters of a node to `.presets/{preset}.json`; uses `ListParameters` + `GetParameters` and writes a plain `{param_name: value}` JSON file
+- `params preset-load <node> <preset>` — restore a named preset onto a node via `SetParameters`; reports per-parameter success and failure reasons
+- `params preset-list` — list all saved presets from `.presets/`; no arguments; no running ROS 2 graph required
+- `params preset-delete <preset>` — remove a saved preset file by name only (no node arg needed); no running ROS 2 graph required
+- Presets stored flat as `.presets/{preset}.json` beside the skill directory; use descriptive names like `turtlesim_indoor` to identify node and configuration
+
+### Internal
+
+- Refactored `cmd_params_dump`: extracted `_dump_params(node_name, timeout) -> dict | None` helper so preset-save can reuse the dump logic without going through `output()`
+- `resolve_output_path()` now writes to `.artifacts/` (hidden) instead of `artifacts/`
+
+---
+
 ## [1.0.2] - 2026-03-07
 
 Added `doctor`, `wtf`, `multicast`, and `interface` commands for ROS 2 system health checking, UDP multicast diagnostics, and interface type discovery.
@@ -39,7 +75,7 @@ Refactored the CLI into separate domain modules and added two new command domain
 
 ### Topics
 
-- `topics capture-image` — capture a single frame from a ROS 2 image topic (compressed or raw), save to `artifacts/`; optional Discord send via `--channel-id` and `--config`
+- `topics capture-image` — capture a single frame from a ROS 2 image topic (compressed or raw), save to `.artifacts/`; optional Discord send via `--channel-id` and `--config`
 
 ### Lifecycle
 
@@ -60,7 +96,7 @@ Refactored the CLI into separate domain modules and added two new command domain
 - `control set-controller-state` / `scs` — activate or deactivate a single controller via `SwitchController`
 - `control set-hardware-component-state` / `shcs` — drive a hardware component through its lifecycle (`unconfigured`, `inactive`, `active`, `finalized`)
 - `control switch-controllers` / `sc` — atomically activate and/or deactivate multiple controllers in a single `SwitchController` call; `--strictness STRICT|BEST_EFFORT`
-- `control view-controller-chains` / `vcc` — generate a Graphviz DOT diagram of loaded chained controllers, render to PDF in `artifacts/`, optionally send to Discord
+- `control view-controller-chains` / `vcc` — generate a Graphviz DOT diagram of loaded chained controllers, render to PDF in `.artifacts/`, optionally send to Discord
 - `control configure-controller` / `cc` — explicitly configure a loaded controller (`unconfigured → inactive`) via the `ConfigureController` service; surfaces `on_configure()` errors that `SwitchController`'s silent auto-configure hides
 
 ### Fixes
@@ -70,7 +106,7 @@ Refactored the CLI into separate domain modules and added two new command domain
 
 ### Utilities
 
-- `resolve_output_path()` added to `ros2_utils.py` — shared helper for `--output` arguments; plain filename → `artifacts/` (created if absent), explicit path → used as-is
+- `resolve_output_path()` added to `ros2_utils.py` — shared helper for `--output` arguments; plain filename → `.artifacts/` (created if absent), explicit path → used as-is
 
 ---
 

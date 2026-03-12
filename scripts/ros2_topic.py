@@ -24,6 +24,50 @@ VELOCITY_TYPES = {
     "geometry_msgs/Twist", "geometry_msgs/TwistStamped",
 }
 
+# Diagnostic message types (with and without /msg/ qualifier).
+DIAG_TYPES = {
+    "diagnostic_msgs/msg/DiagnosticArray",
+    "diagnostic_msgs/DiagnosticArray",
+}
+
+# Numeric level → human-readable name (mirrors DiagnosticStatus constants).
+_DIAG_LEVEL_NAMES = {0: "OK", 1: "WARN", 2: "ERROR", 3: "STALE"}
+
+# Battery message types (with and without /msg/ qualifier).
+BATTERY_TYPES = {
+    "sensor_msgs/msg/BatteryState",
+    "sensor_msgs/BatteryState",
+}
+
+# Numeric code → human-readable name (mirrors BatteryState constants).
+_BATTERY_POWER_SUPPLY_STATUS = {
+    0: "UNKNOWN",
+    1: "CHARGING",
+    2: "DISCHARGING",
+    3: "NOT_CHARGING",
+    4: "FULL",
+}
+_BATTERY_POWER_SUPPLY_HEALTH = {
+    0: "UNKNOWN",
+    1: "GOOD",
+    2: "OVERHEAT",
+    3: "DEAD",
+    4: "OVERVOLTAGE",
+    5: "UNSPEC_FAILURE",
+    6: "COLD",
+    7: "WATCHDOG_TIMER_EXPIRE",
+    8: "SAFETY_TIMER_EXPIRE",
+}
+_BATTERY_POWER_SUPPLY_TECHNOLOGY = {
+    0: "UNKNOWN",
+    1: "NIMH",
+    2: "LION",
+    3: "LIPO",
+    4: "LIFE",
+    5: "NICD",
+    6: "LIMN",
+}
+
 
 # ---------------------------------------------------------------------------
 # estop
@@ -1079,7 +1123,7 @@ def cmd_topics_delay(args):
 # ---------------------------------------------------------------------------
 
 def cmd_topics_capture_image(args):
-    """Capture an image from a ROS 2 image topic and save to artifacts/ folder."""
+    """Capture an image from a ROS 2 image topic and save to .artifacts/ folder."""
     try:
         from sensor_msgs.msg import CompressedImage, Image
         import cv2
@@ -1285,5 +1329,365 @@ def cmd_actions_echo(args):
                         return
             rclpy.shutdown()
             output({"error": "Timeout waiting for action feedback"})
+    except Exception as e:
+        output({"error": str(e)})
+
+
+# ---------------------------------------------------------------------------
+# Diagnostics
+# ---------------------------------------------------------------------------
+
+def _discover_diag_topics(node):
+    """Return [{topic, type}] for every DiagnosticArray topic in the graph."""
+    results = []
+    for name, types in node.get_topic_names_and_types():
+        for t in types:
+            if t in DIAG_TYPES:
+                results.append({"topic": name, "type": t})
+                break
+    return sorted(results, key=lambda x: x["topic"])
+
+
+def _parse_diag_array(msg_dict):
+    """Convert a msg_to_dict() DiagnosticArray into a clean status list."""
+    status_list = []
+    for s in msg_dict.get("status", []):
+        level = s.get("level", 0)
+        status_list.append({
+            "level": level,
+            "level_name": _DIAG_LEVEL_NAMES.get(level, str(level)),
+            "name": s.get("name", ""),
+            "message": s.get("message", ""),
+            "hardware_id": s.get("hardware_id", ""),
+            "values": [
+                {"key": kv.get("key", ""), "value": kv.get("value", "")}
+                for kv in s.get("values", [])
+            ],
+        })
+    return status_list
+
+
+def cmd_topics_diag_list(args):
+    """List all topics that publish DiagnosticArray messages (discovered by type)."""
+    try:
+        rclpy.init()
+        node = ROS2CLI()
+        topics = _discover_diag_topics(node)
+        rclpy.shutdown()
+        output({"topics": topics, "count": len(topics)})
+    except Exception as e:
+        output({"error": str(e)})
+
+
+def cmd_topics_diag(args):
+    """Subscribe to diagnostic topics, auto-discovered by type.
+
+    If --topic is given, use that specific topic.  Otherwise, find every topic
+    whose type is DiagnosticArray and subscribe to all of them simultaneously.
+    DiagnosticArray messages are decoded into a human-readable status list with
+    level_name (OK / WARN / ERROR / STALE), name, message, hardware_id and
+    key-value pairs.
+    """
+    try:
+        rclpy.init()
+        node = ROS2CLI("diag_temp")
+
+        if args.topic:
+            # Verify topic exists and resolve its type.
+            resolved_type = None
+            for name, types in node.get_topic_names_and_types():
+                if name == args.topic:
+                    resolved_type = types[0] if types else None
+                    break
+            if resolved_type is None:
+                rclpy.shutdown()
+                return output({
+                    "error": f"Could not detect type for topic '{args.topic}'",
+                    "hint": "Ensure the topic is active. Use 'topics type <topic>' to inspect it.",
+                })
+            diag_topics = [{"topic": args.topic, "type": resolved_type}]
+        else:
+            diag_topics = _discover_diag_topics(node)
+            if not diag_topics:
+                rclpy.shutdown()
+                return output({
+                    "error": "No diagnostic topics found",
+                    "hint": (
+                        "Ensure diagnostics-publishing nodes are running. "
+                        "Diagnostic topics may be named /diagnostics, "
+                        "<node>/diagnostics, or any other name — they are "
+                        "identified by their DiagnosticArray message type."
+                    ),
+                })
+
+        # Load the DiagnosticArray message class once.
+        diag_class = None
+        for t in ("diagnostic_msgs/msg/DiagnosticArray", "diagnostic_msgs/DiagnosticArray"):
+            diag_class = get_msg_type(t)
+            if diag_class:
+                break
+        if diag_class is None:
+            rclpy.shutdown()
+            return output({
+                "error": "Could not load diagnostic_msgs/DiagnosticArray",
+                "hint": (
+                    "Install the diagnostics package: "
+                    "sudo apt install ros-$ROS_DISTRO-diagnostics"
+                ),
+            })
+
+        # Subscribe to all discovered topics simultaneously.
+        executor = rclpy.executors.SingleThreadedExecutor()
+        subscribers = {}
+        for t in diag_topics:
+            sub = TopicSubscriber(t["topic"], t["type"], msg_class=diag_class)
+            subscribers[t["topic"]] = sub
+            executor.add_node(sub)
+
+        max_msgs = args.max_messages or 1
+        timeout_sec = args.timeout
+
+        if args.duration:
+            # Timed collection mode: spin for the given duration.
+            end_time = time.time() + args.duration
+            while time.time() < end_time:
+                executor.spin_once(timeout_sec=0.1)
+            rclpy.shutdown()
+            results = []
+            for topic_name, sub in subscribers.items():
+                with sub.lock:
+                    msgs = sub.messages[:max_msgs]
+                for msg_dict in msgs:
+                    results.append({
+                        "topic": topic_name,
+                        "stamp": msg_dict.get("header", {}).get("stamp", {}),
+                        "status": _parse_diag_array(msg_dict),
+                    })
+            output({"results": results, "topic_count": len(diag_topics)})
+        else:
+            # One-shot mode: wait until every topic has delivered ≥1 message,
+            # or until the timeout expires.
+            end_time = time.time() + timeout_sec
+            while time.time() < end_time:
+                executor.spin_once(timeout_sec=0.1)
+                all_received = all(
+                    len(subscribers[t["topic"]].messages) > 0
+                    for t in diag_topics
+                )
+                if all_received:
+                    break
+            rclpy.shutdown()
+            results = []
+            for t in diag_topics:
+                topic_name = t["topic"]
+                sub = subscribers[topic_name]
+                with sub.lock:
+                    msgs = sub.messages[:]
+                if msgs:
+                    msg_dict = msgs[0]
+                    results.append({
+                        "topic": topic_name,
+                        "stamp": msg_dict.get("header", {}).get("stamp", {}),
+                        "status": _parse_diag_array(msg_dict),
+                    })
+                else:
+                    results.append({
+                        "topic": topic_name,
+                        "error": "Timeout — no message received",
+                    })
+            output({"results": results, "topic_count": len(diag_topics)})
+    except Exception as e:
+        output({"error": str(e)})
+
+
+# ---------------------------------------------------------------------------
+# Battery monitoring
+# ---------------------------------------------------------------------------
+
+def _discover_battery_topics(node):
+    """Return [{topic, type}] for every BatteryState topic in the graph."""
+    results = []
+    for name, types in node.get_topic_names_and_types():
+        for t in types:
+            if t in BATTERY_TYPES:
+                results.append({"topic": name, "type": t})
+                break
+    return sorted(results, key=lambda x: x["topic"])
+
+
+def _nan_to_none(v):
+    """Return None for float NaN (which is invalid JSON); pass other values through."""
+    if isinstance(v, float) and v != v:
+        return None
+    return v
+
+
+def _parse_battery_state(msg_dict):
+    """Convert a msg_to_dict() BatteryState into a clean summary dict.
+
+    All float fields use NaN to signal 'unmeasured' per the sensor_msgs spec;
+    those are converted to null so the output is valid JSON.  percentage is
+    scaled from the 0.0–1.0 ROS convention to 0–100 for readability.
+    """
+    pct = msg_dict.get("percentage", float("nan"))
+    status_code = msg_dict.get("power_supply_status", 0)
+    health_code = msg_dict.get("power_supply_health", 0)
+    tech_code = msg_dict.get("power_supply_technology", 0)
+
+    # cell arrays: filter per-element NaN → None
+    raw_cell_v = msg_dict.get("cell_voltage", []) or []
+    raw_cell_t = msg_dict.get("cell_temperature", []) or []
+
+    return {
+        "percentage": (pct * 100) if pct == pct else None,  # NaN guard + scale
+        "voltage": _nan_to_none(msg_dict.get("voltage")),
+        "current": _nan_to_none(msg_dict.get("current")),
+        "charge": _nan_to_none(msg_dict.get("charge")),
+        "capacity": _nan_to_none(msg_dict.get("capacity")),
+        "design_capacity": _nan_to_none(msg_dict.get("design_capacity")),
+        "temperature": _nan_to_none(msg_dict.get("temperature")),
+        "present": msg_dict.get("present"),
+        "power_supply_status": status_code,
+        "status_name": _BATTERY_POWER_SUPPLY_STATUS.get(status_code, str(status_code)),
+        "power_supply_health": health_code,
+        "health_name": _BATTERY_POWER_SUPPLY_HEALTH.get(health_code, str(health_code)),
+        "power_supply_technology": tech_code,
+        "technology_name": _BATTERY_POWER_SUPPLY_TECHNOLOGY.get(tech_code, str(tech_code)),
+        "cell_voltage": [_nan_to_none(v) for v in raw_cell_v],
+        "cell_temperature": [_nan_to_none(v) for v in raw_cell_t],
+        "location": msg_dict.get("location", ""),
+        "serial_number": msg_dict.get("serial_number", ""),
+    }
+
+
+def cmd_topics_battery_list(args):
+    """List all topics that publish BatteryState messages (discovered by type)."""
+    try:
+        rclpy.init()
+        node = ROS2CLI()
+        topics = _discover_battery_topics(node)
+        rclpy.shutdown()
+        output({"topics": topics, "count": len(topics)})
+    except Exception as e:
+        output({"error": str(e)})
+
+
+def cmd_topics_battery(args):
+    """Subscribe to battery topics, auto-discovered by type.
+
+    If --topic is given, use that specific topic.  Otherwise, find every topic
+    whose type is BatteryState and subscribe to all of them simultaneously.
+    BatteryState messages are decoded into a human-readable summary with
+    percentage (0–100), voltage, current, charge, capacity, temperature,
+    status_name, health_name, technology_name, location, and serial_number.
+    """
+    try:
+        rclpy.init()
+        node = ROS2CLI("battery_temp")
+
+        if args.topic:
+            # Verify topic exists and resolve its type.
+            resolved_type = None
+            for name, types in node.get_topic_names_and_types():
+                if name == args.topic:
+                    resolved_type = types[0] if types else None
+                    break
+            if resolved_type is None:
+                rclpy.shutdown()
+                return output({
+                    "error": f"Could not detect type for topic '{args.topic}'",
+                    "hint": "Ensure the topic is active. Use 'topics type <topic>' to inspect it.",
+                })
+            battery_topics = [{"topic": args.topic, "type": resolved_type}]
+        else:
+            battery_topics = _discover_battery_topics(node)
+            if not battery_topics:
+                rclpy.shutdown()
+                return output({
+                    "error": "No battery topics found",
+                    "hint": (
+                        "Ensure battery-publishing nodes are running. "
+                        "Battery topics may be named /battery_state, "
+                        "<robot>/battery_state, or any other name — they are "
+                        "identified by their BatteryState message type."
+                    ),
+                })
+
+        # Load the BatteryState message class once.
+        battery_class = None
+        for t in ("sensor_msgs/msg/BatteryState", "sensor_msgs/BatteryState"):
+            battery_class = get_msg_type(t)
+            if battery_class:
+                break
+        if battery_class is None:
+            rclpy.shutdown()
+            return output({
+                "error": "Could not load sensor_msgs/BatteryState",
+                "hint": (
+                    "Install the sensor_msgs package: "
+                    "sudo apt install ros-$ROS_DISTRO-sensor-msgs"
+                ),
+            })
+
+        # Subscribe to all discovered topics simultaneously.
+        executor = rclpy.executors.SingleThreadedExecutor()
+        subscribers = {}
+        for t in battery_topics:
+            sub = TopicSubscriber(t["topic"], t["type"], msg_class=battery_class)
+            subscribers[t["topic"]] = sub
+            executor.add_node(sub)
+
+        max_msgs = args.max_messages or 1
+        timeout_sec = args.timeout
+
+        if args.duration:
+            # Timed collection mode: spin for the given duration.
+            end_time = time.time() + args.duration
+            while time.time() < end_time:
+                executor.spin_once(timeout_sec=0.1)
+            rclpy.shutdown()
+            results = []
+            for topic_name, sub in subscribers.items():
+                with sub.lock:
+                    msgs = sub.messages[:max_msgs]
+                for msg_dict in msgs:
+                    results.append({
+                        "topic": topic_name,
+                        "stamp": msg_dict.get("header", {}).get("stamp", {}),
+                        "battery": _parse_battery_state(msg_dict),
+                    })
+            output({"results": results, "topic_count": len(battery_topics)})
+        else:
+            # One-shot mode: wait until every topic has delivered ≥1 message,
+            # or until the timeout expires.
+            end_time = time.time() + timeout_sec
+            while time.time() < end_time:
+                executor.spin_once(timeout_sec=0.1)
+                all_received = all(
+                    len(subscribers[t["topic"]].messages) > 0
+                    for t in battery_topics
+                )
+                if all_received:
+                    break
+            rclpy.shutdown()
+            results = []
+            for t in battery_topics:
+                topic_name = t["topic"]
+                sub = subscribers[topic_name]
+                with sub.lock:
+                    msgs = sub.messages[:]
+                if msgs:
+                    msg_dict = msgs[0]
+                    results.append({
+                        "topic": topic_name,
+                        "stamp": msg_dict.get("header", {}).get("stamp", {}),
+                        "battery": _parse_battery_state(msg_dict),
+                    })
+                else:
+                    results.append({
+                        "topic": topic_name,
+                        "error": "Timeout — no message received",
+                    })
+            output({"results": results, "topic_count": len(battery_topics)})
     except Exception as e:
         output({"error": str(e)})
