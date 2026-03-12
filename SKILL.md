@@ -383,6 +383,25 @@ topics publish-sequence /cmd_vel \
 
 **Never guess topic names.** Any time an operation involves a topic, discover the actual topic name from the live graph first.
 
+### Images and Camera
+
+**Always prefer compressed topics** - use much less bandwidth:
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics find sensor_msgs/msg/CompressedImage
+python3 {baseDir}/scripts/ros2_cli.py topics find sensor_msgs/msg/Image
+```
+Use `topics capture-image --topic <discovered>` - never `subscribe` for images.
+
+### Velocity Commands (Twist vs TwistStamped)
+
+Check both types:
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics find geometry_msgs/msg/Twist
+python3 {baseDir}/scripts/ros2_cli.py topics find geometry_msgs/msg/TwistStamped
+```
+- Twist: `{"linear": {"x": 1.0}, "angular": {"z": 0.0}}`
+- TwistStamped: `{"header": {"stamp": {"sec": 0}}, "twist": {"linear": {"x": 1.0}, "angular": {"z": 0.0}}}`
+
 ### Quick lookup table
 
 | If you need... | Run this... | Then... |
