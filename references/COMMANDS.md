@@ -2669,7 +2669,7 @@ Output (nothing received):
 
 ---
 
-## launch run `<package>` `<launch_file>` [args...]
+## launch `<package>` `<launch_file>` [args...]
 
 Run a ROS 2 launch file in a tmux session. System ROS is assumed to be already sourced. The local workspace is sourced automatically if found.
 
@@ -2696,22 +2696,22 @@ Run a ROS 2 launch file in a tmux session. System ROS is assumed to be already s
 
 **Run a launch file:**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py launch run navigation2 navigation2.launch.py
+python3 {baseDir}/scripts/ros2_cli.py launch navigation2 navigation2.launch.py
 ```
 
 **Run with parameters:**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py launch run navigation2 navigation2.launch.py --params "speed:1.0,max_velocity:2.0"
+python3 {baseDir}/scripts/ros2_cli.py launch navigation2 navigation2.launch.py --params "speed:1.0,max_velocity:2.0"
 ```
 
 **Run with presets:**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py launch run navigation2 navigation2.launch.py --presets indoor
+python3 {baseDir}/scripts/ros2_cli.py launch navigation2 navigation2.launch.py --presets indoor
 ```
 
 **Run with package cache refresh:**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py launch run navigation2 navigation2.launch.py --refresh
+python3 {baseDir}/scripts/ros2_cli.py launch navigation2 navigation2.launch.py --refresh
 ```
 
 **Output:**
@@ -2855,7 +2855,7 @@ Error (launch file not found):
 
 ## launch restart `<session>`
 
-Restart a launch session. Kills the existing session and re-launches with the same parameters that were used originally. Works for all session types (both `launch run` and `launch foxglove`).
+Restart a launch session. Kills the existing session and re-launches with the same parameters that were used originally. Works for all session types (both `launch` and `launch foxglove`).
 
 Session metadata is saved when launching and used for restart.
 
@@ -2887,7 +2887,7 @@ Error (session not found):
 ```json
 {
   "error": "Session 'launch_navigation2_navigation2' does not exist",
-  "suggestion": "Use 'launch run' to start a new session",
+  "suggestion": "Use 'launch' to start a new session",
   "available_sessions": []
 }
 ```
@@ -2896,14 +2896,14 @@ Error (no metadata):
 ```json
 {
   "error": "No metadata found for session 'launch_navigation2_navigation2'",
-  "suggestion": "Use 'launch run' to start a fresh session",
+  "suggestion": "Use 'launch' to start a fresh session",
   "session": "launch_navigation2_navigation2"
 }
 ```
 
 ---
 
-## run run `<package>` `<executable>` [args...]
+## run `<package>` `<executable>` [args...]
 
 Run a ROS 2 executable in a tmux session. System ROS is assumed to be already sourced. The local workspace is sourced automatically if found.
 
@@ -2919,12 +2919,12 @@ Run a ROS 2 executable in a tmux session. System ROS is assumed to be already so
 
 **Run an executable:**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py run run lekiwi_control teleop
+python3 {baseDir}/scripts/ros2_cli.py run lekiwi_control teleop
 ```
 
 **Run with arguments:**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py run run lekiwi_control teleop --speed 1.0
+python3 {baseDir}/scripts/ros2_cli.py run lekiwi_control teleop --speed 1.0
 ```
 
 **Output:**

@@ -8,8 +8,8 @@ Added run commands for running ROS 2 executables in tmux sessions.
 
 ### Run Commands
 
-- `run run <package> <executable> [args...]` — run a ROS 2 executable in a tmux session
-- `run run --refresh` — force refresh package cache before checking
+- `run <package> <executable> [args...]` — run a ROS 2 executable in a tmux session
+- `run --refresh` — force refresh package cache before checking
 - `run list` — list running run sessions in tmux
 - `run kill <session>` — kill a running run session
 - `run restart <session>` — restart a run session (preserves original parameters)
@@ -28,10 +28,10 @@ Added launch commands for running launch files in tmux sessions.
 
 ### Launch Commands
 
-- `launch run <package> <launch_file> [args...]` — run a ROS 2 launch file in a tmux session
-- `launch run --presets <preset> <package> <file>` — apply preset parameters before launching
-- `launch run --params "key:value" <package> <file>` — set inline parameters before launching
-- `launch run --refresh` — force refresh package cache before checking
+- `launch <package> <launch_file> [args...]` — run a ROS 2 launch file in a tmux session
+- `launch --presets <preset> <package> <file>` — apply preset parameters before launching
+- `launch --params "key:value" <package> <file>` — set inline parameters before launching
+- `launch --refresh` — force refresh package cache before checking
 - `launch list` — list running launch sessions in tmux
 - `launch kill <session>` — kill a running launch session
 - `launch restart <session>` — restart any launch session (preserves original parameters)
