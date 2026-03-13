@@ -4,6 +4,14 @@ All notable changes to ros2-skill will be documented in this file.
 
 ## [1.0.4] - 2026-03-13
 
+### `--help` audit: complete `help=` string coverage
+
+- Added `help=` strings to all positional `add_argument()` calls that were missing them across the entire `build_parser()` function in `ros2_cli.py`
+- Affected commands: `topics type`, `topics details`, `topics info`, `topics message`, `topics message-structure`, `topics message-struct`, `topics subscribe`/`echo`/`sub`, `topics publish`/`pub`, `topics publish-sequence`/`pub-seq`, `topics publish-until`, `topics publish-continuous`, `services type`, `services details`, `services info`, `services find`, `services call`, `services echo`, `nodes details`, `nodes info`, `params list`/`ls`, `actions details`, `actions info`, `actions send`/`send-goal`, `actions echo`
+- All positional arguments now show a descriptive example in `--help` output (e.g. `Topic name to publish to (e.g. /cmd_vel)`)
+
+## [1.0.4] - 2026-03-13
+
 Added launch and run commands for running ROS 2 launch files and executables in tmux sessions.
 
 ### Launch Commands

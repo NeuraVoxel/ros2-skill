@@ -600,7 +600,7 @@ def cmd_version(args):
 
 def _add_subscribe_args(p):
     """Add the shared arguments for the subscribe / echo subparsers."""
-    p.add_argument("topic", nargs="?")
+    p.add_argument("topic", nargs="?", help="Topic name to subscribe to (e.g. /cmd_vel)")
     p.add_argument("--msg-type", dest="msg_type", default=None,
                    help="Message type (auto-detected if not provided)")
     p.add_argument("--duration", type=float, default=None,
@@ -643,15 +643,15 @@ def build_parser():
     tsub.add_parser("list", help="List all topics")
     tsub.add_parser("ls", help="Alias for list")
     p = tsub.add_parser("type", help="Get topic message type")
-    p.add_argument("topic")
+    p.add_argument("topic", help="Topic name (e.g. /cmd_vel)")
     p = tsub.add_parser("details", help="Get topic details")
-    p.add_argument("topic")
+    p.add_argument("topic", help="Topic name (e.g. /cmd_vel)")
     p = tsub.add_parser("message", help="Get message structure")
-    p.add_argument("message_type")
+    p.add_argument("message_type", help="Message type (e.g. geometry_msgs/msg/Twist)")
     p = tsub.add_parser("message-structure", help="Alias for message")
-    p.add_argument("message_type")
+    p.add_argument("message_type", help="Message type (e.g. geometry_msgs/msg/Twist)")
     p = tsub.add_parser("message-struct", help="Alias for message")
-    p.add_argument("message_type")
+    p.add_argument("message_type", help="Message type (e.g. geometry_msgs/msg/Twist)")
     _add_subscribe_args(tsub.add_parser("subscribe", help="Subscribe to a topic"))
     _add_subscribe_args(tsub.add_parser("echo", help="Echo topic messages (alias for subscribe)"))
     _add_subscribe_args(tsub.add_parser("sub", help="Alias for subscribe"))
@@ -663,7 +663,7 @@ def build_parser():
     p.add_argument("--type", choices=["auto", "compressed", "raw"], default="auto",
                    help="Image type: compressed, raw, or auto")
     p = tsub.add_parser("info", help="Alias for details (ros2 topic info)")
-    p.add_argument("topic")
+    p.add_argument("topic", help="Topic name (e.g. /cmd_vel)")
     p = tsub.add_parser("hz", help="Measure topic publish rate")
     p.add_argument("topic", nargs="?", help="Topic name (e.g. /cmd_vel)")
     p.add_argument("--window", type=int, default=10,
@@ -714,7 +714,7 @@ def build_parser():
         p = tsub.add_parser(_pub_name,
                             help="Publish a message" if _pub_name == "publish"
                             else "Alias for publish")
-        p.add_argument("topic", nargs="?")
+        p.add_argument("topic", nargs="?", help="Topic name to publish to (e.g. /cmd_vel)")
         p.add_argument("msg", nargs="?", help="JSON message")
         p.add_argument("--msg-type", dest="msg_type", default=None,
                        help="Message type (auto-detected if not provided)")
@@ -727,7 +727,7 @@ def build_parser():
                             help="Publish message sequence with delays"
                             if _seq_name == "publish-sequence"
                             else "Alias for publish-sequence")
-        p.add_argument("topic", nargs="?")
+        p.add_argument("topic", nargs="?", help="Topic name to publish to (e.g. /cmd_vel)")
         p.add_argument("messages", nargs="?", help="JSON array of messages")
         p.add_argument("durations", nargs="?",
                        help="JSON array of durations in seconds (message is repeated during each)")
@@ -737,7 +737,7 @@ def build_parser():
                        help="Publish rate in Hz (default: 10)")
     p = tsub.add_parser("publish-until",
                         help="Publish until a monitor-topic condition is met")
-    p.add_argument("topic", nargs="?")
+    p.add_argument("topic", nargs="?", help="Topic name to publish to (e.g. /cmd_vel)")
     p.add_argument("msg", nargs="?", help="JSON message to publish")
     p.add_argument("--monitor", default=None,
                    help="Topic to monitor for the stop condition (required)")
@@ -777,7 +777,7 @@ def build_parser():
     p = tsub.add_parser("publish-continuous",
                         help="Alias for publish "
                              "(use topics publish --duration / --timeout instead)")
-    p.add_argument("topic", nargs="?")
+    p.add_argument("topic", nargs="?", help="Topic name to publish to (e.g. /cmd_vel)")
     p.add_argument("msg", nargs="?", help="JSON message to publish")
     p.add_argument("--msg-type", dest="msg_type", default=None,
                    help="Message type (auto-detected if not provided)")
@@ -794,17 +794,17 @@ def build_parser():
     ssub.add_parser("list", help="List all services")
     ssub.add_parser("ls", help="Alias for list")
     p = ssub.add_parser("type", help="Get service type")
-    p.add_argument("service")
+    p.add_argument("service", help="Service name (e.g. /add_two_ints)")
     p = ssub.add_parser("details", help="Get service details")
-    p.add_argument("service")
+    p.add_argument("service", help="Service name (e.g. /add_two_ints)")
     p = ssub.add_parser("info", help="Alias for details (ros2 service info)")
-    p.add_argument("service")
+    p.add_argument("service", help="Service name (e.g. /add_two_ints)")
     p = ssub.add_parser("find", help="Find services by service type")
-    p.add_argument("service_type", nargs="?")
+    p.add_argument("service_type", nargs="?", help="Service type to search for (e.g. std_srvs/srv/SetBool)")
     p.add_argument("--timeout", type=float, default=5.0,
                    help="Timeout in seconds (default: 5)")
     p = ssub.add_parser("call", help="Call a service")
-    p.add_argument("service")
+    p.add_argument("service", help="Service name (e.g. /add_two_ints)")
     p.add_argument("request",
                    help="JSON request, or service type when using positional service-type format")
     p.add_argument("extra_request", nargs="?", default=None,
@@ -818,7 +818,7 @@ def build_parser():
                    help="Number of attempts before giving up (overrides global --retries)")
     p = ssub.add_parser("echo",
                         help="Echo service events (requires service introspection enabled)")
-    p.add_argument("service")
+    p.add_argument("service", help="Service name (e.g. /add_two_ints)")
     p.add_argument("--duration", type=float, default=None,
                    help="Collect events for exactly this many seconds (overrides --timeout)")
     p.add_argument("--max-messages", "--max-events", dest="max_messages", type=int, default=None,
@@ -835,9 +835,9 @@ def build_parser():
     nsub.add_parser("list", help="List all nodes")
     nsub.add_parser("ls", help="Alias for list")
     p = nsub.add_parser("details", help="Get node details")
-    p.add_argument("node")
+    p.add_argument("node", help="Node name (e.g. /turtlesim)")
     p = nsub.add_parser("info", help="Alias for details (ros2 node info)")
-    p.add_argument("node")
+    p.add_argument("node", help="Node name (e.g. /turtlesim)")
 
     # ------------------------------------------------------------------
     # lifecycle
@@ -987,7 +987,7 @@ def build_parser():
         p = psub.add_parser(_params_list_name,
                             help="List parameters for a node"
                             if _params_list_name == "list" else "Alias for list")
-        p.add_argument("node")
+        p.add_argument("node", help="Node name (e.g. /turtlesim)")
         p.add_argument("--timeout", type=float, default=5.0,
                        help="Timeout in seconds (default: 5)")
     p = psub.add_parser("get", help="Get parameter value")
@@ -1050,9 +1050,9 @@ def build_parser():
     asub.add_parser("list", help="List all actions")
     asub.add_parser("ls", help="Alias for list")
     p = asub.add_parser("details", help="Get action details")
-    p.add_argument("action")
+    p.add_argument("action", help="Action server name (e.g. /turtle1/rotate_absolute)")
     p = asub.add_parser("info", help="Alias for details (ros2 action info)")
-    p.add_argument("action")
+    p.add_argument("action", help="Action server name (e.g. /turtle1/rotate_absolute)")
     p = asub.add_parser("type", help="Get action server type")
     p.add_argument("action", nargs="?", help="Action server name (e.g. /turtle1/rotate_absolute)")
     p.add_argument("--timeout", type=float, default=5.0,
@@ -1061,7 +1061,7 @@ def build_parser():
         p = asub.add_parser(_send_name,
                             help="Send action goal" if _send_name == "send"
                             else "Alias for send (ros2 action send_goal)")
-        p.add_argument("action")
+        p.add_argument("action", help="Action server name (e.g. /turtle1/rotate_absolute)")
         p.add_argument("goal", help="JSON goal")
         p.add_argument("--timeout", type=float, default=30.0,
                        help="Timeout in seconds (default: 30)")
@@ -1077,7 +1077,7 @@ def build_parser():
     p.add_argument("--retries", type=int, default=None,
                    help="Number of attempts before giving up (overrides global --retries)")
     p = asub.add_parser("echo", help="Echo action feedback and status messages")
-    p.add_argument("action")
+    p.add_argument("action", help="Action server name (e.g. /turtle1/rotate_absolute)")
     p.add_argument("--duration", type=float, default=None,
                    help="Collect feedback for this many seconds "
                         "(default: wait for first message)")
