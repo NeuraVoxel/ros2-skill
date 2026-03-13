@@ -750,6 +750,13 @@ def cmd_topics_publish_until(args):
             return output({"error": "--rotate cannot be used with --euclidean"})
         if args.delta or args.above or args.below or args.equals:
             return output({"error": "--rotate cannot be used with --delta, --above, --below, or --equals"})
+        # Explicitly convert to float (argparse type=float may not always work)
+        try:
+            rotate_angle = float(rotate_angle)
+        except (TypeError, ValueError):
+            return output({"error": "--rotate must be a numeric value"})
+        if use_degrees:
+            rotate_angle = math.radians(rotate_angle)
         if rotate_angle <= 0:
             return output({"error": "--rotate must be > 0"})
     else:
@@ -813,6 +820,11 @@ def cmd_topics_publish_until(args):
         rotate_angle = getattr(args, 'rotate', None)
         use_degrees = getattr(args, 'degrees', False)
         if rotate_angle is not None:
+            # Explicitly convert to float (argparse type=float may not always work)
+            try:
+                rotate_angle = float(rotate_angle)
+            except (TypeError, ValueError):
+                return output({"error": "--rotate must be a numeric value"})
             if use_degrees:
                 rotate_angle = math.radians(rotate_angle)  # Convert to radians
             # For rotation, we don't need field paths - it's handled internally
