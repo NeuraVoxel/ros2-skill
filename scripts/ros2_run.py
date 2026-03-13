@@ -44,22 +44,28 @@ def _find_executables(package):
 
 
 def _apply_params(params_str):
-    """Parse and return params from key:value string."""
+    """Parse and return params from key:value or key:=value string."""
     if not params_str:
         return {}
     
     params = {}
     for pair in params_str.split(','):
         pair = pair.strip()
-        if ':' in pair:
+        # Handle both "key:value" and "key:=value" formats
+        if ':=' in pair:
+            key, value = pair.split(':=', 1)
+        elif ':' in pair:
             key, value = pair.split(':', 1)
-            try:
-                if '.' in value:
-                    params[key.strip()] = float(value)
-                else:
-                    params[key.strip()] = int(value)
-            except ValueError:
-                params[key.strip()] = value.strip()
+        else:
+            continue
+        # Try to parse value as number
+        try:
+            if '.' in value:
+                params[key.strip()] = float(value)
+            else:
+                params[key.strip()] = int(value)
+        except ValueError:
+            params[key.strip()] = value.strip()
     
     return params
 
@@ -114,6 +120,12 @@ def cmd_run(args):
     # Build run command
     cmd_parts = ["ros2 run", package, executable]
     cmd_parts.extend(run_args)
+    
+    # Add params to command if specified (key:=value format for ROS 2)
+    if params_str:
+        for key, value in applied_params.items():
+            cmd_parts.append(f"{key}:={value}")
+    
     run_cmd_str = " ".join(cmd_parts)
     
     # Generate session name
