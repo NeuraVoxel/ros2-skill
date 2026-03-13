@@ -1,31 +1,156 @@
-# Examples
+# ROS 2 Skill Examples
 
-## Image Capture
+This guide provides practical, high-value examples for common robotics tasks using the ROS 2 Skill CLI.
 
-Capture an image from a ROS 2 topic and save to `artifacts/`:
+## 1. Robot Motion & Control
 
+### Publish a Velocity Sequence
+Move a robot forward at 0.5 m/s for 2 seconds, then stop immediately.
 ```bash
-python3 scripts/ros2_cli.py topics capture-image \
-  --topic /camera/image_raw/compressed \
-  --output test.jpg \
-  --timeout 5 \
-  --type auto
+python3 scripts/ros2_cli.py topics publish-sequence /cmd_vel \
+  '[{"linear":{"x":0.5},"angular":{"z":0.0}}, {"linear":{"x":0.0},"angular":{"z":0.0}}]' \
+  '[2.0, 0.5]'
 ```
 
-Requires `opencv-python` and `numpy`.
+### Drive Until Condition (Odom)
+Drive forward at 0.2 m/s until the robot has moved 1.0 meter from its starting position.
+```bash
+python3 scripts/ros2_cli.py topics publish-until /cmd_vel \
+  '{"linear":{"x":0.2},"angular":{"z":0.0}}' \
+  --monitor /odom --field pose.pose.position.x --delta 1.0
+```
+
+### Rotate by Angle
+Rotate 90 degrees (1.57 radians) counter-clockwise using the internal monitor.
+```bash
+python3 scripts/ros2_cli.py topics publish-until /cmd_vel \
+  '{"linear":{"x":0.0},"angular":{"z":0.5}}' \
+  --monitor /odom --rotate 1.57
+```
 
 ---
 
-## Discord Integration
+## 2. System Diagnostics & Battery
 
-Send a captured image to a Discord channel:
-
+### Monitor Battery Status
+Auto-discover all battery topics and return a one-shot status report.
 ```bash
-python3 scripts/discord_tools.py send-image \
-  --path artifacts/test.jpg \
-  --channel-id 123456789012345678 \
-  --config ~/.nanobot/config.json \
-  --delete
+python3 scripts/ros2_cli.py topics battery
 ```
 
-Requires `requests` and a bot token in `~/.nanobot/config.json`. See [`SKILL.md`](SKILL.md) for the expected config file format.
+### Continuous Diagnostics
+Watch diagnostic updates for 10 seconds to catch intermittent hardware warnings.
+```bash
+python3 scripts/ros2_cli.py topics diag --duration 10 --max-messages 5
+```
+
+---
+
+## 3. Parameters & Configuration
+
+### Save and Restore Presets
+Capture the current state of a node's parameters (e.g., camera settings) and restore them later.
+```bash
+# Save current settings
+python3 scripts/ros2_cli.py params preset-save /camera_server indoor_mode
+
+# Restore later
+python3 scripts/ros2_cli.py params preset-load /camera_server indoor_mode
+```
+
+### Bulk Update from File
+Update multiple parameters at once using a JSON file.
+```bash
+python3 scripts/ros2_cli.py params load /turtlesim ./configs/standard_colors.json
+```
+
+---
+
+## 4. Hardware & Controllers (ros2_control)
+
+### List Hardware & Interfaces
+Check which hardware components are registered and what interfaces they provide.
+```bash
+python3 scripts/ros2_cli.py control lhc
+python3 scripts/ros2_cli.py control lhi
+```
+
+### Atomic Controller Switch
+Deactivate a 'position' controller and activate a 'velocity' controller in a single transaction.
+```bash
+python3 scripts/ros2_cli.py control switch-controllers \
+  --deactivate joint_position_controller \
+  --activate joint_velocity_controller \
+  --strictness STRICT
+```
+
+---
+
+## 5. Transforms (TF2)
+
+### Lookup Transform
+Get the current transform between the `map` and `base_link` frames.
+```bash
+python3 scripts/ros2_cli.py tf lookup map base_link
+```
+
+### Transform a Point
+Transform a coordinate from the `sensor_frame` to the `odom` frame.
+```bash
+python3 scripts/ros2_cli.py tf transform-point odom sensor_frame 1.0 0.5 0.0
+```
+
+---
+
+## 6. Vision & Perception
+
+### Capture Image
+Grab a frame from a compressed camera stream.
+```bash
+python3 scripts/ros2_cli.py topics capture-image \
+  --topic /camera/image_raw/compressed \
+  --output robot_view.jpg
+```
+
+### Visualise Controller Chains
+Generate a Graphviz diagram of how controllers are chained together.
+```bash
+python3 scripts/ros2_cli.py control vcc --output controller_map.pdf
+```
+
+---
+
+## 7. Global Overrides
+
+### Reliable Service Calls
+Increase timeout and retry count for a service call on a high-latency network.
+```bash
+python3 scripts/ros2_cli.py --timeout 30 --retries 3 services call /spawn \
+  '{"x": 2.0, "y": 2.0, "name": "extra_turtle"}'
+```
+
+---
+
+## 8. Deployment & Session Management
+
+### Launch a Package
+Start a ROS 2 launch file in a managed tmux session.
+```bash
+python3 scripts/ros2_cli.py launch new my_robot_bringup robot.launch.py
+```
+
+### Run with Presets
+Run a node and automatically apply a parameter preset before it starts.
+```bash
+python3 scripts/ros2_cli.py run new turtlesim turtlesim_node --presets indoor_mode
+```
+
+---
+
+## 9. Interface Discovery
+
+### Prototype Payloads
+Get a JSON template for a message type to use in a `publish` command.
+```bash
+python3 scripts/ros2_cli.py interface proto geometry_msgs/msg/Twist
+```
