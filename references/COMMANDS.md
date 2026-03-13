@@ -6,6 +6,108 @@ All commands output JSON. Errors return `{"error": "..."}`.
 
 ---
 
+## --help Quick Reference
+
+**Every subcommand supports `--help`.** Run it before constructing any command you are unsure about — it prints accepted flags without requiring a live ROS 2 graph.
+
+```bash
+# Top-level
+python3 {baseDir}/scripts/ros2_cli.py --help
+
+# topics subcommands
+python3 {baseDir}/scripts/ros2_cli.py topics publish-until --help
+python3 {baseDir}/scripts/ros2_cli.py topics publish-sequence --help
+python3 {baseDir}/scripts/ros2_cli.py topics publish --help
+python3 {baseDir}/scripts/ros2_cli.py topics subscribe --help
+python3 {baseDir}/scripts/ros2_cli.py topics list --help
+python3 {baseDir}/scripts/ros2_cli.py topics type --help
+python3 {baseDir}/scripts/ros2_cli.py topics details --help
+python3 {baseDir}/scripts/ros2_cli.py topics message --help
+python3 {baseDir}/scripts/ros2_cli.py topics hz --help
+python3 {baseDir}/scripts/ros2_cli.py topics bw --help
+python3 {baseDir}/scripts/ros2_cli.py topics delay --help
+python3 {baseDir}/scripts/ros2_cli.py topics find --help
+python3 {baseDir}/scripts/ros2_cli.py topics capture-image --help
+python3 {baseDir}/scripts/ros2_cli.py topics diag --help
+python3 {baseDir}/scripts/ros2_cli.py topics battery --help
+
+# services subcommands
+python3 {baseDir}/scripts/ros2_cli.py services list --help
+python3 {baseDir}/scripts/ros2_cli.py services call --help
+python3 {baseDir}/scripts/ros2_cli.py services details --help
+python3 {baseDir}/scripts/ros2_cli.py services find --help
+python3 {baseDir}/scripts/ros2_cli.py services echo --help
+
+# actions subcommands
+python3 {baseDir}/scripts/ros2_cli.py actions list --help
+python3 {baseDir}/scripts/ros2_cli.py actions send --help
+python3 {baseDir}/scripts/ros2_cli.py actions details --help
+python3 {baseDir}/scripts/ros2_cli.py actions cancel --help
+python3 {baseDir}/scripts/ros2_cli.py actions echo --help
+python3 {baseDir}/scripts/ros2_cli.py actions find --help
+
+# nodes
+python3 {baseDir}/scripts/ros2_cli.py nodes list --help
+python3 {baseDir}/scripts/ros2_cli.py nodes details --help
+
+# params
+python3 {baseDir}/scripts/ros2_cli.py params list --help
+python3 {baseDir}/scripts/ros2_cli.py params get --help
+python3 {baseDir}/scripts/ros2_cli.py params set --help
+python3 {baseDir}/scripts/ros2_cli.py params describe --help
+python3 {baseDir}/scripts/ros2_cli.py params dump --help
+python3 {baseDir}/scripts/ros2_cli.py params load --help
+python3 {baseDir}/scripts/ros2_cli.py params delete --help
+python3 {baseDir}/scripts/ros2_cli.py params preset-save --help
+python3 {baseDir}/scripts/ros2_cli.py params preset-load --help
+python3 {baseDir}/scripts/ros2_cli.py params preset-list --help
+python3 {baseDir}/scripts/ros2_cli.py params preset-delete --help
+
+# lifecycle
+python3 {baseDir}/scripts/ros2_cli.py lifecycle nodes --help
+python3 {baseDir}/scripts/ros2_cli.py lifecycle list --help
+python3 {baseDir}/scripts/ros2_cli.py lifecycle get --help
+python3 {baseDir}/scripts/ros2_cli.py lifecycle set --help
+
+# control (controller manager)
+python3 {baseDir}/scripts/ros2_cli.py control list-controllers --help
+python3 {baseDir}/scripts/ros2_cli.py control list-controller-types --help
+python3 {baseDir}/scripts/ros2_cli.py control list-hardware-components --help
+python3 {baseDir}/scripts/ros2_cli.py control list-hardware-interfaces --help
+python3 {baseDir}/scripts/ros2_cli.py control load-controller --help
+python3 {baseDir}/scripts/ros2_cli.py control unload-controller --help
+python3 {baseDir}/scripts/ros2_cli.py control configure-controller --help
+python3 {baseDir}/scripts/ros2_cli.py control set-controller-state --help
+python3 {baseDir}/scripts/ros2_cli.py control switch-controllers --help
+python3 {baseDir}/scripts/ros2_cli.py control set-hardware-component-state --help
+python3 {baseDir}/scripts/ros2_cli.py control view-controller-chains --help
+
+# tf
+python3 {baseDir}/scripts/ros2_cli.py tf list --help
+python3 {baseDir}/scripts/ros2_cli.py tf lookup --help
+python3 {baseDir}/scripts/ros2_cli.py tf echo --help
+python3 {baseDir}/scripts/ros2_cli.py tf monitor --help
+python3 {baseDir}/scripts/ros2_cli.py tf static --help
+python3 {baseDir}/scripts/ros2_cli.py tf euler-from-quaternion --help
+python3 {baseDir}/scripts/ros2_cli.py tf quaternion-from-euler --help
+python3 {baseDir}/scripts/ros2_cli.py tf transform-point --help
+python3 {baseDir}/scripts/ros2_cli.py tf transform-vector --help
+
+# other
+python3 {baseDir}/scripts/ros2_cli.py estop --help
+python3 {baseDir}/scripts/ros2_cli.py doctor --help
+python3 {baseDir}/scripts/ros2_cli.py multicast send --help
+python3 {baseDir}/scripts/ros2_cli.py multicast receive --help
+python3 {baseDir}/scripts/ros2_cli.py launch new --help
+python3 {baseDir}/scripts/ros2_cli.py run new --help
+python3 {baseDir}/scripts/ros2_cli.py interface show --help
+python3 {baseDir}/scripts/ros2_cli.py version --help
+```
+
+**Rule:** If you are about to use a flag and you have any doubt it exists, run `--help` for that subcommand first. Never guess flag names.
+
+---
+
 ## Global Options
 
 These options are placed **before** the command name and apply to every command that makes service or action calls.

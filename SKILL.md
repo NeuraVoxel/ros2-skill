@@ -101,7 +101,13 @@ The failure mode to avoid: inventing a flag like `--yaw-delta` or `--rotate-degr
 
 **The verification chain:**
 1. **Check this skill first.** The full command reference is in [references/COMMANDS.md](references/COMMANDS.md). If a flag or command is not listed there, it does not exist.
-2. **If still unsure, introspect the live system.** Run the command with `--help` (if supported), or check what topics/services/actions actually exist before referencing them.
+2. **If still unsure, run `--help` on the exact subcommand before constructing the call.** Every subcommand supports `--help` and prints its accepted flags without requiring a live ROS 2 graph. This is mandatory, not optional.
+   ```bash
+   python3 {baseDir}/scripts/ros2_cli.py topics publish-until --help
+   python3 {baseDir}/scripts/ros2_cli.py topics publish-sequence --help
+   python3 {baseDir}/scripts/ros2_cli.py actions send --help
+   # etc. — use the exact subcommand you are about to call
+   ```
 3. **If still stuck after checking both, ask the user.** This is the only acceptable reason to ask — not because you assumed something and it failed.
 
 **Never:**
@@ -1122,6 +1128,14 @@ python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
 #### Case B — Rotation specified, odometry available → `publish-until --rotate` (closed loop)
 
 `--rotate` automatically extracts yaw from the odometry quaternion and handles angle wraparound. **There is no `--yaw` flag.** Do not use `--field` for rotation. Left turn = positive `angular.z`; right turn = negative `angular.z`.
+
+**Before constructing any rotation command, run `--help` to confirm accepted flags:**
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics publish-until --help
+```
+
+Do not proceed until you have verified the flag names from the `--help` output. Never invent or assume flags.
 
 ```bash
 # Step 1 result: VEL_TOPIC = <discovered>

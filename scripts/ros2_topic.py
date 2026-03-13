@@ -402,7 +402,9 @@ class ConditionMonitor(Node):
 
         # Rotation-specific
         self.start_yaw = None
-        self.rotation_delta = None
+        self.last_yaw = None          # yaw from previous message (for incremental integration)
+        self.accumulated_rotation = 0.0  # signed total rotation so far
+        self.rotation_delta = None    # final value reported in output
 
         self.start_msg = None
         self.end_msg = None
@@ -471,9 +473,9 @@ class ConditionMonitor(Node):
                     self.stop_event.set()
 
             elif self.rotate is not None:
-                # Rotation monitoring: extract quaternion and compute yaw change
+                # Rotation monitoring: accumulate signed yaw change across wraparound.
+                # Works for any angle: positive (CCW), negative (CW), >360°, wrapped.
                 try:
-                    # Try to find quaternion in common odometry locations
                     quat = None
                     for path in ['pose.pose.orientation', 'orientation']:
                         try:
@@ -488,7 +490,6 @@ class ConditionMonitor(Node):
                         self.stop_event.set()
                         return
 
-                    # Ensure quaternion values are floats
                     try:
                         qx = float(quat.get('x', 0))
                         qy = float(quat.get('y', 0))
@@ -502,14 +503,28 @@ class ConditionMonitor(Node):
                     current_yaw = quaternion_to_yaw((qx, qy, qz, qw))
 
                     if self.start_yaw is None:
+                        # First message: record start, no delta yet
                         self.start_yaw = current_yaw
+                        self.last_yaw = current_yaw
                         self.start_msg = msg_dict
+                        return
 
-                    # Compute angular difference, handling wraparound
-                    delta_yaw = normalize_angle(current_yaw - self.start_yaw)
-                    self.rotation_delta = abs(delta_yaw)
+                    # Integrate signed incremental delta to accumulate total rotation.
+                    # normalize_angle keeps each step in [-pi, pi], handling wraparound
+                    # correctly regardless of direction or total angle size.
+                    step = normalize_angle(current_yaw - self.last_yaw)
+                    self.accumulated_rotation += step
+                    self.last_yaw = current_yaw
+                    self.rotation_delta = self.accumulated_rotation
 
-                    if self.rotation_delta >= abs(self.rotate):
+                    # Stop when accumulated rotation reaches the signed target:
+                    # - positive target (CCW): stop when accumulated >= target
+                    # - negative target (CW):  stop when accumulated <= target
+                    target = self.rotate
+                    if target > 0 and self.accumulated_rotation >= target:
+                        self.end_msg = msg_dict
+                        self.stop_event.set()
+                    elif target < 0 and self.accumulated_rotation <= target:
                         self.end_msg = msg_dict
                         self.stop_event.set()
 
@@ -768,8 +783,8 @@ def cmd_topics_publish_until(args):
             return output({"error": "--rotate must be a numeric value"})
         if use_degrees:
             rotate_angle = math.radians(rotate_angle)
-        if rotate_angle <= 0:
-            return output({"error": "--rotate must be > 0"})
+        if rotate_angle == 0:
+            return output({"error": "--rotate angle must be non-zero"})
     else:
         # Normal operation: --field is required
         if not args.field:
@@ -907,10 +922,10 @@ def cmd_topics_publish_until(args):
                     "topic": args.topic,
                     "monitor_topic": args.monitor,
                     "operator": "rotate",
-                    "target_rotation": args.rotate,
-                    "target_rotation_degrees": math.degrees(args.rotate) if args.rotate else None,
+                    "target_rotation": rotate_angle,
+                    "target_rotation_degrees": math.degrees(rotate_angle),
                     "actual_rotation": monitor.rotation_delta,
-                    "actual_rotation_degrees": math.degrees(monitor.rotation_delta) if monitor.rotation_delta else None,
+                    "actual_rotation_degrees": math.degrees(monitor.rotation_delta) if monitor.rotation_delta is not None else None,
                     "duration": elapsed,
                     "published_count": published_count,
                 }

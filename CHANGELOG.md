@@ -49,7 +49,9 @@ Added launch and run commands for running ROS 2 launch files and executables in 
 - Session management: fails if session exists; restart preserves original parameters
 - Rule 0: mandatory pre-flight introspection before every publish/call/send — never assume topic names, types, or node names
 - Rule 0.1: mandatory session-start checks — `doctor` health check, simulated time / `/clock` liveness, lifecycle node state verification
-- Rule 0.5: never hallucinate commands or flags; verify in COMMANDS.md first, then the live system, then ask
+- Rule 0.5: never hallucinate commands or flags; verify in COMMANDS.md first, then run `--help` on the exact subcommand before constructing any call, then ask; mandatory for any rotation command before using `--rotate`
+- COMMANDS.md: added `--help Quick Reference` section at the top listing `--help` invocations for every subcommand; agents should run these before using any unfamiliar flag
+- Movement Case B: explicit mandatory `--help` step inline before constructing any `publish-until --rotate` command
 - Rule 5: execute immediately on clear intent; ask only when genuinely ambiguous
 - Rule 6: minimal reporting by default; verbose only on explicit request
 - Movement: mandatory parameter introspection before any velocity command — discover controller nodes, list params, get velocity/angular limits, cap commanded velocity; conservative defaults if no limits found
@@ -59,6 +61,15 @@ Added launch and run commands for running ROS 2 launch files and executables in 
 - Movement: confirm Twist vs TwistStamped via `topics type` after discovery; verify controller active and odometry live before moving; capture start and end pose; report actual distance/angle
 - Distance/angle commands always use `publish-until` with odometry; `publish-sequence` only for open-ended movement or no-odometry fallback
 - All examples use `<VEL_TOPIC>` / `<ODOM_TOPIC>` placeholders; no hardcoded topic or service names anywhere
+
+### publish-until --rotate Fix
+
+- Fixed: `--rotate` rejected negative values (CW rotation) — guard changed from `<= 0` to `== 0`; zero is the only invalid rotation angle
+- Fixed: rotation monitor was direction-blind — used `abs(delta_yaw)` which could never distinguish CW from CCW
+- Fixed: rotation monitor used a single snapshot yaw delta instead of accumulated integration — failed for angles > 180° and multi-turn rotations
+- Fixed: rotation monitor now integrates incremental steps (`normalize_angle(current_yaw - last_yaw)`) and compares signed accumulated total against signed target
+- Fixed: output block reported `args.rotate` (raw degrees when `--degrees` used) instead of the converted `rotate_angle` in radians — now always reports in radians
+- Supports: positive angles (CCW), negative angles (CW), angles > 360°, multi-turn, any sign combination
 
 ---
 
