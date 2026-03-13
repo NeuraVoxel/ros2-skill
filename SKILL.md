@@ -208,9 +208,12 @@ topics publish-until <VEL_TOPIC> '<payload>' --monitor <ODOM_TOPIC> --field pose
 ```
 Angle/rotation commands — **always use `--rotate`, never `--field` or `--yaw`**:
 ```bash
-topics publish-until <VEL_TOPIC> '<payload>' --monitor <ODOM_TOPIC> --rotate <N> --degrees --timeout 30
+# CCW (left): positive --rotate + positive angular.z
+topics publish-until <VEL_TOPIC> '<payload>' --monitor <ODOM_TOPIC> --rotate <+N> --degrees --timeout 30
+# CW (right):  negative --rotate + negative angular.z
+topics publish-until <VEL_TOPIC> '<payload>' --monitor <ODOM_TOPIC> --rotate <-N> --degrees --timeout 30
 ```
-`--rotate` extracts yaw from the odometry quaternion internally. There is no `--yaw` flag. Do not attempt to monitor orientation fields manually.
+`--rotate` sign = direction. Positive = CCW. Negative = CW. `angular.z` sign must always match `--rotate` sign — mismatched signs cause timeout. There is no `--yaw` flag. Do not attempt to monitor orientation fields manually.
 Open-ended or fallback (stop is always the last message):
 ```bash
 topics publish-sequence <VEL_TOPIC> '[<move_payload>, <zero_payload>]' '[<duration>, 0.5]'
@@ -356,7 +359,7 @@ Agent does (for movement):
 | "Check TF/transforms" | Check TF topics | Find /tf, /tf_static topics → subscribe |
 | "Move/drive/turn (mobile robot)" | Open-ended movement, no target | Find Twist/TwistStamped → **publish-sequence** with stop |
 | "Move forward/back N meters" | Closed-loop distance → Movement Workflow Case A | Find odom → **publish-until** `--field pose.pose.position.x --delta N` |
-| "Rotate N degrees / turn left/right / turn N radians" | Closed-loop rotation → Movement Workflow Case B | Find odom → **publish-until** `--rotate N --degrees` (degrees) or `--rotate N` (radians). `--rotate` handles all yaw/heading tracking internally — never use `--field` or `--yaw` for rotation |
+| "Rotate N degrees / turn left/right / turn N radians" | Closed-loop rotation → Movement Workflow Case B | Find odom → **publish-until** `--rotate ±N --degrees` (CCW = positive, CW = negative). Sign of `--rotate` MUST match sign of `angular.z`. Never use `--field` or `--yaw` for rotation |
 | "Move arm/joint (manipulator)" | Publish JointTrajectory | Find JointTrajectory topic → publish |
 | "Control gripper" | Publish GripperCommand or JointTrajectory | Find gripper topic → publish |
 | "Stop the robot" | Publish zero velocity | Find Twist/TwistStamped → `topics type` to confirm → publish zeros in confirmed type |

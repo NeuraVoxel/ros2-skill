@@ -306,7 +306,7 @@ Publish a message at a fixed rate while simultaneously monitoring a second topic
 1. `topics find nav_msgs/msg/Odometry` — find the feedback topic (for --rotate or --field)
 2. `topics message nav_msgs/msg/Odometry` — inspect field paths (for --field)
 3. `topics subscribe /odom --duration 2` — read current value (baseline for `--delta`)
-4. For rotation: just use `--rotate N` (no field paths needed, quaternion handled automatically)
+4. For rotation: use `--rotate ±N` — positive = CCW (left), negative = CW (right). Sign MUST match `angular.z` sign in the message payload.
 
 | Argument | Required | Description |
 |----------|----------|-------------|
@@ -317,7 +317,7 @@ Publish a message at a fixed rate while simultaneously monitoring a second topic
 |--------|----------|---------|-------------|
 | `--monitor TOPIC` | Yes | — | Topic to watch for the stop condition |
 | `--field PATH [PATH...]` | Yes (unless --rotate) | — | One or more dot-separated field paths in the monitor message (e.g. `pose.pose.position.x`). Provide multiple paths with `--euclidean`. |
-| `--rotate N` | Alternative to --field | — | Rotate by N radians. Automatically monitors odometry orientation and stops when rotation is complete. Handles quaternion math internally. |
+| `--rotate ±N` | Alternative to --field | — | Rotate by N radians. **Sign determines direction: positive = CCW (left turn), negative = CW (right turn). Sign of `--rotate` MUST match sign of `angular.z` in the payload — mismatched signs cause the command to run until timeout.** Zero is invalid. Handles quaternion math internally. |
 | `--degrees` | No | radians | Interpret --rotate angle in degrees instead of radians |
 | `--euclidean` | No | off | Compute Euclidean distance across all `--field` paths; requires `--delta`. Works for any number of numeric fields (2D, 3D, joint-space, etc.) |
 | `--delta N` | One required | — | Stop when field changes by ±N from first observed value; or when Euclidean distance ≥ N with `--euclidean` |

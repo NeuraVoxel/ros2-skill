@@ -757,10 +757,13 @@ def build_parser():
                    help="Stop when field < N (absolute threshold)")
     p.add_argument("--equals", default=None,
                    help="Stop when field == value (numeric or string)")
-    p.add_argument("--rotate", type=float, default=None,
-                   help="Rotate by N radians (or degrees with --degrees). "
-                        "Monitors odometry orientation and stops when rotation is complete. "
-                        "Requires --monitor with an odometry topic.")
+     p.add_argument("--rotate", type=float, default=None,
+                    help="Rotate by N radians (or degrees with --degrees). "
+                         "SIGN DETERMINES DIRECTION: positive = CCW (left), negative = CW (right). "
+                         "The sign of --rotate MUST match the sign of angular.z in the message — "
+                         "mismatched signs will cause the command to never stop (monitor waits for "
+                         "opposite direction). Zero is the only invalid value. "
+                         "Requires --monitor with an odometry topic.")
     p.add_argument("--degrees", action="store_true", default=False,
                    help="Interpret --rotate angle in degrees instead of radians")
     p.add_argument("--rate", type=float, default=10.0,
