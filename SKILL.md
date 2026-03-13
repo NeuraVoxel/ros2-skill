@@ -55,7 +55,7 @@ This rule exists because:
 - ❌ Never use `/cmd_vel` without first discovering the velocity topic with `topics find`
 - ❌ Never use `Twist` payload without first confirming the type is not `TwistStamped` via `topics type`
 - ❌ Never use `/odom` without first discovering the odometry topic with `topics find`
-- ❌ Never use `--yaw`, `--yaw-delta`, or `--field` for rotation — the only correct flag is `--rotate N --degrees` (or `--rotate N` for radians)
+- ❌ Never use `--yaw`, `--yaw-delta`, or `--field` for rotation — the only correct flag is `--rotate N --degrees` (or `--rotate N` for radians). Use negative N for CW; `--rotate` sign and `angular.z` sign must always match.
 - ❌ Never assume any topic, service, action, or node name from ROS 2 convention
 - ❌ Never assume a message type from a topic name
 
@@ -1127,7 +1127,16 @@ python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
 
 #### Case B — Rotation specified, odometry available → `publish-until --rotate` (closed loop)
 
-`--rotate` automatically extracts yaw from the odometry quaternion and handles angle wraparound. **There is no `--yaw` flag.** Do not use `--field` for rotation. Left turn = positive `angular.z`; right turn = negative `angular.z`.
+`--rotate` automatically extracts yaw from the odometry quaternion and handles angle wraparound. **There is no `--yaw` flag.** Do not use `--field` for rotation.
+
+**Direction convention — `--rotate` sign and `angular.z` sign must always agree:**
+
+| Direction | `--rotate` | `angular.z` |
+|-----------|-----------|-------------|
+| Left / CCW | positive (e.g. `--rotate 90 --degrees`) | positive (e.g. `0.5`) |
+| Right / CW | negative (e.g. `--rotate -90 --degrees`) | negative (e.g. `-0.5`) |
+
+`--rotate` tells the monitor *how far and in which direction* to track. `angular.z` tells the robot *which way to spin*. They must match — a positive `--rotate` with negative `angular.z` means the robot turns CW while the monitor waits for CCW accumulation and will never stop.
 
 **Before constructing any rotation command, run `--help` to confirm accepted flags:**
 
@@ -1141,17 +1150,17 @@ Do not proceed until you have verified the flag names from the `--help` output. 
 # Step 1 result: VEL_TOPIC = <discovered>
 # Step 2 result: ODOM_TOPIC = <discovered>
 
-# Rotate 90 degrees counter-clockwise (Twist)
+# Rotate 90 degrees counter-clockwise — positive --rotate, positive angular.z (Twist)
 python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
   '{"linear":{"x":0,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0.5}}' \
   --monitor <ODOM_TOPIC> --rotate 90 --degrees --timeout 30
 
-# Rotate 45 degrees clockwise — negative angular.z (Twist)
+# Rotate 45 degrees clockwise — negative --rotate, negative angular.z (Twist)
 python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
   '{"linear":{"x":0,"y":0,"z":0},"angular":{"x":0,"y":0,"z":-0.5}}' \
-  --monitor <ODOM_TOPIC> --rotate 45 --degrees --timeout 30
+  --monitor <ODOM_TOPIC> --rotate -45 --degrees --timeout 30
 
-# Rotate 1.57 radians (TwistStamped variant)
+# Rotate 1.57 radians CCW (TwistStamped variant)
 python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
   '{"header":{"stamp":{"sec":0},"frame_id":""},"twist":{"linear":{"x":0,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0.5}}}' \
   --monitor <ODOM_TOPIC> --rotate 1.5708 --timeout 30
@@ -1304,6 +1313,8 @@ Never ask the user for topic names or message types — discover them from the l
 | "Is there a service called /X?" | Use `services list` to verify it exists |
 | "How do I monitor yaw / heading?" | Use `--rotate N --degrees` (or radians). There is no `--yaw` or `--yaw-delta` flag. `--rotate` handles all yaw tracking internally. |
 | "Should I use --field for rotation?" | No. Never use `--field` for rotation. Use `--rotate`. |
+| "How do I rotate clockwise / right?" | Use `--rotate -90 --degrees` (negative angle) with `angular.z: -0.5` (negative velocity). Sign of `--rotate` and `angular.z` must always match. |
+| "Can --rotate be negative?" | Yes. Negative = CW. Positive = CCW. Zero is the only invalid value. |
 | "What controller parameters exist?" | Use `params list <controller_node>` |
 
 ### Technical Troubleshooting

@@ -361,14 +361,30 @@ python3 {baseDir}/scripts/ros2_cli.py topics publish-until /cmd_vel \
   --monitor /scan --field ranges.0 --below 0.5 --timeout 60
 ```
 
-**Rotate 90 degrees (using --rotate flag, no quaternion math needed):**
+**Direction convention — `--rotate` sign and `angular.z` sign must always match:**
+
+| Direction | `--rotate` | `angular.z` |
+|-----------|-----------|-------------|
+| Left / CCW | positive | positive |
+| Right / CW | negative | negative |
+
+Mismatched signs (e.g. `--rotate 90` with `angular.z: -0.5`) means the robot turns CW while the monitor waits for CCW accumulation — the command will never stop until timeout.
+
+**Rotate 90 degrees CCW (positive --rotate, positive angular.z):**
 ```bash
 python3 {baseDir}/scripts/ros2_cli.py topics publish-until /cmd_vel \
   '{"linear":{"x":0},"angular":{"z":0.5}}' \
   --monitor /odom --rotate 90 --degrees --timeout 30
 ```
 
-**Rotate 180 degrees (using radians):**
+**Rotate 90 degrees CW (negative --rotate, negative angular.z):**
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics publish-until /cmd_vel \
+  '{"linear":{"x":0},"angular":{"z":-0.5}}' \
+  --monitor /odom --rotate -90 --degrees --timeout 30
+```
+
+**Rotate 180 degrees CCW (using radians):**
 ```bash
 python3 {baseDir}/scripts/ros2_cli.py topics publish-until /cmd_vel \
   '{"linear":{"x":0},"angular":{"z":0.5}}' \

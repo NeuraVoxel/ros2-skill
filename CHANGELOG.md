@@ -69,7 +69,9 @@ Added launch and run commands for running ROS 2 launch files and executables in 
 - Fixed: rotation monitor used a single snapshot yaw delta instead of accumulated integration — failed for angles > 180° and multi-turn rotations
 - Fixed: rotation monitor now integrates incremental steps (`normalize_angle(current_yaw - last_yaw)`) and compares signed accumulated total against signed target
 - Fixed: output block reported `args.rotate` (raw degrees when `--degrees` used) instead of the converted `rotate_angle` in radians — now always reports in radians
+- Fixed: documentation had CW example using positive `--rotate` with negative `angular.z` — this would never stop (monitor waits CCW, robot spins CW); corrected to `--rotate -45 --degrees` + `angular.z: -0.5`
 - Supports: positive angles (CCW), negative angles (CW), angles > 360°, multi-turn, any sign combination
+- Rule: `--rotate` sign and `angular.z` sign must always match; direction table added to SKILL.md Case B, Rule 0 checklist, FAQ, and COMMANDS.md
 
 ---
 
