@@ -175,6 +175,7 @@ def cmd_run(args):
         "status": status,
         "presets_applied": applied_presets,
         "params_applied": applied_params,
+        "config_path": config_path,
     }
     
     if ws_path:
@@ -194,6 +195,7 @@ def cmd_run(args):
         "args": run_args,
         "presets": presets,
         "params": params_str,
+        "config_path": config_path,
         "command": run_cmd_str
     })
     
@@ -259,6 +261,7 @@ def cmd_run_restart(args):
     run_args = metadata.get("args", [])
     presets = metadata.get("presets")
     params_str = metadata.get("params")
+    config_path = metadata.get("config_path")
     
     if not package or not executable:
         return output({
@@ -276,7 +279,7 @@ def cmd_run_restart(args):
         'args': run_args,
         'presets': presets,
         'params': params_str,
-        'config_path': None,
+        'config_path': config_path,
         'refresh': False
     })()
     

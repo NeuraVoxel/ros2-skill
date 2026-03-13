@@ -566,6 +566,9 @@ python3 {baseDir}/scripts/ros2_cli.py run new lekiwi_control teleop --params "sp
 # Run with presets
 python3 {baseDir}/scripts/ros2_cli.py run new lekiwi_control teleop --presets indoor
 
+# Run with config path
+python3 {baseDir}/scripts/ros2_cli.py run new lekiwi_control teleop --config-path /path/to/config
+
 # Refresh package cache
 python3 {baseDir}/scripts/ros2_cli.py run new lekiwi_control teleop --refresh
 ```
