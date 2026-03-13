@@ -4,6 +4,14 @@ All notable changes to ros2-skill will be documented in this file.
 
 ## [1.0.4] - 2026-03-13
 
+### Full-graph velocity limit scan and session caching
+
+- Changed velocity limit discovery in SKILL.md to scan **every running node** (not just nodes whose names suggest "controller") before any movement command
+- The agent now runs `params list` on every node, filters for parameters whose names contain `max`, `limit`, `vel`, `speed`, or `accel`, then retrieves each candidate with `params get`
+- Results are cached session-level as a flat map (`<node>:<param> = <value>`); the binding ceiling is the minimum across all discovered linear limits (and separately angular limits)
+- The cache is reused for all subsequent movement commands in the session; re-scan only if the user restarts nodes or explicitly requests a refresh
+- Updated in three places: Rule 0 mandatory pre-flight table, Step 5 (Get Safety Limits), and Step 2.5 of the canonical Movement Workflow
+
 ### `--help` audit: complete `help=` string coverage
 
 - Added `help=` strings to all positional `add_argument()` calls that were missing them across the entire `build_parser()` function in `ros2_cli.py`

@@ -44,12 +44,18 @@ This rule exists because:
 | Read a sensor | `topics find <msg_type>` to discover the topic; never subscribe to a hardcoded name |
 | Any operation involving a node | `nodes list` first; never assume a node name |
 
-**Parameter introspection is mandatory before any movement command.** Before publishing velocity:
-1. Run `nodes list` to find controller nodes (names containing `controller`, `driver`, `base`, etc.)
-2. Run `params list <CTRL_NODE>` on each candidate to find safety-relevant parameters
-3. Look for: `max_vel_x`, `max_vel_y`, `max_vel_theta`, `max_linear_velocity`, `max_angular_velocity`, `speed_limit`, `linear.x.max_velocity`, `angular.z.max_velocity`, or any parameter with `max`, `limit`, or `vel` in the name
-4. Run `params get <CTRL_NODE>:<param>` for each discovered limit
-5. Cap your commanded velocity at the discovered limit — never exceed it. If no limit is found, use a conservative default (e.g. 0.1 m/s linear, 0.3 rad/s angular) and note this to the user
+**Parameter introspection is mandatory before any movement command.** Velocity limits can live on any node — not just nodes with "controller" in the name. Before publishing velocity:
+1. Run `nodes list` to get every node currently running
+2. Run `params list <NODE>` on **every single node** in the list (run in parallel batches if there are many)
+3. For each node, look for any parameter whose name contains `max`, `limit`, `vel`, `speed`, or `accel` (case-insensitive). These are candidates for velocity limits.
+4. Run `params get <NODE>:<param>` for every candidate found across all nodes
+5. Collect all results into a session-level cache keyed by `<node>:<param>`. For example:
+   - `/diff_drive_controller:max_vel_x = 0.5`
+   - `/nav2_controller:max_linear_velocity = 0.4`
+   - `/base_driver:speed_limit = 0.3`
+6. The binding limit is the **minimum value across all discovered linear limits** and the **minimum across all angular limits**. Use that as your ceiling.
+7. Cache these limits for the entire session. Do not re-query on subsequent movement commands unless the user restarts nodes or explicitly asks for a refresh.
+8. Cap your commanded velocity at the session cache ceiling. If the cache is empty (no limits found on any node), use conservative defaults (0.1 m/s linear, 0.3 rad/s angular) and note this to the user.
 
 **Never hardcode or assume:**
 - ❌ Never use `/cmd_vel` without first discovering the velocity topic with `topics find`
@@ -440,28 +446,44 @@ python3 {baseDir}/scripts/ros2_cli.py actions details <action_name>
 
 ### Step 5: Get Safety Limits (for movement)
 
-**ALWAYS check for velocity limits before publishing movement commands. Discover controller nodes first — never assume their names.**
+**ALWAYS check for velocity limits before publishing movement commands. Limits can be on ANY node — not just controller nodes. Scan every node.**
 
 ```bash
-# Step 1: List all nodes to find controller nodes
+# Step 1: List every running node
 python3 {baseDir}/scripts/ros2_cli.py nodes list
-# → look for nodes with names like: diff_drive_controller, base_controller,
-#   velocity_controller, mobile_base_controller, etc.
-# → record the actual controller node name: CTRL_NODE
 
-# Step 2: List all parameters on the discovered controller node
-python3 {baseDir}/scripts/ros2_cli.py params list <CTRL_NODE>
-# → look for parameters containing: max_velocity, max_linear, max_angular, speed_limit, etc.
+# Step 2: Dump all parameters from every node
+# Run in parallel — one params list per node
+python3 {baseDir}/scripts/ros2_cli.py params list <NODE_1>
+python3 {baseDir}/scripts/ros2_cli.py params list <NODE_2>
+# ... repeat for every node
 
-# Step 3: Get the actual velocity limit values (use names from Step 2)
-python3 {baseDir}/scripts/ros2_cli.py params get <CTRL_NODE>:<max_velocity_param>
-python3 {baseDir}/scripts/ros2_cli.py params get <CTRL_NODE>:<max_linear_param>
-python3 {baseDir}/scripts/ros2_cli.py params get <CTRL_NODE>:<max_angular_param>
+# Step 3: For each node, filter parameter names that contain:
+#   max, limit, vel, speed, accel (case-insensitive)
+# These are candidate velocity/acceleration limits.
 
-# Step 4: Apply limits
-# velocity = min(requested_velocity, discovered_max_velocity)
-# Never exceed the discovered limit — use a conservative fraction (e.g. 50%) if unsure
+# Step 4: Retrieve the value of every candidate
+python3 {baseDir}/scripts/ros2_cli.py params get <NODE>:<candidate_param>
+# Repeat for every candidate across every node.
+
+# Step 5: Cache results for the session
+# Build a flat map: { "<node>:<param>": <value> }
+# E.g.:
+#   /diff_drive_controller:max_vel_x = 0.5
+#   /nav2_controller:max_linear_velocity = 0.4
+#   /base_driver:speed_limit = 0.3
+
+# Step 6: Compute binding ceiling
+# linear_ceiling  = min of all discovered linear limit values
+# angular_ceiling = min of all discovered angular/theta limit values
+# velocity = min(requested_velocity, ceiling)
+# Never exceed the ceiling. Use 50% of the ceiling if unsure of the appropriate fraction.
+
+# Step 7: Reuse the cache for all subsequent movement commands in this session.
+# Do NOT re-query unless the user restarts nodes or explicitly requests a refresh.
 ```
+
+**If no limits are found on any node:** use conservative defaults (0.1 m/s linear, 0.3 rad/s angular) and tell the user.
 
 ---
 
@@ -1087,17 +1109,22 @@ python3 {baseDir}/scripts/ros2_cli.py topics hz <ODOM_TOPIC>
 ```
 The rate must be at least 10 Hz for reliable closed-loop control. If the rate is below 5 Hz: fall back to Case D (open-loop) and warn the user that odometry is too slow for safe closed-loop operation.
 
-**Discover velocity limits from controller parameters:**
+**Discover velocity limits from ALL nodes (full-graph scan):**
+
+Velocity limits can be declared on any node — not just nodes whose names suggest "controller". Scan every node:
 ```bash
 python3 {baseDir}/scripts/ros2_cli.py nodes list
-# → find controller nodes (names containing: controller, driver, base, mobile, etc.) → CTRL_NODE
-python3 {baseDir}/scripts/ros2_cli.py params list <CTRL_NODE>
-# → find limit parameters: max_vel_x, max_vel_theta, max_linear_velocity, max_angular_velocity,
-#   speed_limit, linear.x.max_velocity, angular.z.max_velocity, or any param with max/limit/vel
-python3 {baseDir}/scripts/ros2_cli.py params get <CTRL_NODE>:<discovered_limit_param>
-# → repeat for each relevant limit found
+# → iterate over every node and run params list on each
+python3 {baseDir}/scripts/ros2_cli.py params list <NODE>
+# → filter parameter names containing: max, limit, vel, speed, accel (case-insensitive)
+python3 {baseDir}/scripts/ros2_cli.py params get <NODE>:<candidate_param>
+# → repeat for every candidate across every node
 ```
-Cap all commanded velocities at the discovered limits. If no limits are found, use conservative defaults (0.1 m/s linear, 0.3 rad/s angular) and note this.
+Collect all results into a **session-level cache**: `{ "<node>:<param>": <value> }`. Compute:
+- `linear_ceiling`  = minimum of all discovered linear-axis limit values
+- `angular_ceiling` = minimum of all discovered angular/theta limit values
+
+Cap all commanded velocities at these ceilings. Cache for the full session — do not re-scan on subsequent movement commands unless the user restarts nodes or requests a refresh. If no limits are found on any node, use conservative defaults (0.1 m/s linear, 0.3 rad/s angular) and note this.
 
 **Verify the velocity topic has active subscribers** (something must be listening — i.e., a controller):
 ```bash
