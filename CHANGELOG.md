@@ -2,7 +2,25 @@
 
 All notable changes to ros2-skill will be documented in this file.
 
-## [1.0.8] - 2026-03-13
+## [1.0.9] - 2026-03-13
+
+### Fixed — Structural gaps, contradictory rules, and hardcoded example names
+
+Three issues identified in the v1.0.8 review, now resolved:
+
+#### Movement Workflow Step 3 — Restored missing Case A heading
+
+`#### Case A — Distance specified, odometry available → \`publish-until --field\` (closed loop)` heading was accidentally dropped during a prior edit. The content was intact but the subheading was missing, making the case structure harder to parse. Restored.
+
+#### Launch "ALWAYS verify" list — Removed contradictory confirmation item
+
+The list contained `✅ Confirm with user if any doubt about which file/package/argument`, which directly contradicted Rule 5 ("Execute, don't ask") and the launch-specific rule immediately below it ("Exactly one match → launch immediately, no confirmation needed"). Removed. The launch policy is now unambiguous: one clear match → launch immediately; multiple unresolvable matches → list and ask; no match → ask for name.
+
+#### Quick Examples 4 and 5 — Replaced hardcoded names with discover-first pattern
+
+"4. Call a Service" used `/reset` as a call target — a hardcoded name that agents could copy verbatim without verifying the service exists. "5. Send an Action" used `/navigate_to_pose` and `/turtle1/rotate_absolute` inline in the example — robot-specific names that have no business being in a generic skill. Both examples now show the correct three-step discover-first flow: `services list` / `actions list` → `services details` / `actions details` → call/send using `<DISCOVERED_SERVICE>` / `<DISCOVERED_ACTION>` placeholders.
+
+
 
 ### Added / Fixed — Active introspection, liveness checks, safety interlocks, reporting rule
 

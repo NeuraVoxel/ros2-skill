@@ -631,7 +631,6 @@ Use the confirmed type to choose the payload:
 - ✅ Check `ros2 pkg files <package>` for launch files
 - ✅ Run `ros2 launch <pkg> <file> --show-args` to get valid arguments
 - ✅ Validate each user-provided argument against --show-args output
-- ✅ Confirm with user if any doubt about which file/package/argument
 
 ### Rule: Only ask when genuinely ambiguous
 
@@ -1007,6 +1006,8 @@ Record `pose.pose.position.x`, `pose.pose.position.y` from the result — this i
 
 ### Step 3 — Execute based on intent and odometry availability
 
+#### Case A — Distance specified, odometry available → `publish-until --field` (closed loop)
+
 ```bash
 # Step 1 result: VEL_TOPIC = <discovered, e.g. /base/cmd_vel or /robot/cmd_vel>
 # Step 1 type check: geometry_msgs/msg/Twist → use Twist payload
@@ -1130,14 +1131,26 @@ python3 {baseDir}/scripts/ros2_cli.py topics subscribe <LASER_TOPIC> --duration 
 
 ### 4. Call a Service
 ```bash
+# Step 1: Discover available services
 python3 {baseDir}/scripts/ros2_cli.py services list
-python3 {baseDir}/scripts/ros2_cli.py services call /reset '{}'
+
+# Step 2: Get request/response structure for the service you want to call
+python3 {baseDir}/scripts/ros2_cli.py services details <DISCOVERED_SERVICE>
+
+# Step 3: Call with properly-structured payload
+python3 {baseDir}/scripts/ros2_cli.py services call <DISCOVERED_SERVICE> '<json_payload>'
 ```
 
 ### 5. Send an Action
 ```bash
+# Step 1: Discover available actions
 python3 {baseDir}/scripts/ros2_cli.py actions list
-python3 {baseDir}/scripts/ros2_cli.py actions send /navigate_to_pose '{"pose":{"header":{"stamp":{"sec":0}},"pose":{"position":{"x":1.0,"y":0.0,"z":0.0},"orientation":{"x":0.0,"y":0.0,"z":0.0,"w":1.0}}}}'
+
+# Step 2: Get goal/result structure for the action you want to send
+python3 {baseDir}/scripts/ros2_cli.py actions details <DISCOVERED_ACTION>
+
+# Step 3: Send goal with properly-structured payload
+python3 {baseDir}/scripts/ros2_cli.py actions send <DISCOVERED_ACTION> '<json_goal>'
 ```
 
 ### 6. Move Forward N Meters / Rotate N Degrees
