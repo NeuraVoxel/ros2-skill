@@ -2688,8 +2688,6 @@ Run a ROS 2 launch file in a tmux session. System ROS is assumed to be already s
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
-| `--params "k:=v"` | No | — | Inline parameters (comma-separated key:=value or key:value) |
-| `--config-path PATH` | No | auto | Path to config directory |
 | `--timeout SECONDS` | No | 30 | Timeout for launch to start |
 
 **Run a launch file:**
@@ -2697,9 +2695,9 @@ Run a ROS 2 launch file in a tmux session. System ROS is assumed to be already s
 python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py
 ```
 
-**Run with parameters:**
+**Run with arguments:**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py --params "speed:=1.0,max_velocity:=2.0"
+python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py speed:=1.0 max_velocity:=2.0
 ```
 
 **Output:**
@@ -2711,7 +2709,6 @@ python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.
   "package": "navigation2",
   "launch_file": "navigation2.launch.py",
   "status": "running",
-  "params_applied": {"speed": 1.0, "max_velocity": 2.0}
 }
 ```
 

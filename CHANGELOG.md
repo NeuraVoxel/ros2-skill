@@ -9,12 +9,10 @@ Added launch and run commands for running ROS 2 launch files and executables in 
 ### Launch Commands
 
 - `launch new <package> <launch_file> [args...]` — run a ROS 2 launch file in a tmux session
-- `launch new --params "key:=value"` — set inline parameters (comma-separated, supports key:=value and key:value)
-- `launch new --config-path PATH` — path to config directory
 - `launch new --timeout SECONDS` — timeout for launch to start (default: 30)
 - `launch list` — list running launch sessions in tmux
 - `launch kill <session>` — kill a running launch session
-- `launch restart <session>` — restart any launch session (preserves original parameters)
+- `launch restart <session>` — restart any launch session
 - `launch foxglove [port]` — launch foxglove_bridge (port defaults to 8765)
 
 ### Run Commands
@@ -22,7 +20,7 @@ Added launch and run commands for running ROS 2 launch files and executables in 
 - `run new <package> <executable> [args...]` — run a ROS 2 executable in a tmux session
 - `run new --presets <preset>` — apply preset parameters before running
 - `run new --params "key:=value"` — set inline parameters (comma-separated, supports key:=value and key:value)
-- `run new --config-path PATH` — path to config directory
+- `run new --config-path PATH` — path to config directory (auto-discovers yaml files and passes as --params-file)
 - `run list` — list running run sessions in tmux
 - `run kill <session>` — kill a running run session
 - `run restart <session>` — restart a run session (preserves original parameters)
