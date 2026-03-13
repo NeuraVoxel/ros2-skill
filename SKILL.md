@@ -48,6 +48,7 @@ This rule exists because:
 - ❌ Never use `/cmd_vel` without first discovering the velocity topic with `topics find`
 - ❌ Never use `Twist` payload without first confirming the type is not `TwistStamped` via `topics type`
 - ❌ Never use `/odom` without first discovering the odometry topic with `topics find`
+- ❌ Never use `--yaw`, `--yaw-delta`, or `--field` for rotation — the only correct flag is `--rotate N --degrees` (or `--rotate N` for radians)
 - ❌ Never assume any topic, service, action, or node name from ROS 2 convention
 - ❌ Never assume a message type from a topic name
 
@@ -1204,6 +1205,8 @@ Never ask the user for topic names or message types — discover them from the l
 | "What are the velocity limits?" | Use `params list` on controller nodes |
 | "Do I need odometry?" | Always check with `topics find nav_msgs/Odometry` first |
 | "Is there a service called /X?" | Use `services list` to verify it exists |
+| "How do I monitor yaw / heading?" | Use `--rotate N --degrees` (or radians). There is no `--yaw` or `--yaw-delta` flag. `--rotate` handles all yaw tracking internally. |
+| "Should I use --field for rotation?" | No. Never use `--field` for rotation. Use `--rotate`. |
 | "What controller parameters exist?" | Use `params list <controller_node>` |
 
 ### Technical Troubleshooting
