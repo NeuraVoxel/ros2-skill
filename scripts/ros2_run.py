@@ -80,7 +80,7 @@ def cmd_run(args):
     package = args.package
     executable = args.executable
     run_args = args.args or []
-    presets = args.presets
+    presets = getattr(args, 'presets', None)
     params_str = args.params
     config_path = args.config_path
     force_refresh = getattr(args, 'refresh', False)

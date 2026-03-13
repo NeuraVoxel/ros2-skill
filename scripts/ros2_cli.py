@@ -1168,6 +1168,7 @@ def build_parser():
     p.add_argument("package", help="Package name containing the executable")
     p.add_argument("executable", help="Executable name")
     p.add_argument("args", nargs="*", help="Additional arguments")
+    p.add_argument("--presets", help="Preset parameters to load before running (comma-separated)")
     p.add_argument("--params", help="Parameters to set (comma-separated key:=value or key:value pairs)")
     p.add_argument("--config-path", help="Path to config directory (auto-discovered if not provided)")
     p.add_argument("--refresh", action="store_true", help="Force refresh of package cache before checking")
