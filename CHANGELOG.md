@@ -8,7 +8,6 @@ All notable changes to ros2-skill will be documented in this file.
 
 - Updated velocity limit discovery rules in SKILL.md to scan **every running node** (not just nodes whose names suggest "controller") before any movement command
 - The agent scans `params list` on every node, filters for parameters whose names contain `max`, `limit`, `vel`, `speed`, or `accel`, and retrieves each candidate with `params get`
-- The agent is instructed to hold the discovered limits in session context and reuse them for subsequent movement commands, rather than re-scanning every time
 - The binding ceiling is the minimum across all discovered linear limits (and separately angular limits); fall back to conservative defaults (0.1 m/s, 0.3 rad/s) if nothing is found
 - Updated in three places: Rule 0 mandatory pre-flight, Step 5 (Get Safety Limits), and Step 2.5 of the canonical Movement Workflow
 - No code changes; this is a SKILL.md instruction change only

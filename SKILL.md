@@ -49,13 +49,8 @@ This rule exists because:
 2. Run `params list <NODE>` on **every single node** in the list (run in parallel batches if there are many)
 3. For each node, look for any parameter whose name contains `max`, `limit`, `vel`, `speed`, or `accel` (case-insensitive). These are candidates for velocity limits.
 4. Run `params get <NODE>:<param>` for every candidate found across all nodes
-5. Collect all results into a session-level cache keyed by `<node>:<param>`. For example:
-   - `/diff_drive_controller:max_vel_x = 0.5`
-   - `/nav2_controller:max_linear_velocity = 0.4`
-   - `/base_driver:speed_limit = 0.3`
-6. The binding limit is the **minimum value across all discovered linear limits** and the **minimum across all angular limits**. Use that as your ceiling.
-7. Cache these limits for the entire session. Do not re-query on subsequent movement commands unless the user restarts nodes or explicitly asks for a refresh.
-8. Cap your commanded velocity at the session cache ceiling. If the cache is empty (no limits found on any node), use conservative defaults (0.1 m/s linear, 0.3 rad/s angular) and note this to the user.
+5. Identify the binding ceiling: the **minimum across all discovered linear limit values** and the **minimum across all discovered angular/theta limit values**
+6. Cap your commanded velocity at that ceiling. If no limits are found on any node, use conservative defaults (0.1 m/s linear, 0.3 rad/s angular) and note this to the user.
 
 **Never hardcode or assume:**
 - ❌ Never use `/cmd_vel` without first discovering the velocity topic with `topics find`
@@ -466,21 +461,11 @@ python3 {baseDir}/scripts/ros2_cli.py params list <NODE_2>
 python3 {baseDir}/scripts/ros2_cli.py params get <NODE>:<candidate_param>
 # Repeat for every candidate across every node.
 
-# Step 5: Cache results for the session
-# Build a flat map: { "<node>:<param>": <value> }
-# E.g.:
-#   /diff_drive_controller:max_vel_x = 0.5
-#   /nav2_controller:max_linear_velocity = 0.4
-#   /base_driver:speed_limit = 0.3
-
-# Step 6: Compute binding ceiling
+# Step 5: Compute binding ceiling
 # linear_ceiling  = min of all discovered linear limit values
 # angular_ceiling = min of all discovered angular/theta limit values
 # velocity = min(requested_velocity, ceiling)
 # Never exceed the ceiling. Use 50% of the ceiling if unsure of the appropriate fraction.
-
-# Step 7: Reuse the cache for all subsequent movement commands in this session.
-# Do NOT re-query unless the user restarts nodes or explicitly requests a refresh.
 ```
 
 **If no limits are found on any node:** use conservative defaults (0.1 m/s linear, 0.3 rad/s angular) and tell the user.
@@ -1120,11 +1105,11 @@ python3 {baseDir}/scripts/ros2_cli.py params list <NODE>
 python3 {baseDir}/scripts/ros2_cli.py params get <NODE>:<candidate_param>
 # → repeat for every candidate across every node
 ```
-Collect all results into a **session-level cache**: `{ "<node>:<param>": <value> }`. Compute:
+Compute the binding ceiling:
 - `linear_ceiling`  = minimum of all discovered linear-axis limit values
 - `angular_ceiling` = minimum of all discovered angular/theta limit values
 
-Cap all commanded velocities at these ceilings. Cache for the full session — do not re-scan on subsequent movement commands unless the user restarts nodes or requests a refresh. If no limits are found on any node, use conservative defaults (0.1 m/s linear, 0.3 rad/s angular) and note this.
+Cap all commanded velocities at these ceilings. If no limits are found on any node, use conservative defaults (0.1 m/s linear, 0.3 rad/s angular) and note this.
 
 **Verify the velocity topic has active subscribers** (something must be listening — i.e., a controller):
 ```bash
