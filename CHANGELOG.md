@@ -25,6 +25,16 @@ Added launch and run commands for running ROS 2 launch files and executables in 
 - `run kill <session>` — kill a running run session
 - `run restart <session>` — restart a run session (preserves original parameters)
 
+### Launch Argument Validation
+
+- Invalid/unknown launch arguments now show warning and continue (rather than failing)
+- Auto-match: fuzzy matching for partial argument names (e.g., "mock" → "use_mock")
+- Launch argument caching: available args fetched lazily and cached for performance
+
+### Executable Auto-Detect
+
+- Run command now fuzzy-matches executable names (e.g., "teleop" → "teleop_node")
+
 ### TF2 Transform Commands
 
 - `tf list` — list all coordinate frames

@@ -28,6 +28,58 @@ def _find_executables(package):
     """Find executables in a package."""
     from ros2_utils import get_package_prefix
     prefix = get_package_prefix(package)
+
+
+def _fuzzy_match(query, candidates, threshold=0.5):
+    """Fuzzy match query against candidates.
+    
+    Returns list of (candidate, score) tuples sorted by score.
+    """
+    if not query or not candidates:
+        return []
+    
+    query_lower = query.lower().replace('_', '').replace('-', '')
+    
+    matches = []
+    for candidate in candidates:
+        candidate_lower = candidate.lower().replace('_', '').replace('-', '')
+        
+        # Exact substring match (highest score)
+        if query_lower == candidate_lower:
+            matches.append((candidate, 1.0))
+        # Substring contains
+        elif query_lower in candidate_lower or candidate_lower in query_lower:
+            matches.append((candidate, 0.8))
+        # Starts with
+        elif candidate_lower.startswith(query_lower):
+            matches.append((candidate, 0.7))
+        # Contains words
+        elif any(word in candidate_lower for word in query_lower.split()):
+            matches.append((candidate, 0.5))
+    
+    # Sort by score descending
+    matches.sort(key=lambda x: x[1], reverse=True)
+    return matches
+
+
+def _auto_match_executable(user_executable, available_executables):
+    """Auto-match user-provided executable against available executables.
+    
+    Returns (matched_executable, warning).
+    """
+    if not user_executable or not available_executables:
+        return user_executable, None
+    
+    # Check if exact match
+    if user_executable in available_executables:
+        return user_executable, None
+    
+    # Try fuzzy match
+    matches = _fuzzy_match(user_executable, available_executables)
+    if matches and matches[0][1] >= 0.7:
+        return matches[0][0], f"Auto-matched '{user_executable}' to '{matches[0][0]}'"
+    
+    return user_executable, None
     if not prefix:
         return []
     
@@ -103,12 +155,19 @@ def cmd_run(args):
         })
     
     # Validate executable exists
+    warning = None
     if executable not in executables:
-        return output({
-            "error": f"Executable '{executable}' not found in package '{package}'",
-            "available_executables": executables,
-            "suggestion": f"Use one of: {', '.join(executables)}"
-        })
+        # Try auto-match
+        matched_exe, warning = _auto_match_executable(executable, executables)
+        if matched_exe != executable:
+            executable = matched_exe
+            # Continue with matched executable
+        else:
+            return output({
+                "error": f"Executable '{executable}' not found in package '{package}'",
+                "available_executables": executables,
+                "suggestion": f"Use one of: {', '.join(executables)}"
+            })
     
     # Apply presets if specified
     applied_presets = []

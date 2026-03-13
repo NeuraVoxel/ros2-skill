@@ -29,6 +29,137 @@ from ros2_utils import (
 _package_cache = {}
 _package_cache_initialized = False
 
+# Cache for launch arguments: {(package, launch_file): [args]}
+_launch_args_cache = {}
+
+
+def _get_launch_arguments(package, launch_file):
+    """Get available launch arguments from a launch file.
+    
+    Uses cache to avoid repeated calls.
+    """
+    cache_key = (package, launch_file)
+    
+    if cache_key in _launch_args_cache:
+        return _launch_args_cache[cache_key]
+    
+    # Get the launch file path
+    prefix = _get_package_prefix(package)
+    if not prefix:
+        return []
+    
+    possible_paths = [
+        os.path.join(prefix, "share", package, "launch", launch_file),
+        os.path.join(prefix, "lib", package, "launch", launch_file),
+        launch_file,
+    ]
+    
+    launch_path = None
+    for p in possible_paths:
+        if os.path.exists(p):
+            launch_path = p
+            break
+    
+    if not launch_path:
+        return []
+    
+    # Call --show-arguments to get available args
+    cmd = f"ros2 launch {package} {os.path.basename(launch_path)} --show-arguments"
+    stdout, stderr, rc = run_cmd(cmd, timeout=30)
+    
+    args = []
+    if rc == 0 and stdout:
+        # Parse output - typically shows args in format "arg_name (default value)"
+        for line in stdout.split('\n'):
+            line = line.strip()
+            if line and not line.startswith(' '):
+                # Extract arg name (before space or parenthesis)
+                arg = line.split(' ')[0].split('(')[0].strip()
+                if arg and arg not in args:
+                    args.append(arg)
+    
+    _launch_args_cache[cache_key] = args
+    return args
+
+
+def _fuzzy_match(query, candidates, threshold=0.5):
+    """Fuzzy match query against candidates.
+    
+    Returns list of (candidate, score) tuples sorted by score.
+    """
+    if not query or not candidates:
+        return []
+    
+    query_lower = query.lower().replace('_', '').replace('-', '')
+    
+    matches = []
+    for candidate in candidates:
+        candidate_lower = candidate.lower().replace('_', '').replace('-', '')
+        
+        # Exact substring match (highest score)
+        if query_lower == candidate_lower:
+            matches.append((candidate, 1.0))
+        # Substring contains
+        elif query_lower in candidate_lower or candidate_lower in query_lower:
+            matches.append((candidate, 0.8))
+        # Starts with
+        elif candidate_lower.startswith(query_lower):
+            matches.append((candidate, 0.7))
+        # Contains words
+        elif any(word in candidate_lower for word in query_lower.split()):
+            matches.append((candidate, 0.5))
+    
+    # Sort by score descending
+    matches.sort(key=lambda x: x[1], reverse=True)
+    return matches
+
+
+def _auto_match_launch_args(user_args, available_args):
+    """Auto-match user-provided args against available launch args.
+    
+    Returns (matched_args, warnings).
+    """
+    warnings = []
+    matched = []
+    invalid = []
+    
+    for arg in user_args:
+        # Extract arg name from "name:=value" or just "name"
+        if ':=' in arg:
+            arg_name = arg.split(':=')[0]
+        elif '=' in arg:
+            arg_name = arg.split('=')[0]
+        else:
+            arg_name = arg
+        
+        # Check if exact match
+        if arg_name in available_args:
+            matched.append(arg)
+            continue
+        
+        # Try fuzzy match
+        matches = _fuzzy_match(arg_name, available_args)
+        if matches and matches[0][1] >= 0.7:
+            # Found good match - replace with actual arg name
+            matched_arg = matches[0][0]
+            if ':=' in arg:
+                value = arg.split(':=')[1]
+                matched.append(f"{matched_arg}:={value}")
+            elif '=' in arg:
+                value = arg.split('=')[1]
+                matched.append(f"{matched_arg}={value}")
+            else:
+                matched.append(matched_arg)
+            warnings.append(f"Auto-matched '{arg}' to '{matched_arg}'")
+        else:
+            # No match - mark as invalid
+            invalid.append(arg)
+    
+    if invalid:
+        warnings.append(f"Unknown launch argument(s): {invalid}. Ignoring.")
+    
+    return matched, warnings
+
 
 def _list_packages(force_refresh=False):
     """List all ROS 2 packages (cached)."""
@@ -198,6 +329,13 @@ def cmd_launch_run(args):
             "suggestion": "If the launch file is in a local workspace, set ROS2_LOCAL_WS environment variable."
         })
     
+    # Validate and auto-match launch arguments (only if args provided)
+    warnings = []
+    if launch_args:
+        available_args = _get_launch_arguments(package, os.path.basename(launch_path))
+        launch_args, arg_warnings = _auto_match_launch_args(launch_args, available_args)
+        warnings.extend(arg_warnings)
+    
     # Build launch command
     cmd_parts = ["ros2 launch", package, os.path.basename(launch_path)]
     cmd_parts.extend(launch_args)
@@ -264,10 +402,14 @@ def cmd_launch_run(args):
         "package": package,
         "launch_file": os.path.basename(launch_path),
         "status": status.strip() if status else "unknown",
+        "launch_args": launch_args,
     }
     
     if ws_path:
         result["workspace_sourced"] = ws_path
+    
+    if warnings:
+        result["warnings"] = warnings
     
     if warning:
         result["warning"] = warning
