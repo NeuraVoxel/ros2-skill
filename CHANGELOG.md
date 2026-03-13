@@ -11,11 +11,11 @@ Added launch and run commands for running ROS 2 launch files and executables in 
 - `launch new <package> <launch_file> [args...]` — run a ROS 2 launch file in a tmux session
 - `launch new --params "key:=value"` — set inline parameters (comma-separated, supports key:=value and key:value)
 - `launch new --config-path PATH` — path to config directory
-- `launch new --refresh` — force refresh package cache before checking
+- `launch new --timeout SECONDS` — timeout for launch to start (default: 30)
 - `launch list` — list running launch sessions in tmux
 - `launch kill <session>` — kill a running launch session
 - `launch restart <session>` — restart any launch session (preserves original parameters)
-- `launch foxglove` — launch foxglove_bridge with configurable port
+- `launch foxglove [port]` — launch foxglove_bridge (port defaults to 8765)
 
 ### Run Commands
 
@@ -23,10 +23,13 @@ Added launch and run commands for running ROS 2 launch files and executables in 
 - `run new --presets <preset>` — apply preset parameters before running
 - `run new --params "key:=value"` — set inline parameters (comma-separated, supports key:=value and key:value)
 - `run new --config-path PATH` — path to config directory
-- `run new --refresh` — force refresh package cache before checking
 - `run list` — list running run sessions in tmux
 - `run kill <session>` — kill a running run session
 - `run restart <session>` — restart a run session (preserves original parameters)
+
+### Auto-Refresh
+
+Package cache automatically refreshes when a package is not found. No manual `--refresh` flag needed.
 
 ### Workspace Sourcing
 

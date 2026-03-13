@@ -2691,7 +2691,6 @@ Run a ROS 2 launch file in a tmux session. System ROS is assumed to be already s
 | `--params "k:=v"` | No | — | Inline parameters (comma-separated key:=value or key:value) |
 | `--config-path PATH` | No | auto | Path to config directory |
 | `--timeout SECONDS` | No | 30 | Timeout for launch to start |
-| `--refresh` | No | false | Force refresh package cache before checking |
 
 **Run a launch file:**
 ```bash
@@ -2701,11 +2700,6 @@ python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.
 **Run with parameters:**
 ```bash
 python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py --params "speed:=1.0,max_velocity:=2.0"
-```
-
-**Run with package cache refresh:**
-```bash
-python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py --refresh
 ```
 
 **Output:**
@@ -2780,14 +2774,13 @@ python3 {baseDir}/scripts/ros2_cli.py launch kill launch_navigation2_navigation2
 
 ---
 
-## launch foxglove
+## launch foxglove `[port]`
 
 Launch foxglove_bridge in a tmux session. System ROS is assumed to be already sourced. The local workspace is sourced automatically if found.
 
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `--port PORT` | No | 8765 | Foxglove bridge port |
-| `--refresh` | No | false | Force refresh package cache before checking |
+| Argument | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `port` | No | 8765 | Foxglove bridge port |
 
 **Run foxglove_bridge:**
 ```bash
@@ -2796,12 +2789,7 @@ python3 {baseDir}/scripts/ros2_cli.py launch foxglove
 
 **Run with custom port:**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py launch foxglove --port 9000
-```
-
-**Run with package cache refresh:**
-```bash
-python3 {baseDir}/scripts/ros2_cli.py launch foxglove --refresh
+python3 {baseDir}/scripts/ros2_cli.py launch foxglove 9000
 ```
 
 **Output:**
@@ -2913,7 +2901,6 @@ Run a ROS 2 executable in a tmux session. System ROS is assumed to be already so
 | `--presets NAME` | No | — | Comma-separated preset names to apply before running |
 | `--params "k:=v"` | No | — | Inline parameters (comma-separated key:=value or key:value) |
 | `--config-path PATH` | No | auto | Path to config directory |
-| `--refresh` | No | false | Force refresh package cache before checking |
 
 **Run an executable:**
 ```bash

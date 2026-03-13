@@ -1152,8 +1152,7 @@ def build_parser():
 
     # launch foxglove
     p = lsub.add_parser("foxglove", help="Launch foxglove_bridge")
-    p.add_argument("--port", type=int, default=8765, help="Foxglove bridge port (default: 8765)")
-    p.add_argument("--refresh", action="store_true", help="Force refresh of package cache before checking")
+    p.add_argument("port", nargs="?", type=int, default=8765, help="Foxglove bridge port (default: 8765)")
 
     # ------------------------------------------------------------------
     # run

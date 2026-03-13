@@ -507,6 +507,8 @@ python3 {baseDir}/scripts/ros2_cli.py launch my_robot my_robot.launch.py --confi
 
 ### Launch foxglove_bridge
 
+**Always use `launch foxglove` command instead of `launch new` with foxglove_bridge package.** The `launch foxglove` command is specifically designed for foxglove_bridge and handles port configuration automatically.
+
 ```bash
 # Default port (8765)
 python3 {baseDir}/scripts/ros2_cli.py launch foxglove
@@ -541,7 +543,7 @@ If a session with the same name already exists, the command will fail with an er
 
 ### Package Cache
 
-The package cache auto-refreshes when a package is not found. Use `--refresh` to force a manual refresh before checking.
+The package cache auto-refreshes when a package is not found.
 
 ### Run an Executable
 
@@ -562,9 +564,6 @@ python3 {baseDir}/scripts/ros2_cli.py run new lekiwi_control teleop --presets in
 
 # Run with config path
 python3 {baseDir}/scripts/ros2_cli.py run new lekiwi_control teleop --config-path /path/to/config
-
-# Refresh package cache
-python3 {baseDir}/scripts/ros2_cli.py run new lekiwi_control teleop --refresh
 ```
 
 ### List Running Executables
