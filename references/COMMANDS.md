@@ -296,7 +296,7 @@ Error (array length mismatch):
 
 ---
 
-## topics publish-until `<topic>` `<json_message>` [options]
+## topics publish-until `<topic>` `<msg>` [options]
 
 Publish a message at a fixed rate while simultaneously monitoring a second topic. Stops as soon as a condition on the monitored field is satisfied, or after the safety timeout. Supports single-field conditions and N-dimensional Euclidean distance.
 
