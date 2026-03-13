@@ -2,6 +2,14 @@
 
 All notable changes to ros2-skill will be documented in this file.
 
+## [1.0.5] - 2026-03-13
+
+### Skill
+
+- Parameter introspection is now a mandatory pre-flight step before any movement command — not advisory. The agent must discover controller nodes, list their parameters, identify velocity/angular limits (`max_vel_x`, `max_vel_theta`, `max_linear_velocity`, `max_angular_velocity`, `speed_limit`, etc.), and cap all commanded velocities at the discovered limits before publishing. If no limits are found, conservative defaults (0.1 m/s linear, 0.3 rad/s angular) are used and noted to the user.
+- Rule 0 pre-flight table updated to include the mandatory parameter introspection block for movement.
+- Movement Workflow Step 2.5 expanded: parameter discovery for velocity/angular limits is now the first sub-step, executed before liveness checks.
+
 ## [1.0.4] - 2026-03-13
 
 Added launch and run commands for running ROS 2 launch files and executables in tmux sessions.

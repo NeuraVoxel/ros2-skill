@@ -44,6 +44,13 @@ This rule exists because:
 | Read a sensor | `topics find <msg_type>` to discover the topic; never subscribe to a hardcoded name |
 | Any operation involving a node | `nodes list` first; never assume a node name |
 
+**Parameter introspection is mandatory before any movement command.** Before publishing velocity:
+1. Run `nodes list` to find controller nodes (names containing `controller`, `driver`, `base`, etc.)
+2. Run `params list <CTRL_NODE>` on each candidate to find safety-relevant parameters
+3. Look for: `max_vel_x`, `max_vel_y`, `max_vel_theta`, `max_linear_velocity`, `max_angular_velocity`, `speed_limit`, `linear.x.max_velocity`, `angular.z.max_velocity`, or any parameter with `max`, `limit`, or `vel` in the name
+4. Run `params get <CTRL_NODE>:<param>` for each discovered limit
+5. Cap your commanded velocity at the discovered limit — never exceed it. If no limit is found, use a conservative default (e.g. 0.1 m/s linear, 0.3 rad/s angular) and note this to the user
+
 **Never hardcode or assume:**
 - ❌ Never use `/cmd_vel` without first discovering the velocity topic with `topics find`
 - ❌ Never use `Twist` payload without first confirming the type is not `TwistStamped` via `topics type`
@@ -990,9 +997,21 @@ python3 {baseDir}/scripts/ros2_cli.py topics find nav_msgs/msg/Odometry
 
 Take the result — this is `ODOM_TOPIC`.
 
-### Step 2.5 — Verify topics are live and capture start position
+### Step 2.5 — Verify topics are live, read safety limits, and capture start position
 
-Before executing, verify both topics are active and record the starting position.
+Before executing, verify both topics are active, discover velocity limits from controller parameters, and record the starting position.
+
+**Discover velocity limits from controller parameters:**
+```bash
+python3 {baseDir}/scripts/ros2_cli.py nodes list
+# → find controller nodes (names containing: controller, driver, base, mobile, etc.) → CTRL_NODE
+python3 {baseDir}/scripts/ros2_cli.py params list <CTRL_NODE>
+# → find limit parameters: max_vel_x, max_vel_theta, max_linear_velocity, max_angular_velocity,
+#   speed_limit, linear.x.max_velocity, angular.z.max_velocity, or any param with max/limit/vel
+python3 {baseDir}/scripts/ros2_cli.py params get <CTRL_NODE>:<discovered_limit_param>
+# → repeat for each relevant limit found
+```
+Cap all commanded velocities at the discovered limits. If no limits are found, use conservative defaults (0.1 m/s linear, 0.3 rad/s angular) and note this.
 
 **Verify the velocity topic has active subscribers** (something must be listening — i.e., a controller):
 ```bash
