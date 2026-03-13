@@ -475,7 +475,7 @@ class ConditionMonitor(Node):
                 try:
                     # Try to find quaternion in common odometry locations
                     quat = None
-                    for path in ['pose.pose.orientation', 'pose.pose.orientation', 'orientation']:
+                    for path in ['pose.pose.orientation', 'orientation']:
                         try:
                             quat = resolve_field(msg_dict, path)
                             if quat and isinstance(quat, dict):
@@ -488,7 +488,18 @@ class ConditionMonitor(Node):
                         self.stop_event.set()
                         return
 
-                    current_yaw = quaternion_to_yaw(quat)
+                    # Ensure quaternion values are floats
+                    try:
+                        qx = float(quat.get('x', 0))
+                        qy = float(quat.get('y', 0))
+                        qz = float(quat.get('z', 0))
+                        qw = float(quat.get('w', 1))
+                    except (TypeError, ValueError) as e:
+                        self.field_error = f"Quaternion values must be numeric: {e}"
+                        self.stop_event.set()
+                        return
+
+                    current_yaw = quaternion_to_yaw((qx, qy, qz, qw))
 
                     if self.start_yaw is None:
                         self.start_yaw = current_yaw
