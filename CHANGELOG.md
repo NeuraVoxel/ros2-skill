@@ -73,9 +73,32 @@ Added launch and run commands for running ROS 2 launch files and executables in 
 - Supports: positive angles (CCW), negative angles (CW), angles > 360°, multi-turn, any sign combination
 - Rule: `--rotate` sign and `angular.z` sign must always match; direction table added to SKILL.md Case B, Rule 0 checklist, FAQ, and COMMANDS.md
 
----
+### Docs / Skill — Audit fixes
 
-## [1.0.3] - 2026-03-09
+- Fixed: all 11 tf alias parsers (`e2q`, `quat2euler`, `q2e`, `euler2quat`, `e2qdeg`, `q2edeg`, `tp`, `point`, `tv`, `vector`, `get`) were bare `add_parser()` with no arguments — now have full `add_argument()` definitions and would no longer reject positional args at runtime
+- Fixed: `actions find` and `topics find` argparse missing `--timeout` argument — now accepted and documented
+- Fixed: `--type twist` / `--type odom` in COMMANDS.md examples → `--msg-type twist` / `--msg-type odom` (flag did not exist)
+- Fixed: `doctor check` in decision table → `doctor` (subcommand does not exist)
+- Fixed: `launch`/`run` JSON output examples contained spurious `new` in the `command` field — removed
+- Fixed: `launch` / `run` section headings omitted required `new` subcommand — added
+- Fixed: `topics find` and `actions find` missing `--timeout` from docs — added
+- Fixed: `tf echo` missing `--once` from docs — added
+- Fixed: `quat2euler` / `euler2quat` aliases not in tf section headings — added
+- Fixed: hardcoded `/odom` in COMMANDS.md discovery workflow step 3 → `<ODOM_TOPIC>`
+- Fixed: launch argument validation section wording clarified — script does fuzzy-matching automatically; agent should not fuzzy-match itself
+- Fixed: 6 `nargs="?"` positional args missing `help=` strings — added for `hz`, `find`, `bw`, `delay`, `actions type`, `actions cancel`
+- Fixed: services `find` example had `std srvs/Empty` (space) → `std_srvs/Empty`
+
+### Skill — Gap resolutions (G1, G2, G7, G10, G11, G16)
+
+- G7 (coord frame for distance): Case A switched from `--field pose.pose.position.x` to `--euclidean --field pose.pose.position` — Euclidean distance is frame-independent; works correctly after any prior rotation; `--delta` sign note added (Euclidean is always positive; direction set by velocity sign)
+- G2 (estop on timeout): error recovery row for `publish-until` timeout now mandates immediate `estop` as the first action, then odom check to confirm motion has stopped before any retry
+- G1 (obstacle avoidance): Case A now documents `--monitor <SCAN_TOPIC> --field ranges.0 --below 0.5` as the obstacle-avoidance pattern; also documents the one-monitor limitation and when to choose scan vs odom
+- G10 (action feedback): Actions section now mandates `actions echo` immediately after every `actions send`; no-feedback handling linked to G16 action preemption table
+- G11 (param readback): Params section now mandates `params get` after every `params set` to confirm nodes accepted the change (some silently reject out-of-range or read-only changes)
+- G16 (cancel vs estop): new "Action Preemption" decision table added to Error Recovery — defines when to use `actions cancel`, when to use `estop` first, and the invariant: if in doubt, `estop` first then cancel
+
+
 
 Added parameter preset commands, diagnostics monitoring, battery monitoring, and global timeout/retry configuration.
 

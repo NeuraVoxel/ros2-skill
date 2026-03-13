@@ -358,7 +358,7 @@ Agent does (for movement):
 | "Check robot diagnostics/health" | Subscribe to diagnostics | Find /diagnostics topic → subscribe |
 | "Check TF/transforms" | Check TF topics | Find /tf, /tf_static topics → subscribe |
 | "Move/drive/turn (mobile robot)" | Open-ended movement, no target | Find Twist/TwistStamped → **publish-sequence** with stop |
-| "Move forward/back N meters" | Closed-loop distance → Movement Workflow Case A | Find odom → **publish-until** `--field pose.pose.position.x --delta N` |
+| "Move forward/back N meters" | Closed-loop distance → Movement Workflow Case A | Find odom → **publish-until** `--euclidean --field pose.pose.position --delta N` (frame-independent Euclidean distance) |
 | "Rotate N degrees / turn left/right / turn N radians" | Closed-loop rotation → Movement Workflow Case B | Find odom → **publish-until** `--rotate ±N --degrees` (CCW = positive, CW = negative). Sign of `--rotate` MUST match sign of `angular.z`. Never use `--field` or `--yaw` for rotation |
 | "Move arm/joint (manipulator)" | Publish JointTrajectory | Find JointTrajectory topic → publish |
 | "Control gripper" | Publish GripperCommand or JointTrajectory | Find gripper topic → publish |
@@ -528,7 +528,7 @@ python3 {baseDir}/scripts/ros2_cli.py topics publish /cmd_vel '{"linear":{"x":1.
 # VEL_TOPIC and ODOM_TOPIC come from your introspection steps
 python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
   '<payload_matching_confirmed_type>' \
-  --monitor <ODOM_TOPIC> --field pose.pose.position.x --delta 1.0 --timeout 30
+  --monitor <ODOM_TOPIC> --euclidean --field pose.pose.position --delta 1.0 --timeout 30
 
 # CORRECT (fallback only — no odometry, no distance specified): publish-sequence with stop at end
 python3 {baseDir}/scripts/ros2_cli.py topics publish-sequence <VEL_TOPIC> \
@@ -595,10 +595,24 @@ python3 {baseDir}/scripts/ros2_cli.py topics publish-sequence <VEL_TOPIC> \
 
 | Error | Recovery |
 |-------|----------|
-| `publish-until` times out without reaching target | 1. Check odometry was publishing: `topics details <ODOM_TOPIC>`<br>2. If publisher count dropped to 0 mid-motion: odometry died — send estop immediately, notify user<br>3. Increase `--timeout` if odometry is healthy but robot is slow |
+| `publish-until` times out without reaching target | 1. **Immediately send `estop`** — do not wait, do not retry, do not ask the user first<br>2. Subscribe to `<ODOM_TOPIC>` and check `twist.twist.linear` / `twist.twist.angular`: if any value > 0.01, the robot is still moving — keep estop sent and wait for it to stop before continuing<br>3. Then diagnose: `topics details <ODOM_TOPIC>` — if publisher count dropped to 0 mid-motion, odometry died; notify user<br>4. If odometry is healthy but robot is slow: increase `--timeout` and retry only after the robot has fully stopped |
 | Odometry not updating during motion | 1. Immediately send zero-velocity: `estop`<br>2. Check `topics details <ODOM_TOPIC>` for publisher count and `topics hz <ODOM_TOPIC>` for rate<br>3. Do NOT continue publishing if odometry is stale — it is a runaway risk |
 | Velocity topic has no subscribers | 1. Check `control list-controllers` — the controller may be inactive<br>2. Activate the controller: `control set-controller-state <name> active`<br>3. Re-verify with `topics details <VEL_TOPIC>` before retrying |
 | `publish-until` hangs / no feedback | 1. Verify monitor topic: `topics details <ODOM_TOPIC>`<br>2. Verify the field path is correct: subscribe once and inspect field names<br>3. Check `--timeout` is set |
+
+### Action Preemption — `actions cancel` vs `estop`
+
+Use this decision table whenever an in-flight action goal needs to be stopped:
+
+| Situation | Action | Reason |
+|-----------|--------|--------|
+| Goal is running but user wants to abort gracefully | `actions cancel <action>` | Sends a cancel request to the action server; the server winds down cleanly |
+| Goal is running and the robot is moving unsafely / not stopping | `estop` first, then `actions cancel <action>` | `estop` publishes zero velocity immediately; cancel cleans up the goal state |
+| Goal was rejected or timed out (robot not moving) | `actions cancel <action>` | No motion risk; cancel clears the goal state |
+| Action server crashed / no longer responding | `estop` | No action server to receive cancel; stop the actuators directly |
+| Goal completed but robot is still drifting / coasting | `estop` | Motion is no longer governed by the goal; velocity command is needed |
+
+**Rule:** If in doubt, send `estop` first — it is always safe. Then send `actions cancel` to clean up goal state. Never skip `estop` when the robot is or may be moving.
 
 
 
@@ -927,7 +941,12 @@ python3 {baseDir}/scripts/ros2_cli.py actions details /turtle1/rotate_absolute
 # Step 4: Send goal with properly-structured payload
 python3 {baseDir}/scripts/ros2_cli.py actions send /turtle1/rotate_absolute \
   '{"theta":1.57}'
+
+# Step 5: Monitor feedback — always echo after sending a goal
+python3 {baseDir}/scripts/ros2_cli.py actions echo /turtle1/rotate_absolute --timeout 30
 ```
+
+**After every `actions send`, immediately run `actions echo` on the same action server** to monitor feedback. A stuck or rejected goal gives no signal without feedback monitoring. If `actions echo` returns no messages within `--timeout`, the goal may have been rejected, preempted, or the action server may have crashed — check with `actions list` and `actions details`, then decide between `actions cancel` (graceful abort) and `estop` (runaway/unsafe motion). See the Action Preemption table in the Error Recovery section.
 
 ### 6. Change Parameters
 
@@ -947,7 +966,15 @@ python3 {baseDir}/scripts/ros2_cli.py params get /turtlesim:background_r
 python3 {baseDir}/scripts/ros2_cli.py params set /turtlesim:background_r 255
 python3 {baseDir}/scripts/ros2_cli.py params set /turtlesim:background_g 0
 python3 {baseDir}/scripts/ros2_cli.py params set /turtlesim:background_b 0
+
+# Step 5: Read back after set — always verify the change took effect
+# Some nodes silently reject changes (read-only params, out-of-range values)
+python3 {baseDir}/scripts/ros2_cli.py params get /turtlesim:background_r
+python3 {baseDir}/scripts/ros2_cli.py params get /turtlesim:background_g
+python3 {baseDir}/scripts/ros2_cli.py params get /turtlesim:background_b
 ```
+
+**After every `params set`, always run `params get` on the same parameter** to confirm the change was accepted. Nodes may silently ignore a set if the parameter is read-only or the value is out of range — the `set` call returns success even in those cases.
 
 ### 7. Goal-Oriented Commands (publish-until)
 
@@ -1100,33 +1127,52 @@ Record `pose.pose.position.x`, `pose.pose.position.y` from the result — this i
 
 ### Step 3 — Execute based on intent and odometry availability
 
-#### Case A — Distance specified, odometry available → `publish-until --field` (closed loop)
+#### Case A — Distance specified, odometry available → `publish-until --euclidean` (closed loop)
+
+**Always use `--euclidean --field pose.pose.position`** (expands to x, y, z) to measure Euclidean distance from start. This is frame-independent: it works correctly regardless of the robot's heading and stays accurate after any prior rotation. Do not use `--field pose.pose.position.x` alone — that only tracks displacement along the odom x-axis and gives wrong results once the robot is not aligned with it.
 
 ```bash
 # Step 1 result: VEL_TOPIC = <discovered, e.g. /base/cmd_vel or /robot/cmd_vel>
 # Step 1 type check: geometry_msgs/msg/Twist → use Twist payload
 # Step 2 result: ODOM_TOPIC = <discovered, e.g. /odom or /wheel_odom>
 
-# Move forward 1 meter
+# Move forward 1 meter (Twist) — Euclidean distance, frame-independent
 python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
   '{"linear":{"x":0.2,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0}}' \
-  --monitor <ODOM_TOPIC> --field pose.pose.position.x --delta 1.0 --timeout 30
+  --monitor <ODOM_TOPIC> --euclidean --field pose.pose.position --delta 1.0 --timeout 30
 
 # Move forward 1 meter — TwistStamped variant (if type check returned TwistStamped)
 python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
   '{"header":{"stamp":{"sec":0},"frame_id":""},"twist":{"linear":{"x":0.2,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0}}}' \
-  --monitor <ODOM_TOPIC> --field pose.pose.position.x --delta 1.0 --timeout 30
+  --monitor <ODOM_TOPIC> --euclidean --field pose.pose.position --delta 1.0 --timeout 30
 
-# Move backward 0.5 meters (negative delta)
+# Move backward 0.5 meters (Euclidean — delta is always positive; direction is set by the velocity sign)
 python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
   '{"linear":{"x":-0.2,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0}}' \
-  --monitor <ODOM_TOPIC> --field pose.pose.position.x --delta -0.5 --timeout 30
+  --monitor <ODOM_TOPIC> --euclidean --field pose.pose.position --delta 0.5 --timeout 30
 
-# Move 2 meters in any direction (curved path — Euclidean distance)
+# Move 2 meters along any curved path
 python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
   '{"linear":{"x":0.2,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0.3}}' \
-  --monitor <ODOM_TOPIC> --field pose.pose.position --euclidean --delta 2.0 --timeout 60
+  --monitor <ODOM_TOPIC> --euclidean --field pose.pose.position --delta 2.0 --timeout 60
 ```
+
+**Note on `--delta` sign with `--euclidean`:** Euclidean distance is always non-negative, so `--delta` should always be a positive value — the direction of travel is determined entirely by the velocity command (sign of `linear.x`), not by the sign of `--delta`.
+
+**Obstacle avoidance during forward movement:** `publish-until` supports one `--monitor` topic. If you need to stop before an obstacle (not at a fixed distance), use the LaserScan topic as the monitor instead of odometry:
+
+```bash
+# Discover the LaserScan topic
+python3 {baseDir}/scripts/ros2_cli.py topics find sensor_msgs/msg/LaserScan
+# → SCAN_TOPIC = <result>
+
+# Move forward, stop when front range < 0.5 m
+python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
+  '{"linear":{"x":0.2,"y":0,"z":0},"angular":{"x":0,"y":0,"z":0}}' \
+  --monitor <SCAN_TOPIC> --field ranges.0 --below 0.5 --timeout 30
+```
+
+**Limitation:** A single `publish-until` call can only monitor one topic — you cannot simultaneously stop at a fixed distance AND stop on obstacle detection. If both are needed, set a conservative `--timeout` as an outer bound and use the most safety-critical condition as the `--monitor`. For precise distance, use odometry; for collision avoidance, use LaserScan.
 
 #### Case B — Rotation specified, odometry available → `publish-until --rotate` (closed loop)
 
