@@ -1129,17 +1129,19 @@ def build_parser():
     # launch
     # ------------------------------------------------------------------
     launch = sub.add_parser("launch", help="Launch ROS 2 nodes and launch files")
-    launch.set_defaults(subcommand=None)
-    launch.add_argument("package", nargs="?", help="Package name containing the launch file")
-    launch.add_argument("launch_file", nargs="?", help="Launch file name (without path)")
-    launch.add_argument("args", nargs="*", help="Additional launch arguments")
-    launch.add_argument("--presets", help="Preset parameters to load before launch (comma-separated)")
-    launch.add_argument("--params", help="Parameters to set (comma-separated key:value pairs)")
-    launch.add_argument("--config-path", help="Path to config directory (auto-discovered if not provided)")
-    launch.add_argument("--timeout", type=float, default=30.0, help="Timeout for launch to start (default: 30)")
-    launch.add_argument("--refresh", action="store_true", help="Force refresh of package cache before checking")
 
     lsub = launch.add_subparsers(dest="subcommand")
+
+    # launch new <package> <launch_file> [args...]
+    p = lsub.add_parser("new", help="Run a ROS 2 launch file")
+    p.add_argument("package", help="Package name containing the launch file")
+    p.add_argument("launch_file", help="Launch file name (without path)")
+    p.add_argument("args", nargs="*", help="Additional launch arguments")
+    p.add_argument("--presets", help="Preset parameters to load before launch (comma-separated)")
+    p.add_argument("--params", help="Parameters to set (comma-separated key:value pairs)")
+    p.add_argument("--config-path", help="Path to config directory (auto-discovered if not provided)")
+    p.add_argument("--timeout", type=float, default=30.0, help="Timeout for launch to start (default: 30)")
+    p.add_argument("--refresh", action="store_true", help="Force refresh of package cache before checking")
 
     lsub.add_parser("list", help="List running launch sessions")
     lsub.add_parser("ls", help="Alias for list")
@@ -1159,14 +1161,18 @@ def build_parser():
     # run
     # ------------------------------------------------------------------
     run = sub.add_parser("run", help="Run ROS 2 executables in tmux sessions")
-    run.set_defaults(subcommand=None)
-    run.add_argument("package", nargs="?", help="Package name containing the executable")
-    run.add_argument("executable", nargs="?", help="Executable name")
-    run.add_argument("args", nargs="*", help="Additional arguments")
-    run.add_argument("--presets", help="Preset parameters to load before running (comma-separated)")
-    run.add_argument("--params", help="Parameters to set (comma-separated key:value pairs)")
-    run.add_argument("--config-path", help="Path to config directory (auto-discovered if not provided)")
-    run.add_argument("--refresh", action="store_true", help="Force refresh of package cache before checking")
+
+    rsub = run.add_subparsers(dest="subcommand")
+
+    # run new <package> <executable> [args...]
+    p = rsub.add_parser("new", help="Run a ROS 2 executable")
+    p.add_argument("package", help="Package name containing the executable")
+    p.add_argument("executable", help="Executable name")
+    p.add_argument("args", nargs="*", help="Additional arguments")
+    p.add_argument("--presets", help="Preset parameters to load before running (comma-separated)")
+    p.add_argument("--params", help="Parameters to set (comma-separated key:value pairs)")
+    p.add_argument("--config-path", help="Path to config directory (auto-discovered if not provided)")
+    p.add_argument("--refresh", action="store_true", help="Force refresh of package cache before checking")
 
     rsub = run.add_subparsers(dest="subcommand")
 
@@ -1327,14 +1333,14 @@ DISPATCH = {
     ("multicast", "send"):    cmd_multicast_send,
     ("multicast", "receive"): cmd_multicast_receive,
     # launch
-    ("launch", None):   cmd_launch_run,
+    ("launch", "new"):   cmd_launch_run,
     ("launch", "list"):   cmd_launch_list,
     ("launch", "ls"):    cmd_launch_list,
     ("launch", "kill"):  cmd_launch_kill,
     ("launch", "restart"): cmd_launch_restart,
     ("launch", "foxglove"): cmd_launch_foxglove,
     # run
-    ("run", None):    cmd_run,
+    ("run", "new"):    cmd_run,
     ("run", "list"):   cmd_run_list,
     ("run", "ls"):    cmd_run_list,
     ("run", "kill"):  cmd_run_kill,

@@ -415,7 +415,7 @@ python3 {baseDir}/scripts/ros2_cli.py topics find geometry_msgs/msg/TwistStamped
 | IMU | `topics find sensor_msgs/msg/Imu` | Subscribe to result |
 | Joint states | `topics find sensor_msgs/msg/JointState` | Subscribe to result |
 | Move robot | `topics find geometry_msgs/msg/Twist` | Publish to result |
-| Run launch file | `launch <package> <file>` | Runs in tmux session |
+| Run launch file | `launch new <package> <file>` | Runs in tmux session |
 | List running launches | `launch list` | Shows tmux sessions |
 | Kill launch | `launch kill <session>` | Kills tmux session |
 
@@ -496,13 +496,13 @@ export ROS2_LOCAL_WS=~/my_robot_ws
 
 ```bash
 # Basic launch
-python3 {baseDir}/scripts/ros2_cli.py launch navigation2 navigation2.launch.py
+python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py
 
 # With parameters
-python3 {baseDir}/scripts/ros2_cli.py launch navigation2 navigation2.launch.py --params "speed:1.0"
+python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py --params "speed:1.0"
 
 # With presets (apply params before launch)
-python3 {baseDir}/scripts/ros2_cli.py launch navigation2 navigation2.launch.py --presets indoor
+python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py --presets indoor
 
 # With config path
 python3 {baseDir}/scripts/ros2_cli.py launch my_robot my_robot.launch.py --config-path /path/to/config
@@ -555,19 +555,19 @@ Run a ROS 2 executable in a tmux session. Similar to launch commands but for sin
 
 ```bash
 # Run an executable
-python3 {baseDir}/scripts/ros2_cli.py run lekiwi_control teleop
+python3 {baseDir}/scripts/ros2_cli.py run new lekiwi_control teleop
 
 # Run with arguments
-python3 {baseDir}/scripts/ros2_cli.py run lekiwi_control teleop --arg1 value
+python3 {baseDir}/scripts/ros2_cli.py run new lekiwi_control teleop --arg1 value
 
 # Run with parameters
-python3 {baseDir}/scripts/ros2_cli.py run lekiwi_control teleop --params "speed:1.0"
+python3 {baseDir}/scripts/ros2_cli.py run new lekiwi_control teleop --params "speed:1.0"
 
 # Run with presets
-python3 {baseDir}/scripts/ros2_cli.py run lekiwi_control teleop --presets indoor
+python3 {baseDir}/scripts/ros2_cli.py run new lekiwi_control teleop --presets indoor
 
 # Refresh package cache
-python3 {baseDir}/scripts/ros2_cli.py run lekiwi_control teleop --refresh
+python3 {baseDir}/scripts/ros2_cli.py run new lekiwi_control teleop --refresh
 ```
 
 ### List Running Executables

@@ -8,18 +8,18 @@ Added run commands for running ROS 2 executables in tmux sessions.
 
 ### Run Commands
 
-- `run <package> <executable> [args...]` — run a ROS 2 executable in a tmux session
-- `run --presets <preset>` — apply preset parameters before running
-- `run --params "key:value"` — set inline parameters before running
-- `run --config-path PATH` — path to config directory
-- `run --refresh` — force refresh package cache before checking
+- `run new <package> <executable> [args...]` — run a ROS 2 executable in a tmux session
+- `run new --presets <preset>` — apply preset parameters before running
+- `run new --params "key:value"` — set inline parameters before running
+- `run new --config-path PATH` — path to config directory
+- `run new --refresh` — force refresh package cache before checking
 - `run list` — list running run sessions in tmux
 - `run kill <session>` — kill a running run session
 - `run restart <session>` — restart a run session (preserves original parameters)
 
 ### Bug Fixes
 
-- Fixed argument parsing for `launch` and `run` commands - subcommands (list, kill, restart) are now optional, allowing direct usage like `ros2 launch pkg file.launch.py`
+- Changed command structure to use explicit subcommands: `launch new` and `run new`
 
 ### Workspace Sourcing
 
@@ -39,10 +39,10 @@ Added launch commands for running launch files in tmux sessions.
 
 ### Launch Commands
 
-- `launch <package> <launch_file> [args...]` — run a ROS 2 launch file in a tmux session
-- `launch --presets <preset> <package> <file>` — apply preset parameters before launching
-- `launch --params "key:value" <package> <file>` — set inline parameters before launching
-- `launch --refresh` — force refresh package cache before checking
+- `launch new <package> <launch_file> [args...]` — run a ROS 2 launch file in a tmux session
+- `launch new --presets <preset>` — apply preset parameters before launching
+- `launch new --params "key:value"` — set inline parameters before launching
+- `launch new --refresh` — force refresh package cache before checking
 - `launch list` — list running launch sessions in tmux
 - `launch kill <session>` — kill a running launch session
 - `launch restart <session>` — restart any launch session (preserves original parameters)

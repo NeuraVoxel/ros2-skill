@@ -2696,22 +2696,22 @@ Run a ROS 2 launch file in a tmux session. System ROS is assumed to be already s
 
 **Run a launch file:**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py launch navigation2 navigation2.launch.py
+python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py
 ```
 
 **Run with parameters:**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py launch navigation2 navigation2.launch.py --params "speed:1.0,max_velocity:2.0"
+python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py --params "speed:1.0,max_velocity:2.0"
 ```
 
 **Run with presets:**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py launch navigation2 navigation2.launch.py --presets indoor
+python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py --presets indoor
 ```
 
 **Run with package cache refresh:**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py launch navigation2 navigation2.launch.py --refresh
+python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py --refresh
 ```
 
 **Output:**
@@ -2719,7 +2719,7 @@ python3 {baseDir}/scripts/ros2_cli.py launch navigation2 navigation2.launch.py -
 {
   "success": true,
   "session": "launch_navigation2_navigation2",
-  "command": "ros2 launch navigation2 navigation2.launch.py",
+  "command": "ros2 launch new navigation2 navigation2.launch.py",
   "package": "navigation2",
   "launch_file": "navigation2.launch.py",
   "status": "running",
@@ -2755,7 +2755,7 @@ python3 {baseDir}/scripts/ros2_cli.py launch list
   "launch_sessions_detail": [
     {
       "session": "launch_navigation2_navigation2",
-      "command": "ros2 launch navigation2 navigation2.launch.py",
+      "command": "ros2 launch new navigation2 navigation2.launch.py",
       "status": "running"
     }
   ]
@@ -2877,7 +2877,7 @@ python3 {baseDir}/scripts/ros2_cli.py launch restart launch_foxglove_bridge_port
 {
   "success": true,
   "session": "launch_navigation2_navigation2",
-  "command": "ros2 launch navigation2 navigation2.launch.py",
+  "command": "ros2 launch new navigation2 navigation2.launch.py",
   "status": "running",
   "message": "Session restarted"
 }
@@ -2924,22 +2924,22 @@ Run a ROS 2 executable in a tmux session. System ROS is assumed to be already so
 
 **Run an executable:**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py run lekiwi_control teleop
+python3 {baseDir}/scripts/ros2_cli.py run new lekiwi_control teleop
 ```
 
 **Run with arguments:**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py run lekiwi_control teleop --speed 1.0
+python3 {baseDir}/scripts/ros2_cli.py run new lekiwi_control teleop --speed 1.0
 ```
 
 **Run with parameters:**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py run lekiwi_control teleop --params "speed:1.0,max_velocity:2.0"
+python3 {baseDir}/scripts/ros2_cli.py run new lekiwi_control teleop --params "speed:1.0,max_velocity:2.0"
 ```
 
 **Run with presets:**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py run lekiwi_control teleop --presets indoor
+python3 {baseDir}/scripts/ros2_cli.py run new lekiwi_control teleop --presets indoor
 ```
 
 **Output:**
@@ -2947,7 +2947,7 @@ python3 {baseDir}/scripts/ros2_cli.py run lekiwi_control teleop --presets indoor
 {
   "success": true,
   "session": "run_lekiwi_control_teleop",
-  "command": "ros2 run lekiwi_control teleop",
+  "command": "ros2 run new lekiwi_control teleop",
   "package": "lekiwi_control",
   "executable": "teleop",
   "args": [],
@@ -2982,7 +2982,7 @@ python3 {baseDir}/scripts/ros2_cli.py run list
   "run_sessions_detail": [
     {
       "session": "run_lekiwi_control_teleop",
-      "command": "ros2 run lekiwi_control teleop",
+      "command": "ros2 run new lekiwi_control teleop",
       "status": "running"
     }
   ]
@@ -3032,7 +3032,7 @@ python3 {baseDir}/scripts/ros2_cli.py run restart run_lekiwi_control_teleop
 {
   "success": true,
   "session": "run_lekiwi_control_teleop",
-  "command": "ros2 run lekiwi_control teleop",
+  "command": "ros2 run new lekiwi_control teleop",
   "status": "running",
   "message": "Session restarted"
 }
