@@ -1,0 +1,309 @@
+#!/usr/bin/env python3
+"""ROS 2 run commands for running executables in tmux sessions."""
+
+import os
+
+from ros2_utils import (
+    output,
+    source_local_ws,
+    run_cmd,
+    check_tmux,
+    generate_session_name,
+    session_exists,
+    kill_session,
+    check_session_alive,
+    quote_path,
+    save_session,
+    get_session_metadata,
+    delete_session_metadata,
+    list_packages,
+    package_exists,
+)
+
+
+def _find_executables(package):
+    """Find executables in a package."""
+    from ros2_utils import get_package_prefix
+    prefix = get_package_prefix(package)
+    if not prefix:
+        return []
+    
+    lib_dir = os.path.join(prefix, "lib", package)
+    
+    executables = []
+    if os.path.isdir(lib_dir):
+        for f in os.listdir(lib_dir):
+            full_path = os.path.join(lib_dir, f)
+            if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
+                executables.append(f)
+    
+    return executables
+
+
+def cmd_run(args):
+    """Run a ROS 2 executable in a tmux session."""
+    if not check_tmux():
+        return output({
+            "error": "tmux is not installed. Install with: sudo apt install tmux"
+        })
+    
+    package = args.package
+    executable = args.executable
+    run_args = args.args or []
+    force_refresh = getattr(args, 'refresh', False)
+    
+    # Check package exists
+    if not package_exists(package, force_refresh=force_refresh):
+        return output({
+            "error": f"Package '{package}' not found",
+            "available_packages": list(list_packages().keys())[:20]
+        })
+    
+    # Check executable exists
+    executables = _find_executables(package)
+    if not executables:
+        return output({
+            "error": f"No executables found in package '{package}'",
+            "suggestion": "Check package contents with: ros2 pkg executables " + package,
+            "package": package
+        })
+    
+    # Validate executable exists
+    if executable not in executables:
+        return output({
+            "error": f"Executable '{executable}' not found in package '{package}'",
+            "available_executables": executables,
+            "suggestion": f"Use one of: {', '.join(executables)}"
+        })
+    
+    # Build run command
+    cmd_parts = ["ros2 run", package, executable]
+    cmd_parts.extend(run_args)
+    run_cmd_str = " ".join(cmd_parts)
+    
+    # Generate session name
+    session_name = generate_session_name("run", package, executable)
+    
+    # Get local workspace to source (auto-detected)
+    ws_path, ws_status = source_local_ws()
+    
+    warning = None
+    if ws_status == "not_built":
+        warning = f"Warning: Local workspace found but not built. Build with 'colcon build' first."
+    elif ws_status == "not_found":
+        ws_path = None
+    
+    # Handle existing session with same name - require explicit kill or restart
+    if session_exists(session_name):
+        return output({
+            "error": f"Session '{session_name}' already exists",
+            "suggestion": f"Use 'run restart {session_name}' to restart, or 'run kill {session_name}' to kill first",
+            "session": session_name
+        })
+    
+    # Build tmux command
+    quoted_ws = quote_path(ws_path) if ws_path else None
+    if quoted_ws:
+        tmux_cmd = f"tmux new-session -d -s {session_name} 'bash -c \"source {quoted_ws} && {run_cmd_str}\" 2>&1'"
+    else:
+        tmux_cmd = f"tmux new-session -d -s {session_name} '{run_cmd_str} 2>&1'"
+    
+    stdout, stderr, rc = run_cmd(tmux_cmd, timeout=30)
+    
+    if rc != 0:
+        return output({
+            "error": f"Failed to start executable: {stderr}",
+            "command": run_cmd_str,
+            "session": session_name
+        })
+    
+    # Check if session is actually alive
+    is_alive = check_session_alive(session_name)
+    status = "running" if is_alive else "crashed"
+    
+    # Get PID if available
+    pid_cmd = f"tmux list-panes -t {session_name} -F '#{{pane_pid}}' 2>/dev/null | head -1"
+    pid_output, _, _ = run_cmd(pid_cmd)
+    
+    result = {
+        "success": True,
+        "session": session_name,
+        "command": run_cmd_str,
+        "package": package,
+        "executable": executable,
+        "args": run_args,
+        "status": status,
+    }
+    
+    if ws_path:
+        result["workspace_sourced"] = ws_path
+    
+    if warning:
+        result["warning"] = warning
+    
+    if pid_output:
+        result["pid"] = pid_output.strip()
+    
+    # Save session metadata for restart
+    save_session(session_name, {
+        "type": "run",
+        "package": package,
+        "executable": executable,
+        "args": run_args,
+        "command": run_cmd_str
+    })
+    
+    output(result)
+    return result
+
+
+def cmd_run_list(args):
+    """List running run sessions in tmux."""
+    if not check_tmux():
+        return output({
+            "error": "tmux is not installed",
+            "running_sessions": []
+        })
+    
+    stdout, stderr, rc = run_cmd("tmux list-sessions -F '#{session_name}' 2>/dev/null")
+    
+    if rc != 0 or not stdout.strip():
+        return output({
+            "running_sessions": [],
+            "run_sessions": []
+        })
+    
+    all_sessions = stdout.strip().split('\n')
+    
+    # Filter to run sessions
+    run_sessions = [s for s in all_sessions if s.startswith('run_')]
+    
+    # Get details for each run session
+    sessions_info = []
+    for session in run_sessions:
+        info = {"session": session}
+        
+        # Get pane info
+        pane_cmd = f"tmux list-panes -t {session} -F '#{{pane_title}}' 2>/dev/null"
+        pane_out, _, _ = run_cmd(pane_cmd)
+        if pane_out:
+            info["command"] = pane_out.strip()
+        
+        # Check if still running
+        check_cmd = f"tmux has-session -t {session} 2>/dev/null && echo 'running' || echo 'stopped'"
+        status, _, _ = run_cmd(check_cmd)
+        info["status"] = status.strip() if status else "unknown"
+        
+        sessions_info.append(info)
+    
+    return output({
+        "all_sessions": all_sessions,
+        "run_sessions": run_sessions,
+        "run_sessions_detail": sessions_info
+    })
+
+
+def cmd_run_kill(args):
+    """Kill a running run session."""
+    if not check_tmux():
+        return output({
+            "error": "tmux is not installed"
+        })
+    
+    session = args.session
+    
+    # Validate session name starts with run_
+    if not session.startswith('run_'):
+        return output({
+            "error": f"Session '{session}' is not a run session",
+            "hint": "Run sessions start with 'run_'"
+        })
+    
+    # Check if session exists
+    if not session_exists(session):
+        return output({
+            "error": f"Session '{session}' does not exist",
+            "available_sessions": []
+        })
+    
+    # Kill the session
+    if not kill_session(session):
+        return output({
+            "error": f"Failed to kill session: {session}",
+            "session": session
+        })
+    
+    # Clean up session metadata
+    delete_session_metadata(session)
+    
+    return output({
+        "success": True,
+        "session": session,
+        "message": f"Session '{session}' killed"
+    })
+
+
+def cmd_run_restart(args):
+    """Restart a run session (kill and re-launch with same session name)."""
+    if not check_tmux():
+        return output({
+            "error": "tmux is not installed"
+        })
+    
+    session = args.session
+    
+    # Validate session name starts with run_
+    if not session.startswith('run_'):
+        return output({
+            "error": f"Session '{session}' is not a run session",
+            "hint": "Run sessions start with 'run_'"
+        })
+    
+    # Check if session exists
+    if not session_exists(session):
+        return output({
+            "error": f"Session '{session}' does not exist",
+            "suggestion": "Use 'run' to start a new session",
+            "available_sessions": []
+        })
+    
+    # Load session metadata
+    metadata = get_session_metadata(session)
+    
+    if not metadata:
+        return output({
+            "error": f"No metadata found for session '{session}'",
+            "suggestion": "Use 'run' to start a fresh session",
+            "session": session
+        })
+    
+    if metadata.get("type") != "run":
+        return output({
+            "error": f"Session '{session}' is not a run session",
+            "suggestion": "Use 'launch restart' for launch sessions"
+        })
+    
+    package = metadata.get("package")
+    executable = metadata.get("executable")
+    run_args = metadata.get("args", [])
+    
+    if not package or not executable:
+        return output({
+            "error": f"Incomplete metadata for session '{session}'",
+            "suggestion": "Use 'run' to start a fresh session"
+        })
+    
+    # Kill existing session
+    kill_session(session)
+    
+    # Re-run the executable
+    args_restart = type('Args', (), {
+        'package': package,
+        'executable': executable,
+        'args': run_args,
+        'refresh': False
+    })()
+    
+    result = cmd_run(args_restart)
+    result["message"] = "Session restarted"
+    return result

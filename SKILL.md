@@ -549,6 +549,43 @@ If a session with the same name already exists, the command will fail with an er
 
 The package cache auto-refreshes when a package is not found. Use `--refresh` to force a manual refresh before checking.
 
+### Run an Executable
+
+Run a ROS 2 executable in a tmux session. Similar to launch commands but for single executables.
+
+```bash
+# Run an executable
+python3 {baseDir}/scripts/ros2_cli.py run run lekiwi_control teleop
+
+# Run with arguments
+python3 {baseDir}/scripts/ros2_cli.py run run lekiwi_control teleop --arg1 value
+
+# Refresh package cache
+python3 {baseDir}/scripts/ros2_cli.py run run lekiwi_control teleop --refresh
+```
+
+### List Running Executables
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py run list
+```
+
+### Kill an Executable Session
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py run kill run_lekiwi_control_teleop
+```
+
+### Restart an Executable Session
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py run restart run_lekiwi_control_teleop
+```
+
+### Run Session Collision Handling
+
+Same as launch - if a session with the same name already exists, the command will fail with an error. Use `run restart` or `run kill` first.
+
 ## Command Quick Reference
 
 ### 1. Explore a Robot System

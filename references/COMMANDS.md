@@ -2903,6 +2903,137 @@ Error (no metadata):
 
 ---
 
+## run run `<package>` `<executable>` [args...]
+
+Run a ROS 2 executable in a tmux session. System ROS is assumed to be already sourced. The local workspace is sourced automatically if found.
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `package` | Yes | Package name containing the executable |
+| `executable` | Yes | Executable name (found in `lib/<package>/`) |
+| `args` | No | Additional arguments |
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `--refresh` | No | false | Force refresh package cache before checking |
+
+**Run an executable:**
+```bash
+python3 {baseDir}/scripts/ros2_cli.py run run lekiwi_control teleop
+```
+
+**Run with arguments:**
+```bash
+python3 {baseDir}/scripts/ros2_cli.py run run lekiwi_control teleop --speed 1.0
+```
+
+**Output:**
+```json
+{
+  "success": true,
+  "session": "run_lekiwi_control_teleop",
+  "command": "ros2 run lekiwi_control teleop",
+  "package": "lekiwi_control",
+  "executable": "teleop",
+  "args": [],
+  "status": "running"
+}
+```
+
+Error (session already exists):
+```json
+{
+  "error": "Session 'run_lekiwi_control_teleop' already exists",
+  "suggestion": "Use 'run restart run_lekiwi_control_teleop' to restart, or 'run kill run_lekiwi_control_teleop' to kill first",
+  "session": "run_lekiwi_control_teleop"
+}
+```
+
+---
+
+## run list / run ls
+
+List running run sessions in tmux.
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py run list
+```
+
+**Output:**
+```json
+{
+  "all_sessions": ["run_lekiwi_control_teleop", "launch_navigation2_navigation2"],
+  "run_sessions": ["run_lekiwi_control_teleop"],
+  "run_sessions_detail": [
+    {
+      "session": "run_lekiwi_control_teleop",
+      "command": "ros2 run lekiwi_control teleop",
+      "status": "running"
+    }
+  ]
+}
+```
+
+---
+
+## run kill `<session>`
+
+Kill a running run session.
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `session` | Yes | Session name to kill (must start with `run_`) |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py run kill run_lekiwi_control_teleop
+```
+
+**Output:**
+```json
+{
+  "success": true,
+  "session": "run_lekiwi_control_teleop",
+  "message": "Session 'run_lekiwi_control_teleop' killed"
+}
+```
+
+---
+
+## run restart `<session>`
+
+Restart a run session. Kills the existing session and re-launches with the same parameters.
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `session` | Yes | Session name to restart |
+
+**Restart a run session:**
+```bash
+python3 {baseDir}/scripts/ros2_cli.py run restart run_lekiwi_control_teleop
+```
+
+**Output:**
+```json
+{
+  "success": true,
+  "session": "run_lekiwi_control_teleop",
+  "command": "ros2 run lekiwi_control teleop",
+  "status": "running",
+  "message": "Session restarted"
+}
+```
+
+Error (session not found):
+```json
+{
+  "error": "Session 'run_lekiwi_control_teleop' does not exist",
+  "suggestion": "Use 'run' to start a new session",
+  "available_sessions": []
+}
+```
+
+---
+
 ## interface list
 
 List all interface types (messages, services, actions) installed on this ROS 2 system. Reads from the ament resource index — no running ROS 2 graph required.

@@ -1,46 +1,32 @@
 #!/usr/bin/env python3
 """ROS 2 launch commands for running launch files in tmux sessions."""
 
-import json
 import os
-import subprocess
-import threading
 
-from ros2_utils import output, source_local_ws
+from ros2_utils import (
+    output,
+    source_local_ws,
+    run_cmd,
+    check_tmux,
+    generate_session_name,
+    session_exists,
+    kill_session,
+    check_session_alive,
+    quote_path,
+    get_sessions_file,
+    load_sessions,
+    save_session,
+    get_session_metadata,
+    delete_session_metadata,
+    list_packages,
+    package_exists,
+    get_package_prefix,
+)
 
 
 # Cache for package information
 _package_cache = {}
 _package_cache_initialized = False
-
-
-def _run_cmd(cmd, timeout=10):
-    """Run a shell command and return output."""
-    try:
-        result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True, timeout=timeout
-        )
-        return result.stdout.strip(), result.stderr.strip(), result.returncode
-    except subprocess.TimeoutExpired:
-        return "", "Command timed out", 1
-    except Exception as e:
-        return "", str(e), 1
-
-
-def _refresh_package_cache():
-    """Force refresh of the package cache."""
-    global _package_cache, _package_cache_initialized
-    _package_cache = {}
-    _package_cache_initialized = False
-    _list_packages()
-
-
-def _get_package_prefix(package):
-    """Get the prefix path for a package."""
-    stdout, _, rc = _run_cmd(f"ros2 pkg prefix {package}")
-    if rc == 0 and stdout:
-        return stdout.strip()
-    return None
 
 
 def _list_packages(force_refresh=False):
@@ -54,7 +40,7 @@ def _list_packages(force_refresh=False):
     if _package_cache_initialized:
         return _package_cache
     
-    stdout, _, rc = _run_cmd("ros2 pkg list")
+    stdout, _, rc = run_cmd("ros2 pkg list")
     if rc == 0:
         packages = stdout.strip().split('\n') if stdout.strip() else []
         for pkg in packages:
@@ -70,7 +56,6 @@ def _package_exists(package, force_refresh=False):
     if package in packages:
         return True
     
-    # Auto-refresh if package not found and not already refreshed
     global _package_cache_initialized
     if not force_refresh:
         _package_cache_initialized = False
@@ -78,6 +63,14 @@ def _package_exists(package, force_refresh=False):
         return package in _list_packages()
     
     return False
+
+
+def _get_package_prefix(package):
+    """Get the prefix path for a package."""
+    stdout, _, rc = run_cmd(f"ros2 pkg prefix {package}")
+    if rc == 0 and stdout:
+        return stdout.strip()
+    return None
 
 
 def _get_sessions_file():
@@ -202,64 +195,9 @@ def _apply_params(params_str):
     return params
 
 
-def _check_tmux():
-    """Check if tmux is available."""
-    stdout, _, rc = _run_cmd("which tmux")
-    return rc == 0 and stdout.strip() != ""
-
-
-def _generate_session_name(session_type, package, name):
-    """Generate a tmux session name."""
-    # Remove special characters and limit length
-    safe_name = "".join(c for c in name if c.isalnum() or c in '_-')[:20]
-    return f"{session_type}_{package}_{safe_name}"[:50]
-
-
-def _session_exists(session_name):
-    """Check if a tmux session exists."""
-    check_cmd = f"tmux has-session -t {session_name} 2>/dev/null"
-    _, _, rc = _run_cmd(check_cmd)
-    return rc == 0
-
-
-def _kill_session(session_name):
-    """Kill a tmux session."""
-    kill_cmd = f"tmux kill-session -t {session_name}"
-    stdout, stderr, rc = _run_cmd(kill_cmd)
-    return rc == 0
-
-
-def _check_session_alive(session_name):
-    """Check if session has a running process (not just empty shell)."""
-    # Get the PID of the process in the pane
-    pid_cmd = f"tmux list-panes -t {session_name} -F '#{{pane_pid}}' 2>/dev/null | head -1"
-    pid_out, _, _ = _run_cmd(pid_cmd)
-    
-    if not pid_out:
-        return False
-    
-    # Check if process is still running (not zombie/defunct)
-    proc_cmd = f"ps -p {pid_out.strip()} -o state= 2>/dev/null | tr -d ' '"
-    state_out, _, _ = _run_cmd(proc_cmd)
-    
-    # Running states: R (running), S (sleeping), D (disk sleep)
-    if state_out.strip() in ('R', 'S', 'D'):
-        return True
-    
-    return False
-
-
-def _quote_path(path):
-    """Quote a path to handle spaces and special characters."""
-    if not path:
-        return path
-    # Escape backslashes first, then quotes
-    return '"' + path.replace('\\', '\\\\').replace('"', '\\"') + '"'
-
-
 def cmd_launch_run(args):
     """Run a ROS 2 launch file in a tmux session."""
-    if not _check_tmux():
+    if not check_tmux():
         return output({
             "error": "tmux is not installed. Install with: sudo apt install tmux",
             "suggestion": "Alternatively, launch files can be run with nohup in background"
@@ -318,7 +256,7 @@ def cmd_launch_run(args):
     launch_cmd = " ".join(cmd_parts)
     
     # Generate session name
-    session_name = _generate_session_name("launch", package, launch_file.replace('.launch.py', '').replace('.launch', ''))
+    session_name = generate_session_name("launch", package, launch_file.replace('.launch.py', '').replace('.launch', ''))
     
     # Apply presets if specified
     applied_presets = []
@@ -339,7 +277,7 @@ def cmd_launch_run(args):
         ws_path = None
     
     # Handle existing session with same name - require explicit kill or restart
-    if _session_exists(session_name):
+    if session_exists(session_name):
         return output({
             "error": f"Session '{session_name}' already exists",
             "suggestion": "Use 'launch restart {session_name}' to restart, or 'launch kill {session_name}' to kill first",
@@ -349,14 +287,14 @@ def cmd_launch_run(args):
     # Build tmux command with or without sourcing
     # Use bash -c to support source command (sh doesn't support source)
     # Quote paths to handle spaces
-    quoted_ws = _quote_path(ws_path) if ws_path else None
+    quoted_ws = quote_path(ws_path) if ws_path else None
     if quoted_ws:
         tmux_cmd = f"tmux new-session -d -s {session_name} 'bash -c \"source {quoted_ws} && {launch_cmd}\" 2>&1'"
     else:
         tmux_cmd = f"tmux new-session -d -s {session_name} '{launch_cmd} 2>&1'"
     
     # Run the launch command
-    stdout, stderr, rc = _run_cmd(tmux_cmd, timeout=30)
+    stdout, stderr, rc = run_cmd(tmux_cmd, timeout=30)
     
     if rc != 0:
         return output({
@@ -366,12 +304,12 @@ def cmd_launch_run(args):
         })
     
     # Check if session is actually alive (has running process)
-    is_alive = _check_session_alive(session_name)
+    is_alive = check_session_alive(session_name)
     status = "running" if is_alive else "crashed"
     
     # Get PID if available
     pid_cmd = f"tmux list-panes -t {session_name} -F '{{{{pane_pid}}}}' 2>/dev/null | head -1"
-    pid_output, _, _ = _run_cmd(pid_cmd)
+    pid_output, _, _ = run_cmd(pid_cmd)
     
     result = {
         "success": True,
@@ -410,13 +348,13 @@ def cmd_launch_run(args):
 
 def cmd_launch_list(args):
     """List running launch sessions in tmux."""
-    if not _check_tmux():
+    if not check_tmux():
         return output({
             "error": "tmux is not installed",
             "running_sessions": []
         })
     
-    stdout, stderr, rc = _run_cmd("tmux list-sessions -F '#{session_name}' 2>/dev/null")
+    stdout, stderr, rc = run_cmd("tmux list-sessions -F '#{session_name}' 2>/dev/null")
     
     if rc != 0 or not stdout.strip():
         return output({
@@ -436,13 +374,13 @@ def cmd_launch_list(args):
         
         # Get pane info
         pane_cmd = f"tmux list-panes -t {session} -F '#{{pane_title}}' 2>/dev/null"
-        pane_out, _, _ = _run_cmd(pane_cmd)
+        pane_out, _, _ = run_cmd(pane_cmd)
         if pane_out:
             info["command"] = pane_out.strip()
         
         # Check if still running
         check_cmd = f"tmux has-session -t {session} 2>/dev/null && echo 'running' || echo 'stopped'"
-        status, _, _ = _run_cmd(check_cmd)
+        status, _, _ = run_cmd(check_cmd)
         info["status"] = status.strip() if status else "unknown"
         
         sessions_info.append(info)
@@ -456,7 +394,7 @@ def cmd_launch_list(args):
 
 def cmd_launch_kill(args):
     """Kill a running launch session."""
-    if not _check_tmux():
+    if not check_tmux():
         return output({
             "error": "tmux is not installed"
         })
@@ -472,7 +410,7 @@ def cmd_launch_kill(args):
     
     # Check if session exists
     check_cmd = f"tmux has-session -t {session} 2>/dev/null"
-    _, _, rc = _run_cmd(check_cmd)
+    _, _, rc = run_cmd(check_cmd)
     
     if rc != 0:
         return output({
@@ -482,7 +420,7 @@ def cmd_launch_kill(args):
     
     # Kill the session
     kill_cmd = f"tmux kill-session -t {session}"
-    stdout, stderr, rc = _run_cmd(kill_cmd)
+    stdout, stderr, rc = run_cmd(kill_cmd)
     
     if rc != 0:
         return output({
@@ -502,7 +440,7 @@ def cmd_launch_kill(args):
 
 def cmd_launch_restart(args):
     """Restart a launch session (kill and re-launch with same session name)."""
-    if not _check_tmux():
+    if not check_tmux():
         return output({
             "error": "tmux is not installed"
         })
@@ -517,7 +455,7 @@ def cmd_launch_restart(args):
         })
     
     # Check if session exists
-    if not _session_exists(session):
+    if not session_exists(session):
         return output({
             "error": f"Session '{session}' does not exist",
             "suggestion": "Use 'launch run' to start a new session",
@@ -535,7 +473,7 @@ def cmd_launch_restart(args):
         })
     
     # Kill existing session
-    _kill_session(session)
+    kill_session(session)
     
     # Re-launch based on session type
     if metadata.get("type") == "foxglove":
@@ -584,7 +522,7 @@ def cmd_launch_restart(args):
 
 def cmd_launch_foxglove(args):
     """Launch foxglove_bridge in a tmux session."""
-    if not _check_tmux():
+    if not check_tmux():
         return output({
             "error": "tmux is not installed. Install with: sudo apt install tmux"
         })
@@ -635,7 +573,7 @@ def cmd_launch_foxglove(args):
     launch_cmd = f"ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:={port}"
     
     # Generate session name
-    session_name = _generate_session_name("launch", "foxglove_bridge", f"port{port}")
+    session_name = generate_session_name("launch", "foxglove_bridge", f"port{port}")
     
     # Get local workspace to source (auto-detected)
     ws_path, ws_status = source_local_ws()
@@ -647,7 +585,7 @@ def cmd_launch_foxglove(args):
         ws_path = None
     
     # Handle existing session with same name - require explicit kill or restart
-    if _session_exists(session_name):
+    if session_exists(session_name):
         return output({
             "error": f"Session '{session_name}' already exists",
             "suggestion": f"Use 'launch restart {session_name}' to restart, or 'launch kill {session_name}' to kill first",
@@ -655,13 +593,13 @@ def cmd_launch_foxglove(args):
         })
     
     # Build tmux command
-    quoted_ws = _quote_path(ws_path) if ws_path else None
+    quoted_ws = quote_path(ws_path) if ws_path else None
     if quoted_ws:
         tmux_cmd = f"tmux new-session -d -s {session_name} 'bash -c \"source {quoted_ws} && {launch_cmd}\" 2>&1'"
     else:
         tmux_cmd = f"tmux new-session -d -s {session_name} '{launch_cmd} 2>&1'"
     
-    stdout, stderr, rc = _run_cmd(tmux_cmd, timeout=30)
+    stdout, stderr, rc = run_cmd(tmux_cmd, timeout=30)
     
     if rc != 0:
         return output({
@@ -671,7 +609,7 @@ def cmd_launch_foxglove(args):
         })
     
     # Check if session is actually alive (has running process)
-    is_alive = _check_session_alive(session_name)
+    is_alive = check_session_alive(session_name)
     status = "running" if is_alive else "crashed"
     
     result = {

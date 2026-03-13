@@ -9,6 +9,7 @@ import importlib
 import json
 import os
 import re
+import subprocess
 import sys
 
 try:
@@ -457,3 +458,175 @@ def source_local_ws(user_provided_ws=None):
     
     # No workspace found
     return None, "not_found"
+
+
+# ---------------------------------------------------------------------------
+# Session Management (shared by launch and run commands)
+# ---------------------------------------------------------------------------
+
+# Package cache for launch and run commands
+_package_cache = {}
+_package_cache_initialized = False
+
+
+def run_cmd(cmd, timeout=10):
+    """Run a shell command and return output."""
+    try:
+        result = subprocess.run(
+            cmd, shell=True, capture_output=True, text=True, timeout=timeout
+        )
+        return result.stdout.strip(), result.stderr.strip(), result.returncode
+    except subprocess.TimeoutExpired:
+        return "", "Command timed out", 1
+    except Exception as e:
+        return "", str(e), 1
+
+
+def refresh_package_cache():
+    """Force refresh of the package cache."""
+    global _package_cache, _package_cache_initialized
+    _package_cache = {}
+    _package_cache_initialized = False
+    list_packages()
+
+
+def list_packages(force_refresh=False):
+    """List all ROS 2 packages (cached)."""
+    global _package_cache, _package_cache_initialized
+    
+    if force_refresh:
+        _package_cache = {}
+        _package_cache_initialized = False
+    
+    if _package_cache_initialized:
+        return _package_cache
+    
+    stdout, _, rc = run_cmd("ros2 pkg list")
+    if rc == 0:
+        packages = stdout.strip().split('\n') if stdout.strip() else []
+        for pkg in packages:
+            _package_cache[pkg] = True
+        _package_cache_initialized = True
+    
+    return _package_cache
+
+
+def package_exists(package, force_refresh=False):
+    """Check if a package exists (uses cache, refreshes if not found or force_refresh=True)."""
+    packages = list_packages(force_refresh=force_refresh)
+    if package in packages:
+        return True
+    
+    global _package_cache_initialized
+    if not force_refresh:
+        _package_cache_initialized = False
+        list_packages()
+        return package in list_packages()
+    
+    return False
+
+
+def get_package_prefix(package):
+    """Get the prefix path for a package."""
+    stdout, _, rc = run_cmd(f"ros2 pkg prefix {package}")
+    if rc == 0 and stdout:
+        return stdout.strip()
+    return None
+
+
+def check_tmux():
+    """Check if tmux is available."""
+    stdout, _, rc = run_cmd("which tmux")
+    return rc == 0 and stdout.strip() != ""
+
+
+def generate_session_name(session_type, package, name):
+    """Generate a tmux session name."""
+    safe_name = "".join(c for c in name if c.isalnum() or c in '_-')[:20]
+    return f"{session_type}_{package}_{safe_name}"[:50]
+
+
+def session_exists(session_name):
+    """Check if a tmux session exists."""
+    check_cmd = f"tmux has-session -t {session_name} 2>/dev/null"
+    _, _, rc = run_cmd(check_cmd)
+    return rc == 0
+
+
+def kill_session(session_name):
+    """Kill a tmux session."""
+    kill_cmd = f"tmux kill-session -t {session_name}"
+    stdout, stderr, rc = run_cmd(kill_cmd)
+    return rc == 0
+
+
+def check_session_alive(session_name):
+    """Check if session has a running process (not just empty shell)."""
+    pid_cmd = f"tmux list-panes -t {session_name} -F '#{{pane_pid}}' 2>/dev/null | head -1"
+    pid_out, _, _ = run_cmd(pid_cmd)
+    
+    if not pid_out:
+        return False
+    
+    proc_cmd = f"ps -p {pid_out.strip()} -o state= 2>/dev/null | tr -d ' '"
+    state_out, _, _ = run_cmd(proc_cmd)
+    
+    if state_out.strip() in ('R', 'S', 'D'):
+        return True
+    
+    return False
+
+
+def quote_path(path):
+    """Quote a path to handle spaces and special characters."""
+    if not path:
+        return path
+    return '"' + path.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+
+def get_sessions_file():
+    """Get path to session metadata file."""
+    return os.path.expanduser("~/.ros2_cli_sessions.json")
+
+
+def load_sessions():
+    """Load session metadata from file."""
+    sessions_file = get_sessions_file()
+    if os.path.exists(sessions_file):
+        try:
+            with open(sessions_file, 'r') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return {}
+    return {}
+
+
+def save_session(session_name, metadata):
+    """Save session metadata to file."""
+    sessions_file = get_sessions_file()
+    sessions = load_sessions()
+    sessions[session_name] = metadata
+    try:
+        with open(sessions_file, 'w') as f:
+            json.dump(sessions, f)
+    except IOError:
+        pass
+
+
+def get_session_metadata(session_name):
+    """Get session metadata from file."""
+    sessions = load_sessions()
+    return sessions.get(session_name)
+
+
+def delete_session_metadata(session_name):
+    """Delete session metadata from file."""
+    sessions_file = get_sessions_file()
+    sessions = load_sessions()
+    if session_name in sessions:
+        del sessions[session_name]
+        try:
+            with open(sessions_file, 'w') as f:
+                json.dump(sessions, f)
+        except IOError:
+            pass

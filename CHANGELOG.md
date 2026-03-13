@@ -2,6 +2,26 @@
 
 All notable changes to ros2-skill will be documented in this file.
 
+## [1.0.5] - 2026-03-13
+
+Added run commands for running ROS 2 executables in tmux sessions.
+
+### Run Commands
+
+- `run run <package> <executable> [args...]` — run a ROS 2 executable in a tmux session
+- `run run --refresh` — force refresh package cache before checking
+- `run list` — list running run sessions in tmux
+- `run kill <session>` — kill a running run session
+- `run restart <session>` — restart a run session (preserves original parameters)
+
+### Refactoring
+
+- Extracted common tmux/session helpers to `ros2_utils.py` to avoid duplication
+- Shared functions: `run_cmd`, `check_tmux`, `session_exists`, `kill_session`, `check_session_alive`, `quote_path`, `generate_session_name`, session metadata functions
+- Shared package cache: `list_packages`, `package_exists`, `get_package_prefix`
+
+---
+
 ## [1.0.4] - 2026-03-13
 
 Added launch commands for running launch files in tmux sessions.

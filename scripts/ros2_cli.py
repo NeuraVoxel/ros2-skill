@@ -533,6 +533,12 @@ from ros2_launch import (
     cmd_launch_restart,
     cmd_launch_foxglove,
 )
+from ros2_run import (
+    cmd_run,
+    cmd_run_list,
+    cmd_run_kill,
+    cmd_run_restart,
+)
 from ros2_lifecycle import (
     cmd_lifecycle_nodes,
     cmd_lifecycle_list,
@@ -1153,6 +1159,28 @@ def build_parser():
     p.add_argument("--refresh", action="store_true", help="Force refresh of package cache before checking")
 
     # ------------------------------------------------------------------
+    # run
+    # ------------------------------------------------------------------
+    run = sub.add_parser("run", help="Run ROS 2 executables in tmux sessions")
+    rsub = run.add_subparsers(dest="subcommand")
+
+    # run <package> <executable> [args...]
+    p = rsub.add_parser("run", help="Run a ROS 2 executable")
+    p.add_argument("package", help="Package name containing the executable")
+    p.add_argument("executable", help="Executable name")
+    p.add_argument("args", nargs="*", help="Additional arguments")
+    p.add_argument("--refresh", action="store_true", help="Force refresh of package cache before checking")
+
+    rsub.add_parser("list", help="List running run sessions")
+    rsub.add_parser("ls", help="Alias for list")
+
+    p = rsub.add_parser("kill", help="Kill a running run session")
+    p.add_argument("session", help="Session name to kill")
+
+    p = rsub.add_parser("restart", help="Restart a run session")
+    p.add_argument("session", help="Session name to restart")
+
+    # ------------------------------------------------------------------
     # interface
     # ------------------------------------------------------------------
     iface = sub.add_parser("interface", help="Interface type discovery (ros2 interface)")
@@ -1306,6 +1334,12 @@ DISPATCH = {
     ("launch", "kill"):  cmd_launch_kill,
     ("launch", "restart"): cmd_launch_restart,
     ("launch", "foxglove"): cmd_launch_foxglove,
+    # run
+    ("run", "run"):    cmd_run,
+    ("run", "list"):   cmd_run_list,
+    ("run", "ls"):    cmd_run_list,
+    ("run", "kill"):  cmd_run_kill,
+    ("run", "restart"): cmd_run_restart,
     # interface
     ("interface", "list"):     cmd_interface_list,
     ("interface", "ls"):       cmd_interface_list,
