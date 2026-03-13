@@ -388,13 +388,14 @@ def source_local_ws():
     """
     import os
     
-    # Common workspace patterns to search
+    # Common workspace patterns to search (in priority order)
     ws_patterns = [
-        os.environ.get('ROS2_LOCAL_WS'),
-        '~/ros2_ws',
-        '~/colcon_ws', 
-        '~/workspace',
-        '~/ros2',
+        os.environ.get('ROS2_LOCAL_WS'),  # User override
+        '~/ros2_ws',      # Common default
+        '~/colcon_ws',    # Common default
+        '~/dev_ws',       # Common default
+        '~/workspace',    # Generic
+        '~/ros2',        # Generic
     ]
     
     for ws_pattern in ws_patterns:

@@ -472,11 +472,12 @@ If the skill finds a match but there's any doubt (multiple candidates, ambiguous
 **System ROS is assumed to be already sourced** (via systemd service or manually). The skill automatically sources any local workspace on top of system ROS.
 
 **Search order:**
-1. `ROS2_LOCAL_WS` environment variable
+1. `ROS2_LOCAL_WS` environment variable (user override)
 2. `~/ros2_ws`
 3. `~/colcon_ws`
-4. `~/workspace`
-5. `~/ros2`
+4. `~/dev_ws`
+5. `~/workspace`
+6. `~/ros2`
 
 **Behavior:**
 | Scenario | Behavior |
