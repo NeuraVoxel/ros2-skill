@@ -2671,7 +2671,9 @@ Output (nothing received):
 
 ## launch run `<package>` `<launch_file>` [args...]
 
-Run a ROS 2 launch file in a tmux session.
+Run a ROS 2 launch file in a tmux session. System ROS is assumed to be already sourced. The local workspace is sourced automatically if found.
+
+**Workspace sourcing:** If the launch file is in a local workspace, the skill automatically sources it. Set `ROS2_LOCAL_WS` environment variable if the workspace is not in the default search paths (`~/ros2_ws`, `~/colcon_ws`, `~/workspace`, `~/ros2`).
 
 **Discovery workflow:** Before running, always introspect the robot:
 1. `ros2 pkg list` — find available packages
