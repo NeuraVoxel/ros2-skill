@@ -421,7 +421,7 @@ python3 {baseDir}/scripts/ros2_cli.py topics find geometry_msgs/msg/TwistStamped
 
 ---
 
-## Launch Commands (NEW in v1.0.4)
+## Launch Commands
 
 ### Auto-Discovery for Launch Files
 
