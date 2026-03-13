@@ -81,6 +81,12 @@ Examples:
 - "List available controllers" → `control list-controllers`
 - "What parameters does the camera node have?" → `nodes list` to find the camera node name, then `params list <node>`
 
+### Rule 4 — Never ask for execution approval
+
+**Once you have resolved what to run and validated the arguments, execute immediately. Never ask the user "Would you like me to run this now?" or any equivalent.** The user's original message is the approval. This applies to all commands, including `launch new`, `run new`, `tf static`, and any other command that starts a process.
+
+The only time to stop and ask is when there is genuine ambiguity that cannot be resolved from the system — for example, multiple launch files match and you cannot determine which one the user means.
+
 ---
 
 ## Setup
