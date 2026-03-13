@@ -49,6 +49,10 @@ Added launch, run, and tf commands. Hardened movement safety rules and `--rotate
 - Rule 0.1: mandatory session-start checks — `doctor`, simulated time, lifecycle node states
 - Rule 0.5: never guess commands or flags; verify in COMMANDS.md then `--help` before use
 
+---
+
+## [1.0.3] - 2026-03-09
+
 Added parameter preset commands, diagnostics monitoring, battery monitoring, and global timeout/retry configuration.
 
 ### Global Options
@@ -63,10 +67,16 @@ Added parameter preset commands, diagnostics monitoring, battery monitoring, and
 - `cmd_actions_send`: moved `wait_for_server` inside the retry loop so server unavailability is actually retried
 - `cmd_actions_cancel`: added full retry loop (was missing entirely)
 
-### Topics — Diagnostics
+### Topics — Diagnostics & Battery
 
 - `topics diag-list` — list all topics publishing `DiagnosticArray` messages, discovered by **type** (not by name); works with `/diagnostics`, `<node>/diagnostics`, `<namespace>/diagnostics`, or any other convention
 - `topics diag` — subscribe to all discovered diagnostic topics simultaneously (or a specific `--topic`); returns parsed status with `level_name` (OK/WARN/ERROR/STALE), `name`, `message`, `hardware_id`, and key-value `values`; supports `--duration` + `--max-messages` for multi-message collection and `--timeout` for one-shot mode
+- `topics battery-list` — list all topics publishing `BatteryState` messages, discovered by type
+- `topics battery` — subscribe to battery topics; returns parsed state including percentage, voltage, current, charge, and cell details (handles NaN and numeric-to-label conversion for status/health/tech)
+
+### Skill
+
+- Auto-discovery: movement velocity limits, diagnostics, and battery topics are now auto-discovered by scanning the live graph's message types and parameters.
 
 ### Parameters — Presets
 
