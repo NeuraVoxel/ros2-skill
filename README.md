@@ -62,18 +62,20 @@ No user clarification needed — the agent uses ros2-skill tools to answer all i
 | Category | Commands |
 | -------- | -------- |
 | Connection | `version` |
-| Topics | `list`, `type`, `details`, `message`, `subscribe`, `publish`, `hz`, `bw`, `delay`, `find` |
+| Topics | `list`, `type`, `details`, `message`, `subscribe`, `publish`, `hz`, `bw`, `delay`, `find`, `capture-image`, `diag-list`, `diag`, `battery-list`, `battery` |
 | Services | `list`, `type`, `details`, `call`, `find`, `echo` |
 | Nodes | `list`, `details` |
-| Parameters | `list`, `get`, `set`, `describe`, `dump`, `load`, `delete`, `preset-*` |
+| Parameters | `list`, `get`, `set`, `describe`, `dump`, `load`, `delete`, `preset-save`, `preset-load`, `preset-list`, `preset-delete` |
 | Actions | `list`, `details`, `type`, `send`, `cancel`, `echo`, `find` |
 | Lifecycle | `nodes`, `list`, `get`, `set` |
 | Control | `list-controller-types`, `list-controllers`, `list-hardware-components`, `list-hardware-interfaces`, `load-controller`, `unload-controller`, `configure-controller`, `reload-controller-libraries`, `set-controller-state`, `set-hardware-component-state`, `switch-controllers`, `view-controller-chains` |
-| Doctor | `check` (default), `hello` |
-| Wtf | alias for `doctor` — same commands |
+| TF | `list`, `lookup`, `echo`, `monitor`, `static`, `euler-from-quaternion`, `quaternion-from-euler`, `transform-point`, `transform-vector` |
+| Doctor | `check`, `hello` |
 | Multicast | `send`, `receive` |
 | Interface | `list`, `show`, `proto`, `packages`, `package` |
-| Launch | `run`, `list`, `ls`, `kill` |
+| Launch | `new`, `list`, `kill`, `restart`, `foxglove` |
+| Run | `new`, `list`, `kill`, `restart` |
+| Emergency Stop | `estop` |
 
 All commands output JSON. See [`SKILL.md`](SKILL.md) for quick reference and [`references/COMMANDS.md`](references/COMMANDS.md) for full details with examples.
 
@@ -157,9 +159,9 @@ ros2-skill/
 ├── scripts/
 │   ├── ros2_cli.py            # Entry point — parser, dispatch table, re-exports
 │   ├── ros2_utils.py          # Shared infrastructure (ROS2CLI node, output, msg helpers)
-│   ├── ros2_topic.py          # Topic commands + estop
+│   ├── ros2_topic.py          # Topic commands + estop + battery + diag
 │   ├── ros2_node.py           # Node commands
-│   ├── ros2_param.py          # Parameter commands
+│   ├── ros2_param.py          # Parameter commands + presets
 │   ├── ros2_service.py        # Service commands
 │   ├── ros2_action.py         # Action commands
 │   ├── ros2_lifecycle.py      # Lifecycle (managed node) commands
@@ -167,11 +169,17 @@ ros2-skill/
 │   ├── ros2_doctor.py         # Doctor / Wtf system diagnostics
 │   ├── ros2_multicast.py      # Multicast (UDP) diagnostics
 │   ├── ros2_control.py        # Controller manager commands
+│   ├── ros2_tf.py             # TF2 transform commands and math helpers
+│   ├── ros2_launch.py         # Launch file session management (tmux)
+│   ├── ros2_run.py            # Executable session management (tmux)
 │   └── discord_tools.py       # Discord integration
 ├── references/
 │   └── COMMANDS.md            # Full command reference with output examples
-└── tests/
-    └── test_ros2_cli.py       # Unit tests
+├── tests/
+│   └── test_ros2_cli.py       # Unit tests
+├── EXAMPLES.md                # Practical usage guide for agents
+├── SKILL.md                   # Skill definition for agent platforms
+└── CHANGELOG.md               # Version history
 ```
 
 ## Requirements
