@@ -4,117 +4,50 @@ All notable changes to ros2-skill will be documented in this file.
 
 ## [1.0.4] - 2026-03-13
 
-### Full-graph velocity limit scan (SKILL.md instruction update)
-
-- Updated velocity limit discovery rules in SKILL.md to scan **every running node** (not just nodes whose names suggest "controller") before any movement command
-- The agent scans `params list` on every node, filters for parameters whose names contain `max`, `limit`, `vel`, `speed`, or `accel`, and retrieves each candidate with `params get`
-- The binding ceiling is the minimum across all discovered linear limits (and separately angular limits); fall back to conservative defaults (0.2 m/s, 0.75 rad/s) if nothing is found
-- Updated in three places: Rule 0 mandatory pre-flight, Step 5 (Get Safety Limits), and Step 2.5 of the canonical Movement Workflow
-- No code changes; this is a SKILL.md instruction change only
-
-### `--help` audit: complete `help=` string coverage
-
-- Added `help=` strings to all positional `add_argument()` calls that were missing them across the entire `build_parser()` function in `ros2_cli.py`
-- Affected commands: `topics type`, `topics details`, `topics info`, `topics message`, `topics message-structure`, `topics message-struct`, `topics subscribe`/`echo`/`sub`, `topics publish`/`pub`, `topics publish-sequence`/`pub-seq`, `topics publish-until`, `topics publish-continuous`, `services type`, `services details`, `services info`, `services find`, `services call`, `services echo`, `nodes details`, `nodes info`, `params list`/`ls`, `actions details`, `actions info`, `actions send`/`send-goal`, `actions echo`
-- All positional arguments now show a descriptive example in `--help` output (e.g. `Topic name to publish to (e.g. /cmd_vel)`)
-
-## [1.0.4] - 2026-03-13
-
-Added launch and run commands for running ROS 2 launch files and executables in tmux sessions.
+Added launch, run, and tf commands. Hardened movement safety rules and `--rotate` rotation monitoring.
 
 ### Launch Commands
 
 - `launch new <package> <launch_file> [args...]` — run a ROS 2 launch file in a tmux session
-- `launch new --timeout SECONDS` — timeout for launch to start (default: 30)
-- `launch list` — list running launch sessions in tmux
+- `launch list` — list running launch sessions
 - `launch kill <session>` — kill a running launch session
-- `launch restart <session>` — restart any launch session
-- `launch foxglove [port]` — launch foxglove_bridge (port defaults to 8765)
+- `launch restart <session>` — restart a launch session
+- `launch foxglove [port]` — launch foxglove_bridge (default port: 8765)
 
 ### Run Commands
 
 - `run new <package> <executable> [args...]` — run a ROS 2 executable in a tmux session
 - `run new --presets <preset>` — apply preset parameters before running
-- `run new --params "key:=value"` — set inline parameters (comma-separated, supports key:=value and key:value)
-- `run new --config-path PATH` — path to config directory (auto-discovers yaml files and passes as --params-file)
-- `run list` — list running run sessions in tmux
+- `run new --params "key:=value"` — set inline parameters
+- `run new --config-path PATH` — path to config directory (auto-discovers yaml files)
+- `run list` — list running run sessions
 - `run kill <session>` — kill a running run session
-- `run restart <session>` — restart a run session (preserves original parameters)
+- `run restart <session>` — restart a run session
 
-### TF2 Transform Commands
+### TF2 Commands
 
 - `tf list` — list all coordinate frames
-- `tf lookup <source> <target>` — query transform between frames
-- `tf echo <source> <target> [--once] [--count N]` — echo transforms; `--once` echoes a single transform
+- `tf lookup` / `tf get <source> <target>` — query transform between frames
+- `tf echo <source> <target> [--once] [--count N]` — echo transforms
 - `tf monitor <frame>` — monitor transform updates for a frame
-- `tf static --from <f> --to <t> --xyz x y z --rpy r p y` — publish static transform (named form)
-- `tf static x y z roll pitch yaw from_frame to_frame` — publish static transform (positional form)
-- `tf euler-from-quaternion` / `tf e2q` / `tf quat2euler` — convert quaternion to Euler (radians)
-- `tf quaternion-from-euler` / `tf q2e` / `tf euler2quat` — convert Euler to quaternion (radians)
-- `tf euler-from-quaternion-deg` / `tf e2qdeg` — convert quaternion to Euler (degrees)
-- `tf quaternion-from-euler-deg` / `tf q2edeg` — convert Euler to quaternion (degrees)
+- `tf static` — publish a static transform (named or positional form)
+- `tf euler-from-quaternion` / `tf e2q` / `tf quat2euler` — quaternion → Euler (radians)
+- `tf quaternion-from-euler` / `tf q2e` / `tf euler2quat` — Euler → quaternion (radians)
+- `tf euler-from-quaternion-deg` / `tf e2qdeg` — quaternion → Euler (degrees)
+- `tf quaternion-from-euler-deg` / `tf q2edeg` — Euler → quaternion (degrees)
 - `tf transform-point` / `tf tp` / `tf point` — transform a point between frames
 - `tf transform-vector` / `tf tv` / `tf vector` — transform a vector between frames
 
 ### Skill
 
-- Launch argument validation: fetches real args via `--show-args`; fuzzy-matches close names; drops unknown args without failing the launch
-- Executable auto-detect: fuzzy-matches executable names (e.g. "teleop" → "teleop_node")
-- Workspace sourcing: `launch` and `run` auto-source local ROS 2 workspaces; searches `ROS2_LOCAL_WS`, `~/ros2_ws`, `~/colcon_ws`, `~/dev_ws`, `~/workspace`, `~/ros2` in order
-- Package cache auto-refreshes when a package is not found; no manual `--refresh` needed
-- Session management: fails if session exists; restart preserves original parameters
-- Rule 0: mandatory pre-flight introspection before every publish/call/send — never assume topic names, types, or node names
-- Rule 0.1: mandatory session-start checks — `doctor` health check, simulated time / `/clock` liveness, lifecycle node state verification
-- Rule 0.5: never hallucinate commands or flags; verify in COMMANDS.md first, then run `--help` on the exact subcommand before constructing any call, then ask; mandatory for any rotation command before using `--rotate`
-- COMMANDS.md: added `--help Quick Reference` section at the top listing `--help` invocations for every subcommand; agents should run these before using any unfamiliar flag
-- Movement Case B: explicit mandatory `--help` step inline before constructing any `publish-until --rotate` command
-- Rule 5: execute immediately on clear intent; ask only when genuinely ambiguous
-- Rule 6: minimal reporting by default; verbose only on explicit request
-- Movement: mandatory parameter introspection before any velocity command — discover controller nodes, list params, get velocity/angular limits, cap commanded velocity; conservative defaults if no limits found
-- Movement: pre-motion check — read odom twist fields; abort and `estop` if robot is already moving
-- Movement: odometry rate check (`topics hz`) before closed-loop — fall back to open-loop if rate < 5 Hz
-- Movement: velocity topic disambiguation when both Twist and TwistStamped exist — prefer subscribed topic, then `cmd_vel` naming, then TwistStamped
-- Movement: confirm Twist vs TwistStamped via `topics type` after discovery; verify controller active and odometry live before moving; capture start and end pose; report actual distance/angle
-- Distance/angle commands always use `publish-until` with odometry; `publish-sequence` only for open-ended movement or no-odometry fallback
-- All examples use `<VEL_TOPIC>` / `<ODOM_TOPIC>` placeholders; no hardcoded topic or service names anywhere
-
-### publish-until --rotate Fix
-
-- Fixed: `--rotate` rejected negative values (CW rotation) — guard changed from `<= 0` to `== 0`; zero is the only invalid rotation angle
-- Fixed: rotation monitor was direction-blind — used `abs(delta_yaw)` which could never distinguish CW from CCW
-- Fixed: rotation monitor used a single snapshot yaw delta instead of accumulated integration — failed for angles > 180° and multi-turn rotations
-- Fixed: rotation monitor now integrates incremental steps (`normalize_angle(current_yaw - last_yaw)`) and compares signed accumulated total against signed target
-- Fixed: output block reported `args.rotate` (raw degrees when `--degrees` used) instead of the converted `rotate_angle` in radians — now always reports in radians
-- Fixed: documentation had CW example using positive `--rotate` with negative `angular.z` — this would never stop (monitor waits CCW, robot spins CW); corrected to `--rotate -45 --degrees` + `angular.z: -0.5`
-- Supports: positive angles (CCW), negative angles (CW), angles > 360°, multi-turn, any sign combination
-- Rule: `--rotate` sign and `angular.z` sign must always match; direction table added to SKILL.md Case B, Rule 0 checklist, FAQ, and COMMANDS.md
-
-### Docs / Skill — Audit fixes
-
-- Fixed: all 11 tf alias parsers (`e2q`, `quat2euler`, `q2e`, `euler2quat`, `e2qdeg`, `q2edeg`, `tp`, `point`, `tv`, `vector`, `get`) were bare `add_parser()` with no arguments — now have full `add_argument()` definitions and would no longer reject positional args at runtime
-- Fixed: `actions find` and `topics find` argparse missing `--timeout` argument — now accepted and documented
-- Fixed: `--type twist` / `--type odom` in COMMANDS.md examples → `--msg-type twist` / `--msg-type odom` (flag did not exist)
-- Fixed: `doctor check` in decision table → `doctor` (subcommand does not exist)
-- Fixed: `launch`/`run` JSON output examples contained spurious `new` in the `command` field — removed
-- Fixed: `launch` / `run` section headings omitted required `new` subcommand — added
-- Fixed: `topics find` and `actions find` missing `--timeout` from docs — added
-- Fixed: `tf echo` missing `--once` from docs — added
-- Fixed: `quat2euler` / `euler2quat` aliases not in tf section headings — added
-- Fixed: hardcoded `/odom` in COMMANDS.md discovery workflow step 3 → `<ODOM_TOPIC>`
-- Fixed: launch argument validation section wording clarified — script does fuzzy-matching automatically; agent should not fuzzy-match itself
-- Fixed: 6 `nargs="?"` positional args missing `help=` strings — added for `hz`, `find`, `bw`, `delay`, `actions type`, `actions cancel`
-- Fixed: services `find` example had `std srvs/Empty` (space) → `std_srvs/Empty`
-
-### Skill — Gap resolutions (G1, G2, G7, G10, G11, G16)
-
-- G7 (coord frame for distance): Case A switched from `--field pose.pose.position.x` to `--euclidean --field pose.pose.position` — Euclidean distance is frame-independent; works correctly after any prior rotation; `--delta` sign note added (Euclidean is always positive; direction set by velocity sign)
-- G2 (estop on timeout): error recovery row for `publish-until` timeout now mandates immediate `estop` as the first action, then odom check to confirm motion has stopped before any retry
-- G1 (obstacle avoidance): Case A now documents `--monitor <SCAN_TOPIC> --field ranges.0 --below 0.5` as the obstacle-avoidance pattern; also documents the one-monitor limitation and when to choose scan vs odom
-- G10 (action feedback): Actions section now mandates `actions echo` immediately after every `actions send`; no-feedback handling linked to G16 action preemption table
-- G11 (param readback): Params section now mandates `params get` after every `params set` to confirm nodes accepted the change (some silently reject out-of-range or read-only changes)
-- G16 (cancel vs estop): new "Action Preemption" decision table added to Error Recovery — defines when to use `actions cancel`, when to use `estop` first, and the invariant: if in doubt, `estop` first then cancel
-
-
+- Movement: velocity limit discovery now scans **every running node** (not just controller nodes) — `params list` on all nodes, filter by `max`/`limit`/`vel`/`speed`/`accel`, retrieve each candidate, apply minimum ceiling; conservative defaults 0.2 m/s / 0.75 rad/s if nothing found
+- Movement: `--rotate` fixed for negative angles (CW), angles > 180°, and multi-turn rotations; sign of `--rotate` and `angular.z` must always match
+- Movement: Case A distance now uses `--euclidean --field pose.pose.position` (frame-independent) instead of a single axis field
+- Movement: pre-motion check — read odom twist before publishing; `estop` if robot is already moving
+- Movement: odometry rate check before closed-loop; fall back to open-loop if rate < 5 Hz
+- Rule 0: mandatory full-graph parameter introspection before every movement command
+- Rule 0.1: mandatory session-start checks — `doctor`, simulated time, lifecycle node states
+- Rule 0.5: never guess commands or flags; verify in COMMANDS.md then `--help` before use
 
 Added parameter preset commands, diagnostics monitoring, battery monitoring, and global timeout/retry configuration.
 
