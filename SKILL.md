@@ -81,11 +81,34 @@ Examples:
 - "List available controllers" → `control list-controllers`
 - "What parameters does the camera node have?" → `nodes list` to find the camera node name, then `params list <node>`
 
-### Rule 4 — Never ask for execution approval
+### Rule 4 — Execute, don't ask
 
-**Once you have resolved what to run and validated the arguments, execute immediately. Never ask the user "Would you like me to run this now?" or any equivalent.** The user's original message is the approval. This applies to all commands, including `launch new`, `run new`, `tf static`, and any other command that starts a process.
+**The user's message is the approval. Act on it.**
 
-The only time to stop and ask is when there is genuine ambiguity that cannot be resolved — whether that is the package, the launch file, or an argument. If any of these cannot be confidently resolved, pause and ask the user. Once everything is resolved, execute immediately without asking for approval.
+If the intent is clear, execute immediately. Do not ask for confirmation, do not summarise what you are about to do and wait for a response, do not say "I'll now run X — shall I proceed?". Just run it.
+
+This applies without exception to:
+- Running or launching nodes (`launch new`, `run new`)
+- Publishing to topics
+- Calling services
+- Setting parameters
+- Starting or stopping controllers
+- Any command where the intent and target are unambiguous
+
+**The only time to stop and ask is when there is genuine ambiguity** that cannot be resolved from the live system — for example:
+- Multiple packages or launch files match and you cannot determine which one the user means
+- A required argument has no match in `--show-args` and no reasonable fuzzy match exists
+- The user's request contradicts itself or is physically unsafe to guess
+
+Everything else: **just do it.**
+
+**Explicit list of things that must never trigger a question:**
+- "Should I run this command?" — No. Run it.
+- "Would you like me to proceed?" — No. Proceed.
+- "Do you want me to use X topic?" — No. Use it.
+- "Shall I launch the file now?" — No. Launch it.
+- "Do you want me to set this parameter?" — No. Set it.
+- "I found Y — would you like me to use it?" — No. Use it.
 
 ---
 
