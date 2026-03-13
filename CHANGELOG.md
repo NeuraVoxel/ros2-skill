@@ -25,19 +25,6 @@ Added launch and run commands for running ROS 2 launch files and executables in 
 - `run kill <session>` — kill a running run session
 - `run restart <session>` — restart a run session (preserves original parameters)
 
-### Launch Argument Validation
-
-- Always fetches real launch arguments via `--show-args` before passing any user-provided args
-- Exact match → passed as-is
-- No exact match → fuzzy-matched against real available args only (e.g. "mock" → "use_mock" only if "use_mock" exists)
-- No match at all → argument is dropped, user is notified, launch still proceeds without it
-- If `--show-args` fails → all user args are dropped, user is notified, launch still proceeds
-- Invented or guessed argument names are never passed to the launch file
-
-### Executable Auto-Detect
-
-- Run command now fuzzy-matches executable names (e.g., "teleop" → "teleop_node")
-
 ### TF2 Transform Commands
 
 - `tf list` — list all coordinate frames
@@ -53,59 +40,19 @@ Added launch and run commands for running ROS 2 launch files and executables in 
 - `tf transform-point` / `tf tp` / `tf point` — transform a point between frames
 - `tf transform-vector` / `tf tv` / `tf vector` — transform a vector between frames
 
-### Auto-Refresh
-
-Package cache automatically refreshes when a package is not found. No manual `--refresh` flag needed.
-
-### Workspace Sourcing
-
-Both `launch` and `run` commands automatically source local ROS 2 workspaces before executing. Workspaces are searched in order: `ROS2_LOCAL_WS` env var, `~/ros2_ws`, `~/colcon_ws`, `~/dev_ws`, `~/workspace`, `~/ros2`. Invalid `ROS2_LOCAL_WS` paths now return an error.
-
-### Session Management
-
-- Explicit session handling: fails if session exists, requires `launch/run kill` or `restart`
-- Restart preserves original parameters (package, executable, args, presets, params, config-path)
-- Session metadata saved to `~/.ros2_cli_sessions.json` for restart functionality
-- Session alive check verifies process is actually running (not just tmux shell)
-
-### Bug Fixes
-
-- Fixed duplicate subparser bug in ros2_cli.py
-- Fixed missing json import in ros2_launch.py
-- Fixed argument parsing for launch/run commands
-- Fixed parameter passing to ros2 launch command
-- Fixed param parsing to accept both key:=value and key:value formats
-- Improved session duplicate detection with double-verification
-- Fixed TF2 commands: `tf list`, `tf lookup`, `tf echo`, `tf monitor`, `tf transform-point`, `tf transform-vector` — now properly handle time and message types
-- Fixed `launch new` argument validation: fuzzy matching now only matches against real arguments fetched via `--show-args`. Unknown args are dropped and the user is notified — the launch still proceeds. Invented argument names are never passed.
-- Fixed `tf echo`: added `--once` flag to echo a single transform
-- Fixed `tf echo`: use `rclpy.time.Time()` (latest available) instead of `node.get_clock().now()` to avoid extrapolation errors on a freshly-started buffer
-- Fixed `tf static`: added named argument form (`--from`, `--to`, `--xyz`, `--rpy`) as alternative to positional arguments
-- Fixed `tf quat2euler` / `tf euler2quat` unrecognised subcommand: added as aliases for `euler-from-quaternion` and `quaternion-from-euler`
-- Fixed `tf point` / `tf vector` unrecognised subcommand: added as aliases for `transform-point` and `transform-vector`
-- Fixed `tf transform-point` / `tf transform-vector`: import `tf2_geometry_msgs` to register `PointStamped`/`Vector3Stamped` type adapters; use `rclpy.time.Time()` on message stamp to avoid extrapolation errors
-- Fixed `tf lookup` / `tf echo`: LookupException and ConnectivityException now include `available_frames` in the error output so the user knows what frames are actually in the tf tree
-
-### Refactoring
-
-- Extracted common tmux/session helpers to `ros2_utils.py` to avoid duplication
-- Shared functions: `run_cmd`, `check_tmux`, `session_exists`, `kill_session`, `check_session_alive`, `quote_path`, `generate_session_name`, `list_sessions`, `kill_session_cmd`, session metadata functions
-- Shared package cache: `list_packages`, `package_exists`, `get_package_prefix`
-
 ### Skill
 
-- Added Rule 0: mandatory pre-flight introspection before every publish/call/send — never assume topic names, types, or node names
-- Added Rule 5: execute immediately on clear intent; stop and ask only when genuinely ambiguous
-- Added Rule 6: minimal reporting by default; verbose only on explicit request
-- Movement workflow now requires `topics type <VEL_TOPIC>` after discovery to confirm Twist vs TwistStamped before building any payload
-- Movement workflow step 2.5: verify velocity topic has active subscribers, check controller is `active` via `control list-controllers`, confirm odometry is live, capture start pose — all before executing motion
-- Movement workflow step 4: capture end pose after motion, compute and report actual distance/angle travelled
-- All movement examples use `<VEL_TOPIC>` / `<ODOM_TOPIC>` placeholders; `/cmd_vel` and `/odom` removed throughout
-- Both Twist and TwistStamped payload variants included in every movement case
-- Distance/angle commands always use `publish-until` with odometry feedback; `publish-sequence` restricted to open-ended movement and no-odometry fallback
-- Added movement error recovery table: odom dying mid-motion triggers immediate estop; no-subscriber velocity topic triggers controller check
-- Launch: one clear match launches immediately; confirmation-seeking language removed
-- All examples use discovered placeholders; hardcoded names (`/reset`, `/navigate_to_pose`, `/scan`, `/odom`, etc.) removed throughout
+- Launch argument validation: fetches real args via `--show-args`; fuzzy-matches close names; drops unknown args without failing the launch
+- Executable auto-detect: fuzzy-matches executable names (e.g. "teleop" → "teleop_node")
+- Workspace sourcing: `launch` and `run` auto-source local ROS 2 workspaces; searches `ROS2_LOCAL_WS`, `~/ros2_ws`, `~/colcon_ws`, `~/dev_ws`, `~/workspace`, `~/ros2` in order
+- Package cache auto-refreshes when a package is not found; no manual `--refresh` needed
+- Session management: fails if session exists; restart preserves original parameters
+- Rule 0: mandatory pre-flight introspection before every publish/call/send — never assume topic names, types, or node names
+- Rule 5: execute immediately on clear intent; ask only when genuinely ambiguous
+- Rule 6: minimal reporting by default; verbose only on explicit request
+- Movement: confirm Twist vs TwistStamped via `topics type` after discovery; verify controller active and odometry live before moving; capture start and end pose; report actual distance/angle
+- Distance/angle commands always use `publish-until` with odometry; `publish-sequence` only for open-ended movement or no-odometry fallback
+- All examples use `<VEL_TOPIC>` / `<ODOM_TOPIC>` placeholders; no hardcoded topic or service names anywhere
 
 ---
 
