@@ -114,51 +114,60 @@ def _fuzzy_match(query, candidates, threshold=0.5):
     return matches
 
 
-def _auto_match_launch_args(user_args, available_args):
-    """Auto-match user-provided args against available launch args.
-    
-    Returns (matched_args, warnings).
+def _validate_launch_args(user_args, available_args):
+    """Validate and resolve user-provided args against real available launch args.
+
+    Rules:
+    - Always check available_args (fetched from --show-args) first.
+    - Exact match → use as-is.
+    - No exact match → fuzzy match against available_args only.
+      If a good fuzzy match is found → use the matched name, notify user.
+    - No match at all → drop the argument, notify user. Never pass an invented arg.
+
+    Returns:
+        validated_args: list of args to actually pass to ros2 launch
+        notices: list of human-readable messages about what was changed/dropped
     """
-    warnings = []
-    matched = []
-    invalid = []
-    
+    notices = []
+    validated = []
+
     for arg in user_args:
-        # Extract arg name from "name:=value" or just "name"
+        # Split "name:=value" or "name=value" or bare "name"
         if ':=' in arg:
-            arg_name = arg.split(':=')[0]
+            arg_name, arg_value = arg.split(':=', 1)
+            fmt = lambda n, v: f"{n}:={v}"
         elif '=' in arg:
-            arg_name = arg.split('=')[0]
+            arg_name, arg_value = arg.split('=', 1)
+            fmt = lambda n, v: f"{n}={v}"
         else:
             arg_name = arg
-        
-        # Check if exact match
+            arg_value = None
+            fmt = lambda n, v: n
+
+        # 1. Exact match
         if arg_name in available_args:
-            matched.append(arg)
+            validated.append(arg)
             continue
-        
-        # Try fuzzy match
+
+        # 2. Fuzzy match — only against real available_args
         matches = _fuzzy_match(arg_name, available_args)
-        if matches and matches[0][1] >= 0.7:
-            # Found good match - replace with actual arg name
-            matched_arg = matches[0][0]
-            if ':=' in arg:
-                value = arg.split(':=')[1]
-                matched.append(f"{matched_arg}:={value}")
-            elif '=' in arg:
-                value = arg.split('=')[1]
-                matched.append(f"{matched_arg}={value}")
-            else:
-                matched.append(matched_arg)
-            warnings.append(f"Auto-matched '{arg}' to '{matched_arg}'")
+        if matches and matches[0][1] >= 0.6:
+            matched_name = matches[0][0]
+            resolved = fmt(matched_name, arg_value)
+            validated.append(resolved)
+            notices.append(
+                f"NOTICE: '{arg_name}' not found — using closest match '{matched_name}' instead. "
+                f"Passed as: {resolved}"
+            )
         else:
-            # No match - mark as invalid
-            invalid.append(arg)
-    
-    if invalid:
-        warnings.append(f"Unknown launch argument(s): {invalid}. Ignoring.")
-    
-    return matched, warnings
+            # 3. No match — drop and notify, do NOT pass through
+            available_str = ', '.join(sorted(available_args)) if available_args else 'none'
+            notices.append(
+                f"NOTICE: Argument '{arg_name}' does not exist in this launch file and no similar "
+                f"argument was found. It was NOT passed. Available args: [{available_str}]"
+            )
+
+    return validated, notices
 
 
 def _list_packages(force_refresh=False):
@@ -329,12 +338,20 @@ def cmd_launch_run(args):
             "suggestion": "If the launch file is in a local workspace, set ROS2_LOCAL_WS environment variable."
         })
     
-    # Validate and auto-match launch arguments (only if args provided)
-    warnings = []
+    # Validate and resolve launch arguments against real --show-args output
+    arg_notices = []
     if launch_args:
         available_args = _get_launch_arguments(package, os.path.basename(launch_path))
-        launch_args, arg_warnings = _auto_match_launch_args(launch_args, available_args)
-        warnings.extend(arg_warnings)
+        if not available_args:
+            # Could not fetch args — drop all user args and notify, but still launch
+            arg_notices.append(
+                f"NOTICE: Could not retrieve launch arguments via --show-args. "
+                f"All provided arguments {launch_args} were dropped. "
+                f"Launch will proceed without arguments."
+            )
+            launch_args = []
+        else:
+            launch_args, arg_notices = _validate_launch_args(launch_args, available_args)
     
     # Build launch command
     cmd_parts = ["ros2 launch", package, os.path.basename(launch_path)]
@@ -407,10 +424,10 @@ def cmd_launch_run(args):
     
     if ws_path:
         result["workspace_sourced"] = ws_path
-    
-    if warnings:
-        result["warnings"] = warnings
-    
+
+    if arg_notices:
+        result["arg_notices"] = arg_notices
+
     if warning:
         result["warning"] = warning
     

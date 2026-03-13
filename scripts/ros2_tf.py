@@ -81,24 +81,28 @@ def cmd_tf_list(args):
     rclpy.spin_once(node, timeout_sec=0.5)
     
     try:
-        all_frames = tf_buffer.all_frames_as_yaml()
-        frames = list(all_frames.keys()) if all_frames else []
+        # all_frames_as_yaml returns a YAML string, not a dict
+        all_frames_yaml = tf_buffer.all_frames_as_yaml()
         
-        # Build frame tree
-        frames_with_parent = []
-        for frame in frames:
+        # Parse the YAML string to extract frame names
+        frames = []
+        if all_frames_yaml:
+            import yaml
             try:
-                trans = tf_buffer.lookup_transform_core(
-                    "world", frame, rclpy.time.Time()
-                )
-                parent = trans.header.frame_id
-                frames_with_parent.append(f"{frame} -> {parent}")
+                frames_dict = yaml.safe_load(all_frames_yaml)
+                if frames_dict:
+                    frames = list(frames_dict.keys())
             except Exception:
-                frames_with_parent.append(f"{frame}")
+                # Fallback: parse line by line
+                for line in all_frames_yaml.split('\n'):
+                    line = line.strip()
+                    if line and ':' in line:
+                        frame = line.split(':')[0].strip()
+                        if frame and frame not in frames:
+                            frames.append(frame)
         
         output({
             "frames": frames,
-            "frame_tree": ", ".join(sorted(frames_with_parent)),
             "count": len(frames)
         })
     finally:
@@ -125,13 +129,18 @@ def cmd_tf_lookup(args):
     tf_buffer = Buffer()
     tf_listener = TransformListener(tf_buffer, node)
     
+    # Give it a moment to populate
+    rclpy.spin_once(node, timeout_sec=0.5)
+    
     timeout = getattr(args, 'timeout', 5.0)
     
     try:
+        # Use node's clock to get current time
+        now = node.get_clock().now()
         transform = tf_buffer.lookup_transform(
             target,
             source,
-            rclpy.time.Time(),
+            now,
             timeout=rclpy.duration.Duration(seconds=timeout)
         )
         
@@ -194,10 +203,11 @@ def cmd_tf_echo(args):
     try:
         for i in range(count):
             try:
+                now = node.get_clock().now()
                 transform = tf_buffer.lookup_transform(
                     target,
                     source,
-                    rclpy.time.Time(),
+                    now,
                     timeout=rclpy.duration.Duration(seconds=timeout)
                 )
                 
@@ -251,10 +261,11 @@ def cmd_tf_monitor(args):
     try:
         for i in range(count):
             try:
+                now = node.get_clock().now()
                 transform = tf_buffer.lookup_transform(
                     "world",
                     frame,
-                    rclpy.time.Time(),
+                    now,
                     timeout=rclpy.duration.Duration(seconds=timeout)
                 )
                 
@@ -458,10 +469,12 @@ def cmd_tf_transform_point(args):
     try:
         point = PointStamped()
         point.header.frame_id = source
+        point.header.stamp = node.get_clock().now().to_msg()
         point.point.x = x
         point.point.y = y
         point.point.z = z
         
+        now = node.get_clock().now()
         transformed = tf_buffer.transform(
             point,
             target,
@@ -521,10 +534,12 @@ def cmd_tf_transform_vector(args):
     try:
         vector = Vector3Stamped()
         vector.header.frame_id = source
+        vector.header.stamp = node.get_clock().now().to_msg()
         vector.vector.x = x
         vector.vector.y = y
         vector.vector.z = z
         
+        now = node.get_clock().now()
         transformed = tf_buffer.transform(
             vector,
             target,

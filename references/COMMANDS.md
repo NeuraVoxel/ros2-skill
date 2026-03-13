@@ -2840,20 +2840,59 @@ Run a ROS 2 launch file in a tmux session. System ROS is assumed to be already s
 python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py
 ```
 
-**Run with arguments:**
+**Run with arguments (exact match):**
 ```bash
-python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py speed:=1.0 max_velocity:=2.0
+python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py use_mock:=true map:=/maps/office.yaml
 ```
 
-**Output:**
+**Run with arguments (fuzzy-matched):**
+```bash
+# "mock" is not a real arg but "use_mock" is — it will be auto-matched and you'll be notified
+python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py mock:=true
+```
+
+**Output (success, all args matched):**
 ```json
 {
   "success": true,
   "session": "launch_navigation2_navigation2",
-  "command": "ros2 launch new navigation2 navigation2.launch.py",
+  "command": "ros2 launch navigation2 navigation2.launch.py use_mock:=true map:=/maps/office.yaml",
   "package": "navigation2",
   "launch_file": "navigation2.launch.py",
   "status": "running",
+  "launch_args": ["use_mock:=true", "map:=/maps/office.yaml"]
+}
+```
+
+**Output (fuzzy match applied):**
+```json
+{
+  "success": true,
+  "session": "launch_navigation2_navigation2",
+  "command": "ros2 launch navigation2 navigation2.launch.py use_mock:=true",
+  "package": "navigation2",
+  "launch_file": "navigation2.launch.py",
+  "status": "running",
+  "launch_args": ["use_mock:=true"],
+  "arg_notices": [
+    "NOTICE: 'mock' not found — using closest match 'use_mock' instead. Passed as: use_mock:=true"
+  ]
+}
+```
+
+**Output (unknown arg — dropped, launch still proceeds):**
+```json
+{
+  "success": true,
+  "session": "launch_navigation2_navigation2",
+  "command": "ros2 launch navigation2 navigation2.launch.py",
+  "package": "navigation2",
+  "launch_file": "navigation2.launch.py",
+  "status": "running",
+  "launch_args": [],
+  "arg_notices": [
+    "NOTICE: Argument 'nonexistent_arg' does not exist in this launch file and no similar argument was found. It was NOT passed. Available args: [map, use_mock, use_sim_time]"
+  ]
 }
 ```
 

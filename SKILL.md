@@ -454,11 +454,16 @@ python3 {baseDir}/scripts/ros2_cli.py topics find geometry_msgs/msg/TwistStamped
 - ❌ Never invent a package name that doesn't exist
 - ❌ Never invent a launch file that doesn't exist
 - ❌ Never assume a package exists without checking
+- ❌ Never guess launch argument names (e.g., don't assume "mock" → "use_mock")
+- ❌ Never auto-correct or fuzzy-match argument names
+- ❌ Never pass arguments that weren't explicitly provided by the user
 
 ### ALWAYS verify:
 - ✅ Check `ros2 pkg list` for package existence
 - ✅ Check `ros2 pkg files <package>` for launch files
-- ✅ Confirm with user if any doubt about which file/package
+- ✅ Run `ros2 launch <pkg> <file> --show-args` to get valid arguments
+- ✅ Validate each user-provided argument against --show-args output
+- ✅ Confirm with user if any doubt about which file/package/argument
 
 ### Rule: Confirm before executing if uncertain
 
@@ -535,12 +540,26 @@ python3 {baseDir}/scripts/ros2_cli.py tf transform-vector map base_link 1 0 0
 # Basic launch
 python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py
 
-# With additional arguments
+# With arguments - MUST verify arguments exist first
 python3 {baseDir}/scripts/ros2_cli.py launch new navigation2 navigation2.launch.py arg1:=value arg2:=value
-
-# Auto-detect: partial argument names are auto-matched (mock → use_mock)
-# Invalid arguments show warning and are ignored
 ```
+
+### ⚠️ STRICT: Launch Argument Validation
+
+**This is critical for safety. Passing incorrect arguments has caused accidents.**
+
+Rules, in order:
+
+1. **Always fetch available arguments first** via `--show-args` before passing any args.
+2. **Exact match** → pass as-is.
+3. **No exact match** → fuzzy-match against the real available args only.
+   - If a close match is found (e.g. "mock" → "use_mock") → use it, but **notify the user**.
+   - The substitution is shown in `arg_notices` in the output.
+4. **No match at all** → **drop the argument, do NOT pass it, notify the user.**
+   - The launch still proceeds without that argument.
+   - The user is told which argument was dropped and what the available args are.
+5. **Never invent or assume argument names.** Only use names that exist in `--show-args` output.
+6. **If `--show-args` fails** → drop all user-provided args, notify the user, still launch.
 
 ### Run an Executable
 

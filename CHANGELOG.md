@@ -27,9 +27,12 @@ Added launch and run commands for running ROS 2 launch files and executables in 
 
 ### Launch Argument Validation
 
-- Invalid/unknown launch arguments now show warning and continue (rather than failing)
-- Auto-match: fuzzy matching for partial argument names (e.g., "mock" → "use_mock")
-- Launch argument caching: available args fetched lazily and cached for performance
+- Always fetches real launch arguments via `--show-args` before passing any user-provided args
+- Exact match → passed as-is
+- No exact match → fuzzy-matched against real available args only (e.g. "mock" → "use_mock" only if "use_mock" exists)
+- No match at all → argument is dropped, user is notified, launch still proceeds without it
+- If `--show-args` fails → all user args are dropped, user is notified, launch still proceeds
+- Invented or guessed argument names are never passed to the launch file
 
 ### Executable Auto-Detect
 
@@ -72,6 +75,8 @@ Both `launch` and `run` commands automatically source local ROS 2 workspaces bef
 - Fixed parameter passing to ros2 launch command
 - Fixed param parsing to accept both key:=value and key:value formats
 - Improved session duplicate detection with double-verification
+- Fixed TF2 commands: `tf list`, `tf lookup`, `tf echo`, `tf monitor`, `tf transform-point`, `tf transform-vector` — now properly handle time and message types
+- Fixed `launch new` argument validation: fuzzy matching now only matches against real arguments fetched via `--show-args`. Unknown args are dropped and the user is notified — the launch still proceeds. Invented argument names are never passed.
 
 ### Refactoring
 
