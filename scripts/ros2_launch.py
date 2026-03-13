@@ -233,8 +233,9 @@ def cmd_launch_run(args):
         ws_path = None
     
     # Build tmux command with or without sourcing
+    # Use bash -c to support source command (sh doesn't support source)
     if ws_path:
-        tmux_cmd = f"tmux new-session -d -s {session_name} 'source {ws_path} && {launch_cmd} 2>&1'"
+        tmux_cmd = f"tmux new-session -d -s {session_name} 'bash -c \"source {ws_path} && {launch_cmd}\" 2>&1'"
     else:
         tmux_cmd = f"tmux new-session -d -s {session_name} '{launch_cmd} 2>&1'"
     
