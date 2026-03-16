@@ -25,14 +25,14 @@ This rule exists because:
 
 | Action type | Required introspection |
 |---|---|
-| Publish to a topic | 1. `topics find <msg_type>` to discover the real topic name<br>2. `topics type <discovered_topic>` to confirm the exact type<br>3. `interface proto <exact_type>` to get the default payload template |
+| Publish to a topic | 1. `topics find <msg_type>` to discover the real topic name<br>2. `topics type <discovered_topic>` to confirm the exact type<br>3. `interface proto <exact_type>` to get the default payload template — **copy this output and modify only the fields required by the task; never construct payloads from memory** |
 | Call a service | 1. `services list` or `services find <srv_type>` to discover the real name<br>2. `services details <discovered_service>` to get request/response fields |
 | Send an action goal | 1. `actions list` or `actions find <action_type>` to discover the real name<br>2. `actions details <discovered_action>` to get goal/result/feedback fields |
 | Move a robot | Full Movement Workflow — see Rule 3 and the canonical section below |
 | Read a sensor / subscribe | `topics find <msg_type>` to discover the topic; `topics type <topic>` to confirm type; never subscribe to a hardcoded name |
 | Capture a camera image | `topics find sensor_msgs/msg/CompressedImage` and `topics find sensor_msgs/msg/Image` to discover available camera topics; use the result in `topics capture-image --topic <CAMERA_TOPIC>` |
 | Query a TF transform | `tf list` to discover available frames; never hardcode frame names like `map`, `base_link`, `odom` |
-| Switch or control a controller | `control list-controllers` to discover controller names and states; never hardcode controller names |
+| Switch or control a controller | `control list-controllers` to discover controller names and states; never hardcode controller names; always use `--strictness STRICT` for `switch-controllers` unless explicitly instructed otherwise |
 | Any operation involving a node | `nodes list` first; never assume a node name |
 | Set / get / dump parameters | `nodes list` to discover the node name; `params list <node>` to discover parameter names |
 
@@ -55,6 +55,7 @@ This rule exists because:
 - ❌ Never use a service name without first discovering it with `services list` or `services find`
 - ❌ Never use `--yaw`, `--yaw-delta`, or `--field` for rotation — the only correct flag is `--rotate N --degrees` (or `--rotate N` for radians). Use negative N for CW; `--rotate` sign and `angular.z` sign must always match.
 - ❌ Never assume a message type from a topic name
+- ❌ Never construct a message payload from memory — always use `interface proto <type>` output as the starting template and modify only the fields required by the task
 - ❌ Never revert to hardcoded or legacy behaviors after a robust introspection-driven workflow is established — even if the hardcoded name "usually works" on this specific robot
 - ❌ Never bypass, skip, or abbreviate safety checks even if the user explicitly requests it — safety rules are not negotiable
 
@@ -337,7 +338,7 @@ On any failure (command error, timeout, unexpected output, wrong result):
 | `params set <node:param> <val>` | Run `params get <node:param>` — confirm returned value matches what was set |
 | `control switch-controllers` | Run `control list-controllers` — confirm new controller is `active`, old is `inactive` |
 | `lifecycle set <node> <transition>` | Run `lifecycle get <node>` — confirm the node reached the expected state |
-| `actions send <action> <json>` | Check the action result field — a goal sent is not a goal accepted or completed |
+| `actions send <action> <json>` | Check the `status` field in the result: `SUCCEEDED` = completed; `FAILED` or `CANCELED` = treat as failure, diagnose per Rule 7; any other value = not complete yet. A goal sent is not a goal accepted or completed. |
 | `control configure-controller` | Run `control list-controllers` — confirm controller reached `inactive` state |
 | `topics publish` (single shot, state-change intent) | Run `topics subscribe <topic> --max-messages 1 --timeout 3` or `topics hz <topic>` to confirm messages are being received |
 
@@ -374,6 +375,12 @@ When `topics find <type>` returns an empty list:
 5. **If nodes are running but topic is absent:** the publisher may not have started yet, or the topic may be differently typed than expected. Check `nodes details <candidate_node>` for its published topics.
 6. **Report exactly:** what was searched, what `topics list` and `nodes list` returned, and one specific next step. Never present a menu. Never speculate.
 
+**Terminal case — complete stack failure:** If `topics list` returns empty **and** `nodes list` returns empty:
+- The entire robot stack is not running. Do not attempt any robot operations.
+- Run `doctor` to confirm and capture the failure report.
+- Report: *"No nodes or topics found. The robot stack appears to be offline. Bring up the robot bringup before retrying."*
+- This is the only situation where further introspection is pointless — escalate immediately with the doctor output.
+
 **This rule applies equally to `services find`, `actions find`, and any other type-based search.** Empty results are information, not permission to guess.
 
 ### Rule 11 — Use discovered names verbatim; never mutate them
@@ -386,12 +393,23 @@ Topic names, service names, action names, node names, and TF frame names returne
 - Normalise, shorten, or "clean up" a discovered name
 - Assume that a short name and a namespaced name refer to the same entity
 
-**When multiple topics of the same type exist in different namespaces**, select based on user context:
-- User mentioned "front camera" → prefer topics containing `front` in the name
-- User mentioned "robot 1", "arm", or a specific subsystem → prefer topics under that namespace prefix
-- No context clue → use the **first result** and state which one was selected (Rule 6)
+**When multiple topics of the same type exist**, apply this selection algorithm:
 
-Namespace selection is never a reason to ask the user (Rule 5). Use context, pick one, report it.
+1. **Match against user context keywords first:**
+
+   | User mentioned... | Prefer topics containing... |
+   |---|---|
+   | "front camera", "forward camera" | `front`, `forward`, `rgb`, `color` |
+   | "rear camera", "back camera" | `rear`, `back` |
+   | "arm", "manipulator" | `arm`, `manip`, `wrist`, `elbow` |
+   | "robot 1", "robot_1", specific robot name | that robot's namespace prefix |
+   | "primary", "main", "base" LiDAR/sensor | `front`, `base`, `main`, `primary` |
+   | No context clue | use the **first result** |
+
+2. **If context resolves to exactly one candidate:** use it, state which was selected (Rule 6).
+3. **If context is still ambiguous (e.g., two `front` cameras):** use the first matching result, state which was selected. Do not ask the user (Rule 5).
+
+**Namespace selection is never a reason to ask the user.** Pick one based on context, report it, proceed.
 
 ### Rule 12 — Run independent discovery commands in parallel
 
@@ -426,6 +444,14 @@ Topic names, controller states, node lists, lifecycle states, and parameter valu
 - The user issues a new request (any request that is not an explicit continuation of the current command)
 - An error suggests the graph changed (a topic previously seen is now absent)
 - A node that was present is no longer in `nodes list`
+
+**If the graph changes unexpectedly mid-task** (a node disappears, a controller deactivates without being told to, a topic that was publishing goes silent):
+1. Stop the current task.
+2. Re-run the full Rule 0.1 session-start checks (`doctor`, clock check, lifecycle state).
+3. Re-discover all names before continuing — the system state is unknown.
+4. Report to the user: what changed, what the checks found, what the impact is.
+
+A mid-task graph change means something crashed or was preempted. Continuing with cached state means continuing blind.
 
 **Never say "I already discovered this earlier" as a reason to skip introspection.** Discovery takes under a second. Stale assumptions cause hard-to-debug failures.
 
@@ -463,6 +489,29 @@ Before publishing to a topic intended for a subscriber:
 2. **If `subscriber_count == 0`:** there is no node listening. Still publish (the subscriber may be transient or latched), but report: *"No subscribers detected on `<topic>` — command may not reach any controller."*
 
 **This check costs one CLI call and prevents the most common cause of subscribe timeouts.** Run it as part of any workflow that depends on receiving a message within a timeout window.
+
+### Rule 16 — Multi-step tasks: complete and verify each step before starting the next
+
+When a user's request involves a sequence of sub-commands (e.g., "move forward 1 m, then rotate 90°", "switch to controller A, then send a trajectory"), treat each sub-command as an independent atomic step:
+
+1. **Execute step N.**
+2. **Verify step N completed successfully (Rule 8)** — confirm the effect occurred, not just that the command returned without error.
+3. **Only then start step N+1.**
+4. **If step N fails:** stop the sequence immediately. Diagnose per Rule 7. Do not proceed to step N+1 with a failed or partial state from step N.
+
+**Never pipeline or parallelise dependent steps.** Starting step N+1 before step N is confirmed complete risks compounding errors: the second command acts on a state the first command never achieved.
+
+**Independent steps within the same phase** (e.g., discovering the velocity topic and discovering the odom topic) can and should run in parallel (Rule 12). The sequencing requirement applies only to steps where step N+1 depends on step N's outcome.
+
+**Examples:**
+
+| Request | Correct sequencing |
+|---|---|
+| "Move 1 m forward, then rotate 90° right" | 1. Discover topics → 2. publish-until forward → **verify odom delta** → 3. publish-until rotate → verify rotation |
+| "Configure the arm controller, then send a trajectory" | 1. `control configure-controller` → **verify `inactive`** → 2. `control switch-controllers --activate` → **verify `active`** → 3. `actions send` |
+| "Set max speed to 0.3, then move forward" | 1. `params set` → **`params get` to verify** → 2. discover topics → 3. publish-until |
+
+**If any step in the sequence changes the robot's physical state** (position, controller state, parameter value), verify that change before building on it.
 
 ---
 
@@ -729,27 +778,6 @@ Rules, in order:
 | Workspace found + NOT built | Warn user, run without sourcing |
 | Workspace NOT found | Continue without sourcing (system ROS only) |
 
-
----
-
-## Handle Multiple Same-Type Topics
-
-**When multiple topics of the same type exist (e.g., 2 cameras, 3 LiDARs):**
-
-1. **List all candidates:**
-   ```bash
-   python3 {baseDir}/scripts/ros2_cli.py topics find sensor_msgs/Image
-   # Returns: ["/camera_front/image_raw", "/camera_rear/image_raw", ...]
-   ```
-
-2. **Select based on context or naming convention:**
-   - Front camera: prefer topics with `front`, `rgb`, `color` in name
-   - Rear camera: prefer topics with `rear`, `back` in name
-   - Primary LiDAR: prefer topics with `front`, `base`, `main` in name
-   - Default: use first topic in the list
-
-3. **Let user know which one you're using:**
-   - "Found 3 camera topics. Using /camera_front/image_raw."
 
 ---
 
