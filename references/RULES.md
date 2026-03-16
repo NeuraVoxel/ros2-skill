@@ -27,7 +27,7 @@ This document contains the mandatory operational rules, safety protocols, and de
 
 **Treating these rules as guidelines is itself a critical violation.** "I defaulted to legacy habits" and "I improvised instead of following the workflow" are not acceptable explanations. The rules exist precisely to override legacy habits and improvisation.
 
-**Session logging:** Any session that involves a rule violation, unexpected behaviour, or self-correction must be summarised in `references/HISTORY.md` at session end. Format is defined in that file.
+**On any identified violation — by the agent or flagged by the user — report the root cause clearly and precisely.** The response to a violation is not to log it: it is to identify which rule was insufficient or absent, and harden that rule immediately so the same failure cannot recur.
 
 ### Rule 0 — Full introspection before every action (non-negotiable)
 
