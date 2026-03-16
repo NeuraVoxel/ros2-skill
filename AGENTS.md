@@ -86,6 +86,19 @@ Every other `ros2_*.py` file in `scripts/` is an internal submodule. Running one
 
 ---
 
+## Reporting
+
+**Default to result-only output.** Do not state intent, preview CLI commands, or announce that you are using ros2-skill before acting. The user knows.
+
+- ✅ `"Daemon is running (domain 0)."`
+- ❌ `"I will now run python3 ros2_cli.py daemon status to check the daemon..."`
+
+State intent only when confirmation is required (irreversible actions, hardware movement). For everything else: act, then report the result concisely.
+
+**Do not suggest updating MEMORY.md.** This system does not use a memory file.
+
+---
+
 ## Session Start
 
 Run these checks **once per session**, before any task. They take seconds and catch the most common silent failure causes.
@@ -154,6 +167,26 @@ When in doubt about which folder to use, use `.artifacts/`.
 
 ---
 
+## Discord & Image Sending
+
+To send an image to the user via Discord, use `discord_tools.py`. The nanobot config file contains the bot token and channel configuration — it is the same config the nanobot agent itself uses:
+
+```bash
+python3 {baseDir}/scripts/discord_tools.py send-image \
+  --config /home/ubuntu/.nanobot/config.json \
+  --image {baseDir}/.artifacts/<filename>
+```
+
+**Config path:** `/home/ubuntu/.nanobot/config.json` — do not hardcode tokens or channel IDs anywhere else.
+
+**Workflow for "take a photo and send it to me":**
+1. Discover the camera topic: `topics find sensor_msgs/msg/CompressedImage` (prefer compressed; fall back to `sensor_msgs/msg/Image`)
+2. Capture: `topics capture-image --topic <discovered> --output {baseDir}/.artifacts/<name>.jpg`
+3. Send: `discord_tools.py send-image --config /home/ubuntu/.nanobot/config.json --image <path>`
+4. Report: one line confirming the image was sent.
+
+---
+
 ## Core Rules (condensed from RULES.md)
 
 Full mandatory rules are in `references/RULES.md`. These are the ones most commonly violated:
@@ -203,6 +236,36 @@ If you catch a rule violation (before or after executing a command):
 4. Report in **one line**: what was about to go wrong, what was caught, what was corrected instead.
 
 Never ask the user to diagnose an error you caused. If retry fails, diagnose further before escalating.
+
+### 7 — Resolve intent before asking. Never ask what you can infer.
+
+When a user request is ambiguous or incomplete, resolve it yourself — then act. Only ask when genuine ambiguity remains after all options are exhausted.
+
+**Subcommand inference:** Map natural language to the correct subcommand without asking.
+
+| User says | Correct form |
+|---|---|
+| "launch lekiwi_bringup base" | `launch new lekiwi_bringup base.launch.py` |
+| "kill/stop the launch" | `launch kill <session>` |
+| "take a photo" | discover camera topic → `topics capture-image --topic <discovered>` |
+| "topic list" or "topic" instead of "topics" | self-correct silently per Rule 6, retry with `topics` |
+
+**Launch file name resolution** — try in order, act on first match, never ask:
+1. Exact match (`base`)
+2. `<name>.launch.py` (`base.launch.py`)
+3. `<name>.py`
+4. If multiple files match and the intent is genuinely unclear — only then ask.
+
+**Camera / image tasks** — do not ask which topic to use. Discover it:
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics find sensor_msgs/msg/CompressedImage
+python3 {baseDir}/scripts/ros2_cli.py topics find sensor_msgs/msg/Image
+```
+Use the first result. If multiple camera topics exist and the user has not specified, pick the most likely one (e.g. the one matching a known camera node) and proceed.
+
+**Near-miss commands** — `topic` → `topics`, `node` → `nodes`, `service` → `services`, etc.: self-correct and retry silently. Never surface this to the user.
+
+The test: *"Can I resolve this without asking?"* — if yes, resolve it and act.
 
 ---
 
