@@ -138,6 +138,18 @@ python3 {baseDir}/scripts/ros2_cli.py topics subscribe /scan --max-messages 1
 
 ---
 
+## Artifacts
+
+All captured images, logs, and generated outputs from ros2-skill commands **must** be stored in the `.artifacts/` folder inside the skill directory:
+
+```
+{baseDir}/.artifacts/
+```
+
+If the folder does not exist, create it before saving any output. Never use `/tmp` or any other location for persistent artifacts produced by this skill.
+
+---
+
 ## Core Rules (condensed from RULES.md)
 
 Full mandatory rules are in `references/RULES.md`. These are the ones most commonly violated:
@@ -178,6 +190,16 @@ Never claim a result without confirming it. Subscribe to the relevant topic or c
 
 If a subcommand or flag is not in `references/COMMANDS.md` or `--help` output, it does not exist. Run `--help` on the parent command, find the correct form, and retry silently — do not report a guess-and-fail to the user.
 
+### 6 — On any rule violation: halt, self-correct, retry, report
+
+If you catch a rule violation (before or after executing a command):
+1. Halt immediately.
+2. Self-correct autonomously — do not ask the user.
+3. Retry with the correct approach.
+4. Report in **one line**: what was about to go wrong, what was caught, what was corrected instead.
+
+Never ask the user to diagnose an error you caused. If retry fails, diagnose further before escalating.
+
 ---
 
 ## Safety
@@ -195,6 +217,8 @@ python3 {baseDir}/scripts/ros2_cli.py estop
 5. If no limits are found anywhere, use conservative defaults: **0.2 m/s linear, 0.75 rad/s angular**
 
 Safety checks are never optional. Do not bypass them even if the user requests it.
+
+**Confirm before any action that moves the robot or interacts with hardware.** State what you are about to do and wait for acknowledgement before executing movement commands, hardware state changes, or any irreversible action.
 
 ---
 
