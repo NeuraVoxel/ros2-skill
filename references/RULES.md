@@ -328,6 +328,142 @@ On any failure (command error, timeout, unexpected output, wrong result):
 - ❌ *"The command timed out. Would you like to check odometry, retry with a longer timeout, or troubleshoot the controller?"*
 - ✅ Run `estop`. Run `topics hz <ODOM_TOPIC>`. Run `control list-controllers`. Report: *"Timed out after 60 s. Odom rate: 0 Hz (no publisher active). No velocity controller running. Robot did not move. Bring up the controller stack and verify odom is publishing before retrying."*
 
+### Rule 8 — Verify the effect; never trust exit codes alone
+
+**A command returning without error means the request was delivered — it does not mean the effect occurred.** Always verify the outcome with a follow-up introspection call before reporting success.
+
+| Operation | Verification |
+|---|---|
+| `params set <node:param> <val>` | Run `params get <node:param>` — confirm returned value matches what was set |
+| `control switch-controllers` | Run `control list-controllers` — confirm new controller is `active`, old is `inactive` |
+| `lifecycle set <node> <transition>` | Run `lifecycle get <node>` — confirm the node reached the expected state |
+| `actions send <action> <json>` | Check the action result field — a goal sent is not a goal accepted or completed |
+| `control configure-controller` | Run `control list-controllers` — confirm controller reached `inactive` state |
+| `topics publish` (single shot, state-change intent) | Run `topics subscribe <topic> --max-messages 1 --timeout 3` or `topics hz <topic>` to confirm messages are being received |
+
+**Never report "Done" based solely on a zero-error response.** If verification reveals the effect did not occur (param unchanged, controller not switched, lifecycle state unchanged), diagnose immediately per Rule 7 — do not report success.
+
+**Exception:** For `publish-until` and `publish-sequence`, the command's own stop condition or duration is the success criterion. Do not add a separate `topics hz` check during an active motion sequence.
+
+### Rule 9 — Pre-motion check: confirm the robot is stationary before commanding movement
+
+**Before issuing any motion command**, verify the robot is not already moving:
+
+1. Subscribe to `<ODOM_TOPIC>` for one message (2-second timeout):
+   ```bash
+   topics subscribe <ODOM_TOPIC> --max-messages 1 --timeout 2
+   ```
+2. Check `twist.twist.linear.x`, `twist.twist.linear.y`, and `twist.twist.angular.z` in the returned message.
+3. **If any value is non-zero:** send `estop` immediately, wait 0.5 s, then proceed with the requested command. Report: *"Robot was already moving. Stopped before issuing new command."*
+4. **If the subscribe times out (odom not publishing):** do NOT proceed with closed-loop motion. Fall back to open-loop (`publish-sequence`) and notify the user: *"Odometry is not publishing. Running open-loop — distance accuracy not guaranteed."*
+
+**Never issue a new motion command on top of an existing one without stopping first.** Overlapping velocity commands cause unpredictable trajectories and runaway motion.
+
+### Rule 10 — Empty discovery: broaden the search, never guess
+
+When `topics find <type>` returns an empty list:
+
+1. **Do not guess a topic name.**
+2. **Do not fall back to a hardcoded name** (Rule 0).
+3. **Broaden the search immediately and in parallel:**
+   ```bash
+   topics list    # All active topics — scan for anything plausibly relevant
+   nodes list     # Are the nodes that publish this type even running?
+   ```
+4. **If nodes are missing:** the robot stack may not be up. Run `doctor` and report what is absent.
+5. **If nodes are running but topic is absent:** the publisher may not have started yet, or the topic may be differently typed than expected. Check `nodes details <candidate_node>` for its published topics.
+6. **Report exactly:** what was searched, what `topics list` and `nodes list` returned, and one specific next step. Never present a menu. Never speculate.
+
+**This rule applies equally to `services find`, `actions find`, and any other type-based search.** Empty results are information, not permission to guess.
+
+### Rule 11 — Use discovered names verbatim; never mutate them
+
+Topic names, service names, action names, node names, and TF frame names returned by discovery commands must be used **exactly as returned** — character for character, including leading slashes, namespace prefixes, and suffixes.
+
+**Never:**
+- Strip a namespace prefix (e.g., convert `/robot_1/cmd_vel` → `/cmd_vel`)
+- Add a namespace that was not in the discovery result
+- Normalise, shorten, or "clean up" a discovered name
+- Assume that a short name and a namespaced name refer to the same entity
+
+**When multiple topics of the same type exist in different namespaces**, select based on user context:
+- User mentioned "front camera" → prefer topics containing `front` in the name
+- User mentioned "robot 1", "arm", or a specific subsystem → prefer topics under that namespace prefix
+- No context clue → use the **first result** and state which one was selected (Rule 6)
+
+Namespace selection is never a reason to ask the user (Rule 5). Use context, pick one, report it.
+
+### Rule 12 — Run independent discovery commands in parallel
+
+When a task requires discovering multiple independent facts (velocity topic, odom topic, velocity limits, controller state, etc.), issue all discovery commands simultaneously — never sequentially.
+
+Sequential discovery is slower and masks partial failures. If velocity discovery succeeds but odom discovery fails, sequential execution hides that failure until the motion command times out.
+
+**Correct (parallel):**
+```bash
+# All three issued simultaneously
+topics find geometry_msgs/msg/Twist
+topics find geometry_msgs/msg/TwistStamped
+topics find nav_msgs/msg/Odometry
+```
+
+**Wrong (sequential):**
+```
+topics find geometry_msgs/msg/Twist → wait → topics find TwistStamped → wait → ...
+```
+
+**This also applies to parameter scanning (Rule 0, Step 2):** run `params list <NODE>` for all nodes simultaneously, not one node at a time. Process all results together to find the binding velocity ceiling.
+
+**Dependency exception:** if command B requires a result from command A (e.g., you need the topic name before you can check its type), sequential execution is correct for those two steps only. Run everything else in parallel around them.
+
+### Rule 13 — Never reuse stale session state for a new task
+
+Topic names, controller states, node lists, lifecycle states, and parameter values discovered earlier in the session **must not be reused as-is** for a new task. Robot state can change between tasks: nodes crash, controllers switch, topics appear or disappear.
+
+**Per-task re-discovery is mandatory.** The only exception is within the consecutive steps of the same single task (e.g., `VEL_TOPIC` discovered in step 1 of a motion command is used in step 4 of that same command — that is valid).
+
+**Re-discover unconditionally when:**
+- The user issues a new request (any request that is not an explicit continuation of the current command)
+- An error suggests the graph changed (a topic previously seen is now absent)
+- A node that was present is no longer in `nodes list`
+
+**Never say "I already discovered this earlier" as a reason to skip introspection.** Discovery takes under a second. Stale assumptions cause hard-to-debug failures.
+
+### Rule 14 — Check lifecycle state before using any managed node's interface
+
+If `lifecycle nodes` shows a node is lifecycle-managed, its state determines whether its topics, services, and parameters function:
+
+| State | Behaviour |
+|---|---|
+| `unconfigured` | Node is up but not configured — topics and services do not exist yet |
+| `inactive` | Node is configured but not active — topics exist but messages are silently dropped |
+| `active` | Node is fully operational |
+| `finalized` / `error` | Node has shut down or faulted — do not attempt to use it |
+
+**Before using any topic, service, or parameter from a lifecycle-managed node:**
+1. Run `lifecycle get <node>` to check current state.
+2. If not `active`, apply the correct transitions:
+   ```bash
+   lifecycle set <node> configure   # unconfigured → inactive
+   lifecycle set <node> activate    # inactive → active
+   ```
+3. Verify with `lifecycle get <node>` that the node reached `active` (Rule 8) before proceeding.
+
+**Do not skip this check even if the node "usually works."** A node in `inactive` silently discards all messages — it produces no error, no warning, and no feedback. This is the most common source of inexplicable publish failures on managed-node robots.
+
+### Rule 15 — Check publisher and subscriber counts before waiting on a topic
+
+Before subscribing to a topic and waiting for a message, verify a publisher exists:
+1. Run `topics details <topic>` — check `publisher_count`.
+2. **If `publisher_count == 0`:** do not subscribe (you will timeout). Report: *"No publisher on `<topic>`. Check `nodes list` to verify the publishing node is running."* Then diagnose per Rule 7.
+3. **If `publisher_count > 0` but subscribe still times out:** run `topics hz <topic>` to confirm messages are actively flowing (a publisher node may be up but not sending). Check QoS profile mismatch in `topics details <topic>` output.
+
+Before publishing to a topic intended for a subscriber:
+1. Run `topics details <topic>` — check `subscriber_count`.
+2. **If `subscriber_count == 0`:** there is no node listening. Still publish (the subscriber may be transient or latched), but report: *"No subscribers detected on `<topic>` — command may not reach any controller."*
+
+**This check costs one CLI call and prevents the most common cause of subscribe timeouts.** Run it as part of any workflow that depends on receiving a message within a timeout window.
+
 ---
 
 ## Quick Decision Card
@@ -534,12 +670,16 @@ Use this decision table whenever an in-flight action goal needs to be stopped:
 
 1. **Discover available packages:**
    ```bash
-   ros2 pkg list  # Get all packages
+   # ros2-skill has no package-listing command — this is a Rule 2 last-resort exception.
+   # Document: ros2-skill has no equivalent for `ros2 pkg list`.
+   ros2 pkg list
    ```
 
 2. **Find matching launch files:**
    ```bash
-   ros2 pkg files <package>  # Find launch files in package
+   # ros2-skill has no launch-file listing command — this is a Rule 2 last-resort exception.
+   # Document: ros2-skill has no equivalent for `ros2 pkg files`.
+   ros2 pkg files <package>
    ```
 
 3. **Intelligent inference (use context):**
