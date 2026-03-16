@@ -243,8 +243,6 @@ Error: --channel-id argument is required
 
 Publish a sequence of messages in order. Each message is repeated at `--rate` Hz for its corresponding duration before moving to the next. Arrays must be the same length. The final message should usually be all-zeros to stop the robot.
 
-**Aliases:** none
-
 **ROS 2 CLI equivalent:** No direct equivalent (requires scripting multiple `ros2 topic pub` calls)
 
 | Argument | Required | Description |
@@ -1673,8 +1671,6 @@ Error (not found):
 
 Send an action goal and wait for the result. Optionally collects intermediate feedback messages.
 
-**Aliases:** none
-
 **ROS 2 CLI equivalent:** `ros2 action send_goal /action turtlesim/action/RotateAbsolute '{"theta": 3.14}'`
 
 | Argument | Required | Description |
@@ -1873,8 +1869,6 @@ No matches:
 
 List all managed (lifecycle) nodes in the ROS 2 graph. Discovers nodes by scanning for services of type `lifecycle_msgs/srv/GetState`.
 
-**Aliases:** none
-
 **ROS 2 CLI equivalent:** `ros2 lifecycle nodes`
 
 | Argument | Required | Description |
@@ -1980,8 +1974,6 @@ Output (error):
 
 Get the current lifecycle state of a managed node.
 
-**Aliases:** none
-
 **ROS 2 CLI equivalent:** `ros2 lifecycle get <node>`
 
 | Argument | Required | Description |
@@ -2020,8 +2012,6 @@ Output (error):
 Trigger a lifecycle state transition on a managed node. Accepts a transition by label (preferred) or numeric ID.
 
 When a label is given, the node's available transitions are queried first to resolve the correct numeric ID. This ensures correctness because the `ChangeState` service dispatches on ID, not label. Numeric IDs bypass the extra lookup.
-
-**Aliases:** none
 
 **ROS 2 CLI equivalent:** `ros2 lifecycle set <node> <transition>`
 
@@ -2090,8 +2080,6 @@ Output (error — unknown label, with available options):
 
 List all controller types available in the pluginlib registry with their base classes.
 
-**Aliases:** none
-
 | Option | Required | Description |
 |--------|----------|-------------|
 | --controller-manager | No | Controller manager node name (default: /controller_manager) |
@@ -2124,8 +2112,6 @@ Output (error):
 
 List all loaded controllers, their type, and current state.
 
-**Aliases:** none
-
 | Option | Required | Description |
 |--------|----------|-------------|
 | --controller-manager | No | Controller manager node name (default: /controller_manager) |
@@ -2157,8 +2143,6 @@ Output (error):
 
 List hardware components (actuator, sensor, system) managed by ros2_control.
 
-**Aliases:** none
-
 | Option | Required | Description |
 |--------|----------|-------------|
 | --controller-manager | No | Controller manager node name (default: /controller_manager) |
@@ -2188,8 +2172,6 @@ Output (error):
 ## control list-hardware-interfaces
 
 List all available command and state interfaces.
-
-**Aliases:** none
 
 | Option | Required | Description |
 |--------|----------|-------------|
@@ -2279,8 +2261,6 @@ Configure a loaded controller, driving it from the `unconfigured` state to `inac
 
 Use this command when a controller is stuck in `unconfigured` after `load-controller`, or when you need to confirm that configuration succeeds before attempting to activate.
 
-**Aliases:** none
-
 **ROS 2 CLI equivalent:** `ros2 control configure_controller <name>`
 
 | Argument | Required | Description |
@@ -2320,8 +2300,6 @@ Output (error — service not available):
 
 Reload all controller plugin libraries in the controller manager.
 
-**Aliases:** none
-
 | Option | Required | Description |
 |--------|----------|-------------|
 | --force-kill | No | Force kill controllers before reloading |
@@ -2348,8 +2326,6 @@ Output (error):
 ## control set-controller-state
 
 Activate or deactivate a single controller via SwitchController (STRICT mode).
-
-**Aliases:** none
 
 | Option | Required | Description |
 |--------|----------|-------------|
@@ -2379,8 +2355,6 @@ Output (error):
 
 Drive a hardware component through its lifecycle state machine.
 
-**Aliases:** none
-
 | Option | Required | Description |
 |--------|----------|-------------|
 | name | Yes | Hardware component name (positional) |
@@ -2408,8 +2382,6 @@ Output (error):
 ## control switch-controllers
 
 Atomically activate and/or deactivate multiple controllers in a single call.
-
-**Aliases:** none
 
 | Option | Required | Description |
 |--------|----------|-------------|
@@ -2446,8 +2418,6 @@ Output (error):
 ## control view-controller-chains
 
 Generate a Graphviz diagram of loaded chained controllers, save as PDF to `.artifacts/`, and optionally send to Discord.
-
-**Aliases:** none
 
 Requires graphviz: `sudo apt install graphviz`
 
