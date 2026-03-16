@@ -297,7 +297,7 @@ When a user asks to do something, **infer what they want at the goal level, then
 
 Examples:
 - "Take a picture" → find compressed image topics (`topics find sensor_msgs/msg/CompressedImage`), capture from the first active result
-- "Move the robot forward" → find velocity topic (`topics find geometry_msgs/msg/Twist` and `TwistStamped`), publish with the matching structure
+- "Move the robot forward" / "drive ahead" / "go forward 1 m" → motion vocabulary detected → full Rule 3 workflow: find vel topic + find odom → if odom ≥ 5 Hz and distance given, use `publish-until`; if no odom, use `publish-sequence` with duration; if no distance, open-ended `publish-sequence`
 - "What is the battery level?" → `topics battery` (auto-discovers `BatteryState` topics)
 - "List available controllers" → `control list-controllers`
 - "What parameters does the camera node have?" → `nodes list` to find the camera node name, then `params list <node>`
@@ -732,6 +732,46 @@ Agent does (for movement):
 
 **RULE: NEVER ask the user anything that can be discovered from the ROS 2 graph.**
 
+### Motion Context Cues — Vocabulary and Method Selection
+
+**Any of the following words in a user message is a motion command.** Every motion command triggers the full Rule 3 workflow — no exceptions. Odom availability (discovered in Rule 3 Step 2) determines the execution method, not the user's phrasing.
+
+**Motion trigger words (non-exhaustive — treat similar words the same way):**
+
+| Category | Trigger words |
+|---|---|
+| General motion | move, go, drive, travel, head, proceed, advance, roll, navigate |
+| Forward | forward, ahead, straight, onward, front |
+| Backward | back, backward, backwards, reverse, retreat |
+| Left | left, leftward |
+| Right | right, rightward |
+| Rotation / turning | rotate, turn, spin, yaw, pivot, swing |
+| Strafing (holonomic) | strafe, slide, sidestep, lateral |
+
+**Method selection — always determined by odom availability, not user phrasing:**
+
+```
+Motion command received
+  │
+  ├─ Check odom (Rule 3 Step 2: topics find nav_msgs/msg/Odometry + topics hz)
+  │
+  ├─ Odom available (≥ 5 Hz) AND target distance/angle specified
+  │     └─ publish-until (closed-loop) — PREFERRED
+  │
+  ├─ Odom available (≥ 5 Hz) AND no target (open-ended)
+  │     └─ publish-sequence with stop payload — odom used for pre/post health checks only
+  │
+  ├─ Odom unavailable (not found or rate < 5 Hz) AND target specified
+  │     └─ publish-sequence with calculated duration (open-loop, last resort)
+  │        Notify user: "No odometry. Running open-loop — accuracy not guaranteed."
+  │
+  └─ Odom unavailable AND no target
+        └─ publish-sequence with stop payload
+           Notify user: "No odometry available."
+```
+
+**Never interpret a motion word as "just publish a Twist message" without going through this decision tree.** The choice of `publish-until` vs. `publish-sequence` is always driven by odom availability.
+
 ### Step 1: Understand User Intent
 
 | User says... | Agent interprets as... | Agent must... |
@@ -749,9 +789,10 @@ Agent does (for movement):
 | "Read joystick/gamepad" | Subscribe to Joy | Find Joy topic → subscribe |
 | "Check robot diagnostics/health" | Subscribe to diagnostics | Find /diagnostics topic → subscribe |
 | "Check TF/transforms" | Check TF topics | Find /tf, /tf_static topics → subscribe |
-| "Move/drive/turn (mobile robot)" | Open-ended movement, no target | Find Twist/TwistStamped → **publish-sequence** with stop |
-| "Move forward/back N meters" | Closed-loop distance → Rule 3 | Find odom → **publish-until** `--euclidean --field pose.pose.position --delta N` |
-| "Rotate N degrees / turn left/right / turn N radians" | Closed-loop rotation → Rule 3 | Find odom → **publish-until** `--rotate ±N --degrees` |
+| **Any motion word** + direction + **specific distance** (e.g. "move forward 1 m", "drive back 0.5 m", "go forward 2 metres") | Closed-loop distance if odom available, else timed open-loop | **Odom available** → `publish-until --field pose.pose.position --delta N --timeout <calc>`<br>**No odom** → `publish-sequence` with duration `N / v`; notify user |
+| **Any motion word** + direction + **specific angle** (e.g. "rotate 90°", "turn left 45 degrees", "spin right 1.57 rad") | Closed-loop rotation if odom available, else timed open-loop | **Odom available** → `publish-until --rotate ±N --degrees --timeout <calc>`<br>**No odom** → `publish-sequence` with duration `θ_rad / ω`; notify user |
+| **Any motion word** + direction, **no target** (e.g. "move forward", "drive ahead", "go left", "roll back") | Open-ended movement — run until stopped | `publish-sequence` with move payload then zero payload (regardless of odom availability — no delta target exists for `publish-until`) |
+| **Any motion word** with no direction or target (e.g. "move", "drive", "go") | Ambiguous quantity → ask once (Rule 5 condition 3) | Ask: *"Which direction, and how far or for how long?"* |
 | "Move arm/joint (manipulator)" | Publish JointTrajectory | Find JointTrajectory topic → publish |
 | "Control gripper" | Publish GripperCommand or JointTrajectory | Find gripper topic → publish |
 | "Stop the robot" | Publish zero velocity | Find Twist/TwistStamped → `topics type` to confirm → publish zeros |
