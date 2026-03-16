@@ -79,7 +79,7 @@ This rule exists because:
 - ❌ Never construct a message payload from memory — always use `interface proto <type>` output as the starting template and modify only the fields required by the task
 - ❌ Never revert to hardcoded or legacy behaviors after a robust introspection-driven workflow is established — even if the hardcoded name "usually works" on this specific robot
 - ❌ Never bypass, skip, or abbreviate safety checks even if the user explicitly requests it — safety rules are not negotiable
-- ❌ Never report a sensor value (position, orientation, yaw, distance) computed from a reading captured during an ongoing action — subscribe fresh after the action is complete and the robot is stationary
+- ❌ Never read or report odometry for position, orientation, or yaw while the robot is moving or decelerating — wait until confirmed stationary (velocity ≈ 0 on all axes) then subscribe fresh (see Rule 8 two-phase protocol)
 
 **Introspection commands return discovered names. Use those names — not the ones you expect.**
 
@@ -378,15 +378,17 @@ On any failure (command error, timeout, unexpected output, wrong result):
 | `actions send <action> <json>` | Check the `status` field in the result: `SUCCEEDED` = completed; `FAILED` or `CANCELED` = treat as failure, diagnose per Rule 7; any other value = not complete yet. A goal sent is not a goal accepted or completed. |
 | `control configure-controller` | Run `control list-controllers` — confirm controller reached `inactive` state |
 | `topics publish` (single shot, state-change intent) | Run `topics subscribe <topic> --max-messages 1 --timeout 3` or `topics hz <topic>` to confirm messages are being received |
-| Movement completion (position / orientation reporting) | Subscribe to `<ODOM_TOPIC>` for **one fresh message after motion has fully stopped** — compute position and orientation from that reading only. A quaternion or position captured during motion is a transient intermediate value, not the final state. |
+| Movement completion (position / orientation reporting) | **Two-phase protocol — both steps required:** (1) Confirm the robot is stationary: subscribe `<ODOM_TOPIC> --max-messages 1`; check `twist.twist.linear.x`, `twist.twist.linear.y`, and `twist.twist.angular.z` are all ≈ 0. If any are non-zero, wait 0.5 s and repeat. (2) Once confirmed stationary, subscribe `<ODOM_TOPIC> --max-messages 1` again and compute position, orientation, or yaw from **this** reading only. |
 
-**Sensor readings captured during an action are intermediate — they reflect a transient state, not the final settled state.** Post-action sensor verification always requires a fresh subscribe call issued after the action is complete and the robot is stationary. Never report a yaw, position, or distance computed from a reading taken mid-action.
+**Reading odometry while the robot is moving produces wrong results.** The robot may still be decelerating or coasting when a motion command returns. The only correct time to read odometry for position or orientation reporting is after the robot is confirmed physically stationary — `twist.twist.linear.x`, `.y`, and `twist.twist.angular.z` are all ≈ 0. Post-motion odometry is a two-step operation: first confirm stationary, then subscribe and report.
+
+Never report yaw, position, or distance from any reading taken while motion was ongoing — including the final message delivered just before the command returned.
 
 **Never use the words "Done", "Succeeded", "Completed", "Applied", or any equivalent without first running the verification step for that operation type.** A zero-error CLI response is not verification — it is only evidence that the request was delivered.
 
 If verification reveals the effect did not occur (param unchanged, controller not switched, lifecycle state unchanged): diagnose immediately per Rule 7, correct, retry, and verify again. Do not move on until the verification passes.
 
-**Exception:** For `publish-until` and `publish-sequence`, the command's own stop condition or duration is the success criterion. Do not add a separate `topics hz` check during an active motion sequence.
+**Exception:** For `publish-until` and `publish-sequence`, the command's own stop condition or duration is the execution criterion — do not add a separate `topics hz` check **during** an active motion sequence. This exception applies only to checking delivery-rate mid-motion. It does **not** exempt the post-motion two-phase odometry read required for position/orientation reporting — that step is always mandatory after motion completes.
 
 ### Rule 9 — Pre-motion check: confirm the robot is stationary before commanding movement
 
@@ -554,6 +556,75 @@ When a user's request involves a sequence of sub-commands (e.g., "move forward 1
 | "Set max speed to 0.3, then move forward" | 1. `params set` → **`params get` to verify** → 2. discover topics → 3. publish-until |
 
 **If any step in the sequence changes the robot's physical state** (position, controller state, parameter value), verify that change before building on it.
+
+### Rule 17 — Follow REP-103 and REP-105 at all times
+
+ROS 2 has standardised units, coordinate conventions, and frame conventions. Violating them produces silent wrong results — wrong yaw, wrong direction, wrong distance — with no error from the CLI.
+
+#### REP-103: Standard Units and Coordinate Conventions
+
+**Units — all message values use SI units. No exceptions.**
+
+| Quantity | Unit | Never use |
+|---|---|---|
+| Linear distance | metres (m) | cm, mm, inches |
+| Linear velocity | m/s | cm/s, km/h |
+| Angular position | radians (rad) | degrees (in payloads) |
+| Angular velocity | rad/s | deg/s, RPM |
+| Time | seconds (s) | ms unless in a `builtin_interfaces/Time` stamp |
+| Frequency | Hz | — |
+
+**The `--degrees` flag in `publish-until --rotate` and `--rotate --degrees` is a CLI convenience only.** The underlying `angular.z` in the Twist/TwistStamped payload is always rad/s. Never put degrees into a message field.
+
+**Coordinate frame convention (right-hand rule):**
+
+| Axis | Direction |
+|---|---|
+| x | Forward |
+| y | Left |
+| z | Up |
+
+- Positive `linear.x` → robot moves **forward**
+- Positive `angular.z` → robot rotates **CCW (left)** when viewed from above
+- Negative `angular.z` → robot rotates **CW (right)**
+- This matches the `--rotate` sign convention: positive = CCW, negative = CW
+
+**Quaternion field order in all ROS 2 messages is `(x, y, z, w)` — never `(w, x, y, z)`.**
+
+**Yaw from odometry quaternion (2D mobile robot — pure z-rotation):**
+```
+yaw_rad = 2 * atan2(q.z, q.w)
+yaw_deg = yaw_rad * (180 / π)
+```
+This simplified formula is valid when `q.x ≈ 0` and `q.y ≈ 0` (flat-ground robot). For a 3D platform, use the full euler extraction formula. Verify `q.x` and `q.y` are near zero before using the simplified form.
+
+**Never:**
+- Put degree values into `angular.z` or any rotation field in a message
+- Assume the quaternion order is `(w, x, y, z)` — ROS 2 uses `(x, y, z, w)`
+- Use `angular.z` with opposite sign to `--rotate` — they must always match
+
+#### REP-105: Coordinate Frames for Mobile Platforms
+
+**The standard frame hierarchy is:**
+```
+map → odom → base_link (→ sensor frames)
+```
+
+| Frame | Properties | Use for |
+|---|---|---|
+| `base_link` | Attached to robot body | Relative transforms from the robot |
+| `odom` | Continuous, no jumps — drifts over time | Closed-loop motion tracking; `publish-until` delta monitoring |
+| `map` | Globally accurate — may jump when localisation corrects | Absolute position queries; navigation goals |
+
+**For closed-loop motion (publish-until):** monitor position delta in the `odom` frame — use `pose.pose.position.x` (or `.y`) from `nav_msgs/Odometry`, which is expressed in the `odom` frame. This is correct for tracking relative displacement.
+
+**For absolute position queries** (e.g., "where is the robot on the map?"): look up the `map` → `base_link` transform via `tf lookup`. The `odom` frame position drifts; the `map` frame is corrected by localisation (AMCL, Cartographer, etc.).
+
+**Never:**
+- Use the `map` frame position from an odometry message — odometry is expressed in `odom`, not `map`
+- Use the `odom` frame for absolute global position when a localiser is running — use `map` instead
+- Assume frame names are exactly `map`, `odom`, `base_link` without first running `tf list` (Rule 0) — they may be namespaced (e.g., `/robot_1/odom`)
+- Confuse a jump in `map` → `odom` (localisation correction) with the robot physically moving
 
 ---
 
