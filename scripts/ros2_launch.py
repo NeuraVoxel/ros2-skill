@@ -39,7 +39,7 @@ def _get_launch_arguments(package, launch_file):
         return _launch_args_cache[cache_key]
     
     # Get the launch file path
-    prefix = _get_package_prefix(package)
+    prefix = get_package_prefix(package)
     if not prefix:
         return []
     
@@ -165,54 +165,11 @@ def _validate_launch_args(user_args, available_args):
     return validated, notices
 
 
-def _list_packages(force_refresh=False):
-    """List all ROS 2 packages (cached)."""
-    global _package_cache, _package_cache_initialized
-    
-    if force_refresh:
-        _package_cache = {}
-        _package_cache_initialized = False
-    
-    if _package_cache_initialized:
-        return _package_cache
-    
-    stdout, _, rc = run_cmd("ros2 pkg list")
-    if rc == 0:
-        packages = stdout.strip().split('\n') if stdout.strip() else []
-        for pkg in packages:
-            _package_cache[pkg] = True
-        _package_cache_initialized = True
-    
-    return _package_cache
-
-
-def _package_exists(package, force_refresh=False):
-    """Check if a package exists (uses cache, refreshes if not found or force_refresh=True)."""
-    packages = _list_packages(force_refresh=force_refresh)
-    if package in packages:
-        return True
-    
-    global _package_cache_initialized
-    if not force_refresh:
-        _package_cache_initialized = False
-        _list_packages()
-        return package in _list_packages()
-    
-    return False
-
-
-def _get_package_prefix(package):
-    """Get the prefix path for a package."""
-    stdout, _, rc = run_cmd(f"ros2 pkg prefix {package}")
-    if rc == 0 and stdout:
-        return stdout.strip()
-    return None
-
 
 
 def _find_launch_files(package):
     """Find launch files in a package."""
-    prefix = _get_package_prefix(package)
+    prefix = get_package_prefix(package)
     if not prefix:
         return []
     
@@ -246,16 +203,16 @@ def cmd_launch_run(args):
     launch_args = args.args or []
     
     # Check package exists (auto-refresh if not found)
-    if not _package_exists(package, force_refresh=False):
-        _list_packages(force_refresh=True)
-    if not _package_exists(package, force_refresh=False):
+    if not package_exists(package, force_refresh=False):
+        list_packages(force_refresh=True)
+    if not package_exists(package, force_refresh=False):
         return output({
             "error": f"Package '{package}' not found",
-            "available_packages": list(_list_packages().keys())[:20]
+            "available_packages": list(list_packages().keys())[:20]
         })
     
     # Find launch file
-    prefix = _get_package_prefix(package)
+    prefix = get_package_prefix(package)
     launch_files = _find_launch_files(package)
     
     # Try different possible paths
@@ -502,18 +459,18 @@ def cmd_launch_foxglove(args):
         })
     
     # Check package exists (auto-refresh if not found)
-    if not _package_exists("foxglove_bridge", force_refresh=False):
-        _list_packages(force_refresh=True)
-    if not _package_exists("foxglove_bridge", force_refresh=False):
+    if not package_exists("foxglove_bridge", force_refresh=False):
+        list_packages(force_refresh=True)
+    if not package_exists("foxglove_bridge", force_refresh=False):
         return output({
             "error": "Package 'foxglove_bridge' not found",
             "suggestion": f"Install for your ROS 2 distro with:\n  sudo apt install ros-{ros_distro}-foxglove-bridge\n\nOr build from source:\n  git clone https://github.com/foxglove/ros2-foxglove-bridge.git",
             "current_distro": ros_distro,
-            "available_packages": list(_list_packages().keys())[:20]
+            "available_packages": list(list_packages().keys())[:20]
         })
     
     # Check if launch file exists (search multiple locations)
-    prefix = _get_package_prefix("foxglove_bridge")
+    prefix = get_package_prefix("foxglove_bridge")
     possible_launch_paths = [
         os.path.join(prefix, "share", "foxglove_bridge", "launch", "foxglove_bridge_launch.xml"),
         os.path.join(prefix, "lib", "foxglove_bridge", "launch", "foxglove_bridge_launch.xml"),
