@@ -577,6 +577,11 @@ from ros2_bag import (
 from ros2_component import (
     cmd_component_types,
 )
+from ros2_daemon import (
+    cmd_daemon_status,
+    cmd_daemon_start,
+    cmd_daemon_stop,
+)
 from ros2_control import (
     cmd_control_list_controller_types,
     cmd_control_list_controllers,
@@ -1308,6 +1313,15 @@ def build_parser():
 
     compsub.add_parser("types", help="List all registered rclcpp composable node types (no graph required)")
 
+    # ------------------------------------------------------------------
+    # daemon
+    # ------------------------------------------------------------------
+    daemon = sub.add_parser("daemon", help="ROS 2 daemon lifecycle management")
+    daemonsub = daemon.add_subparsers(dest="subcommand")
+    daemonsub.add_parser("status", help="Check whether the ROS 2 daemon is running")
+    daemonsub.add_parser("start",  help="Start the ROS 2 daemon")
+    daemonsub.add_parser("stop",   help="Stop the ROS 2 daemon")
+
     return parser
 
 
@@ -1456,6 +1470,10 @@ DISPATCH = {
     ("bag", "info"): cmd_bag_info,
     # component
     ("component", "types"): cmd_component_types,
+    # daemon
+    ("daemon", "status"): cmd_daemon_status,
+    ("daemon", "start"):  cmd_daemon_start,
+    ("daemon", "stop"):   cmd_daemon_stop,
 }
 
 

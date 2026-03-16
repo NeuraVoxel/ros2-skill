@@ -94,7 +94,7 @@ This rule exists because:
 **Step 0 — Environment and domain sanity (containerised / multi-system environments):**
 Before anything else, verify the ROS 2 environment is coherent:
 - If `nodes list` or `topics list` returns an unexpectedly large or irrelevant set of names, the `ROS_DOMAIN_ID` may be colliding with another system. Default domain ID is `0`. In container-alongside-host deployments, both sides default to `0` and see each other's nodes — this is the most common container misconfiguration. Verify with the host before proceeding.
-- If the doctor command (Step 1) reports "ROS daemon not running" or "no nodes found" despite the robot stack being up, the daemon may need restarting: `ros2 daemon start` (raw shell command — ros2_cli.py has no daemon management command; this is the one permitted exception under Rule 2). After restarting, re-run doctor before continuing.
+- If the doctor command (Step 1) reports "ROS daemon not running" or "no nodes found" despite the robot stack being up, the daemon may need restarting: run `daemon status` to confirm, then `daemon start` to restart; verify with `daemon status` after. Re-run doctor before continuing.
 - In containerised environments, `ROS_LOCALHOST_ONLY` being set to `1` isolates all communication to localhost — cross-container and cross-host topics will be invisible. If discovery returns no nodes despite the stack being up, check whether this variable is set in the environment.
 
 **Step 1 — Run a health check:**
@@ -941,7 +941,7 @@ Motion command received
 | "give me a full system overview / system summary / robot status overview / what's the full state" | Full system snapshot | `doctor` + `topics list` + `nodes list` + `control list-controllers` + `lifecycle nodes` |
 | "test connectivity / test DDS / test network / test multicast / DDS reachability check" | Test DDS multicast connectivity | `doctor hello` |
 | "check skill version / what version is this / what version of ros2_cli / skill info" | Get ros2_cli version | `version` |
-| "is the daemon running / is ROS daemon up / ROS daemon status / daemon health / restart daemon / start daemon" | Check / restart the ROS 2 daemon (note: daemon management is a raw shell command — Rule 2 exception) | `doctor` (daemon health shown) — if daemon is down, restart with shell: `ros2 daemon start` |
+| "is the daemon running / is ROS daemon up / ROS daemon status / daemon health / restart daemon / start daemon / stop daemon" | Check or control the ROS 2 daemon | `daemon status` to check; `daemon start` to start; `daemon stop` to stop |
 | "what domain ID / ROS domain / what's ROS_DOMAIN_ID / which domain is active / domain collision / wrong nodes appearing" | Check ROS domain isolation | Inspect `ROS_DOMAIN_ID` env variable; run `nodes list` and verify expected nodes appear; if unexpected nodes from other systems appear, check domain ID collision — see Rule 0.1 Step 0 |
 | "is ROS localhost only / is ROS isolated to localhost / can I reach across containers / cross-container ROS / is ROS_LOCALHOST_ONLY set" | Check cross-host/container visibility | Inspect `ROS_LOCALHOST_ONLY` env variable; if set to `1`, cross-container and cross-host topics are invisible — see Rule 0.1 Step 0 |
 | "run tests / run test suite / run the tests / test package X / check if tests pass / execute tests / run unit tests / run integration tests / colcon test" | Run package tests (shell command — Rule 2 exception; ros2_cli.py has no test runner) | Shell: `colcon test --packages-select <pkg>` then `colcon test-result --verbose` to show failures |

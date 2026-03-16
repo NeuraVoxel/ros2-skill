@@ -108,6 +108,11 @@ python3 {baseDir}/scripts/ros2_cli.py bag info --help
 
 # component (no live ROS 2 graph required)
 python3 {baseDir}/scripts/ros2_cli.py component types --help
+
+# daemon (no live ROS 2 graph required)
+python3 {baseDir}/scripts/ros2_cli.py daemon status --help
+python3 {baseDir}/scripts/ros2_cli.py daemon start --help
+python3 {baseDir}/scripts/ros2_cli.py daemon stop --help
 ```
 
 **Rule:** If you are about to use a flag and you have any doubt it exists, run `--help` for that subcommand first. Never guess flag names.
@@ -3542,6 +3547,97 @@ Error (`ament_index_python` not installed):
 {
   "error": "ament_index_python is required: pip install ament-index-python",
   "detail": "No module named 'ament_index_python'"
+}
+```
+
+---
+
+## daemon status
+
+Check whether the ROS 2 daemon is running.
+
+**No live ROS 2 graph required.** Reads the domain ID from `ROS_DOMAIN_ID` (default 0). Queries the `ros2cli` Python API first; falls back to PID file discovery in `~/.ros/` if `ros2cli` is not available.
+
+**ROS 2 CLI equivalent:** `ros2 daemon status`
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py daemon status
+```
+
+Output (running):
+```json
+{"status": "running", "domain_id": 0, "pid": 12345}
+```
+
+Output (not running):
+```json
+{"status": "not_running", "domain_id": 0}
+```
+
+---
+
+## daemon start
+
+Start the ROS 2 daemon if it is not already running.
+
+**No live ROS 2 graph required.** Uses `ros2cli.daemon.spawn_daemon()`. Idempotent: returns `already_running` immediately if the daemon is already up.
+
+**ROS 2 CLI equivalent:** `ros2 daemon start`
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py daemon start
+```
+
+Output (started):
+```json
+{"status": "started", "domain_id": 0, "pid": 12345}
+```
+
+Output (already running):
+```json
+{"status": "already_running", "domain_id": 0, "pid": 12345}
+```
+
+Output (ros2cli unavailable):
+```json
+{
+  "error": "ros2cli Python package not available",
+  "hint": "Install ros2cli or run 'ros2 daemon start' in a shell",
+  "domain_id": 0
+}
+```
+
+---
+
+## daemon stop
+
+Stop the ROS 2 daemon.
+
+**No live ROS 2 graph required.** Uses `ros2cli.daemon.shutdown_daemon()` if available; falls back to `SIGTERM` via PID file. Idempotent: returns `not_running` immediately if the daemon is already stopped.
+
+**ROS 2 CLI equivalent:** `ros2 daemon stop`
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py daemon stop
+```
+
+Output (stopped):
+```json
+{"status": "stopped", "domain_id": 0}
+```
+
+Output (not running):
+```json
+{"status": "not_running", "domain_id": 0}
+```
+
+Output (stop signal sent, daemon still exiting):
+```json
+{
+  "status": "stop_requested",
+  "domain_id": 0,
+  "note": "Daemon may take a moment to exit",
+  "pid": 12345
 }
 ```
 
