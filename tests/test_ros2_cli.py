@@ -1215,9 +1215,9 @@ class TestArgumentIntrospection(unittest.TestCase):
     def test_tf_lookup_help_exits_zero(self):
         self._assert_help_exits_zero("tf", "lookup")
 
-    def test_topics_subscribe_requires_topic(self):
-        """topics subscribe without a topic positional must fail — not silently return None."""
-        self._assert_missing_required_fails("topics", "subscribe")
+    def test_topics_type_requires_topic(self):
+        """topics type requires a topic positional (subscribe uses nargs='?' for auto-discovery)."""
+        self._assert_missing_required_fails("topics", "type")
 
     def test_params_set_requires_name_and_value(self):
         """params set without name:param and value must fail."""
