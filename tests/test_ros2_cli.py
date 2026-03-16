@@ -689,10 +689,17 @@ class TestBagParsing(unittest.TestCase):
 
 
 class TestBagMetadataLogic(unittest.TestCase):
-    """Pure-Python tests for ros2_bag helpers — no rclpy required."""
+    """Pure-Python logic tests for ros2_bag helpers.
+
+    No rclpy calls are made by the functions under test, but ros2_utils
+    (imported by ros2_bag) calls sys.exit(1) when rclpy is absent, so the
+    rclpy guard is still required to import the module safely.
+    """
 
     @classmethod
     def setUpClass(cls):
+        if not check_rclpy_available():
+            raise unittest.SkipTest("rclpy not available - requires ROS 2 environment")
         import ros2_bag
         cls.ros2_bag = ros2_bag
 
@@ -797,10 +804,17 @@ class TestComponentParsing(unittest.TestCase):
 
 
 class TestComponentTypesLogic(unittest.TestCase):
-    """Pure-Python tests for ros2_component — no rclpy required."""
+    """Pure-Python logic tests for ros2_component.
+
+    No rclpy calls are made by the functions under test, but ros2_utils
+    (imported by ros2_component) calls sys.exit(1) when rclpy is absent, so
+    the rclpy guard is still required to import the module safely.
+    """
 
     @classmethod
     def setUpClass(cls):
+        if not check_rclpy_available():
+            raise unittest.SkipTest("rclpy not available - requires ROS 2 environment")
         import ros2_component
         cls.ros2_component = ros2_component
 
@@ -871,6 +885,638 @@ class TestComponentTypesLogic(unittest.TestCase):
         self.assertIn("warnings", result)
         self.assertEqual(len(result["warnings"]), 1)
         self.assertEqual(result["warnings"][0]["package"], "bad_pkg")
+
+
+class TestBagInfoCommand(unittest.TestCase):
+    """End-to-end tests for cmd_bag_info.
+
+    Tests the full function including metadata parsing, field extraction,
+    duration conversion, topic sorting, compression handling, and every
+    error path.  Uses real tempfiles + PyYAML so the filesystem code is
+    exercised without a live ROS 2 graph.
+
+    Note: the functions under test make no rclpy calls, but ros2_utils
+    (imported by ros2_bag) calls sys.exit(1) when rclpy is absent, so
+    the rclpy guard is required to import the module safely.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        if not check_rclpy_available():
+            raise unittest.SkipTest("rclpy not available - requires ROS 2 environment")
+        import ros2_bag
+        cls.ros2_bag = ros2_bag
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _skip_if_no_yaml(self):
+        try:
+            import yaml  # noqa: F401
+        except ImportError:
+            raise unittest.SkipTest("PyYAML not available")
+
+    def _write_bag(self, tmpdir, meta):
+        import pathlib
+        import yaml
+        with open(pathlib.Path(tmpdir) / "metadata.yaml", "w") as fh:
+            yaml.dump(meta, fh)
+
+    def _base_meta(self, **updates):
+        """Return a minimal valid metadata dict with optional field overrides."""
+        info = {
+            "duration":         {"nanoseconds": 10_000_000_000},
+            "starting_time":    {"nanoseconds_since_epoch": 1_700_000_000_000_000_000},
+            "storage_identifier": "sqlite3",
+            "message_count":    150,
+            "topics_with_message_count": [],
+        }
+        info.update(updates)
+        return {"rosbag2_bagfile_information": info}
+
+    def _run(self, bag_path):
+        import types
+        captured = []
+        with patch("ros2_bag.output", side_effect=captured.append):
+            self.ros2_bag.cmd_bag_info(types.SimpleNamespace(bag_path=bag_path))
+        self.assertEqual(len(captured), 1)
+        return captured[0]
+
+    # ------------------------------------------------------------------
+    # Valid bag — field presence and values
+    # ------------------------------------------------------------------
+
+    def test_valid_bag_required_fields_present(self):
+        """All required top-level output fields are present for a valid bag."""
+        self._skip_if_no_yaml()
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_bag(tmpdir, self._base_meta())
+            result = self._run(tmpdir)
+        for field in ("bag_path", "storage_identifier", "duration",
+                      "starting_time", "message_count", "topic_count", "topics"):
+            self.assertIn(field, result)
+
+    def test_valid_bag_duration_seconds_conversion(self):
+        """duration.seconds is correctly derived from nanoseconds."""
+        self._skip_if_no_yaml()
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_bag(tmpdir, self._base_meta(duration={"nanoseconds": 5_500_000_000}))
+            result = self._run(tmpdir)
+        self.assertAlmostEqual(result["duration"]["seconds"], 5.5)
+        self.assertEqual(result["duration"]["nanoseconds"], 5_500_000_000)
+
+    def test_valid_bag_starting_time_preserved(self):
+        """starting_time nanoseconds_since_epoch value is passed through unchanged."""
+        self._skip_if_no_yaml()
+        import tempfile
+        ns = 1_700_000_000_123_456_789
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_bag(tmpdir, self._base_meta(
+                starting_time={"nanoseconds_since_epoch": ns}
+            ))
+            result = self._run(tmpdir)
+        self.assertEqual(result["starting_time"]["nanoseconds_since_epoch"], ns)
+
+    def test_valid_bag_storage_identifier(self):
+        """storage_identifier is correctly read for both sqlite3 and mcap."""
+        self._skip_if_no_yaml()
+        import tempfile
+        for storage in ("sqlite3", "mcap"):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                self._write_bag(tmpdir, self._base_meta(storage_identifier=storage))
+                result = self._run(tmpdir)
+            self.assertEqual(result["storage_identifier"], storage)
+
+    def test_valid_bag_message_count(self):
+        """message_count in output matches the metadata value."""
+        self._skip_if_no_yaml()
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_bag(tmpdir, self._base_meta(message_count=999))
+            result = self._run(tmpdir)
+        self.assertEqual(result["message_count"], 999)
+
+    def test_valid_bag_path_is_absolute(self):
+        """bag_path in output is the resolved absolute path."""
+        self._skip_if_no_yaml()
+        import tempfile, pathlib
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_bag(tmpdir, self._base_meta())
+            result = self._run(tmpdir)
+        self.assertTrue(pathlib.Path(result["bag_path"]).is_absolute())
+
+    # ------------------------------------------------------------------
+    # Topic handling
+    # ------------------------------------------------------------------
+
+    def test_topics_sorted_alphabetically(self):
+        """Topics in output are sorted alphabetically by name regardless of input order."""
+        self._skip_if_no_yaml()
+        import tempfile
+        topics = [
+            {"topic_metadata": {"name": "/scan",    "type": "sensor_msgs/msg/LaserScan", "serialization_format": "cdr", "offered_qos_profiles": ""}, "message_count": 10},
+            {"topic_metadata": {"name": "/cmd_vel", "type": "geometry_msgs/msg/Twist",   "serialization_format": "cdr", "offered_qos_profiles": ""}, "message_count": 50},
+            {"topic_metadata": {"name": "/odom",    "type": "nav_msgs/msg/Odometry",     "serialization_format": "cdr", "offered_qos_profiles": ""}, "message_count": 100},
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_bag(tmpdir, self._base_meta(topics_with_message_count=topics))
+            result = self._run(tmpdir)
+        names = [t["name"] for t in result["topics"]]
+        self.assertEqual(names, sorted(names))
+        self.assertEqual(names, ["/cmd_vel", "/odom", "/scan"])
+
+    def test_topic_count_always_matches_topics_list_length(self):
+        """topic_count == len(topics) for 0, 1, and N topics."""
+        self._skip_if_no_yaml()
+        import tempfile
+        for n in (0, 1, 5):
+            topics = [
+                {"topic_metadata": {"name": f"/t{i}", "type": "std_msgs/msg/String",
+                                    "serialization_format": "cdr", "offered_qos_profiles": ""},
+                 "message_count": i}
+                for i in range(n)
+            ]
+            with tempfile.TemporaryDirectory() as tmpdir:
+                self._write_bag(tmpdir, self._base_meta(topics_with_message_count=topics))
+                result = self._run(tmpdir)
+            self.assertEqual(result["topic_count"], n)
+            self.assertEqual(result["topic_count"], len(result["topics"]))
+
+    def test_topic_entry_has_all_required_fields(self):
+        """Each topic dict contains name, type, serialization_format, offered_qos_profiles, message_count."""
+        self._skip_if_no_yaml()
+        import tempfile
+        topics = [
+            {"topic_metadata": {"name": "/cmd_vel", "type": "geometry_msgs/msg/Twist",
+                                "serialization_format": "cdr",
+                                "offered_qos_profiles": "- history: 1\n"},
+             "message_count": 42},
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_bag(tmpdir, self._base_meta(topics_with_message_count=topics))
+            result = self._run(tmpdir)
+        topic = result["topics"][0]
+        for field in ("name", "type", "serialization_format", "offered_qos_profiles", "message_count"):
+            self.assertIn(field, topic)
+        self.assertEqual(topic["name"], "/cmd_vel")
+        self.assertEqual(topic["message_count"], 42)
+
+    # ------------------------------------------------------------------
+    # Compression
+    # ------------------------------------------------------------------
+
+    def test_compression_fields_present_when_set(self):
+        """compression_format and compression_mode appear when the metadata has them."""
+        self._skip_if_no_yaml()
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_bag(tmpdir, self._base_meta(
+                compression_format="zstd", compression_mode="file"
+            ))
+            result = self._run(tmpdir)
+        self.assertEqual(result["compression_format"], "zstd")
+        self.assertEqual(result["compression_mode"], "file")
+
+    def test_compression_fields_absent_when_not_set(self):
+        """compression_format and compression_mode are absent when metadata omits them."""
+        self._skip_if_no_yaml()
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_bag(tmpdir, self._base_meta())  # no compression keys
+            result = self._run(tmpdir)
+        self.assertNotIn("compression_format", result)
+        self.assertNotIn("compression_mode", result)
+
+    # ------------------------------------------------------------------
+    # Error paths
+    # ------------------------------------------------------------------
+
+    def test_nonexistent_path_returns_error_with_hint(self):
+        """A nonexistent bag path returns {"error": ..., "hint": ...} — never raises."""
+        result = self._run("/does/not/exist/bag")
+        self.assertIn("error", result)
+        self.assertIn("hint", result)
+        self.assertIsInstance(result["error"], str)
+        self.assertGreater(len(result["error"]), 0)
+
+    def test_empty_directory_returns_error_with_hint(self):
+        """A directory with no metadata.yaml returns {"error": ..., "hint": ...}."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = self._run(tmpdir)
+        self.assertIn("error", result)
+        self.assertIn("hint", result)
+
+    def test_cmd_bag_info_never_raises(self):
+        """cmd_bag_info catches all exceptions — no unhandled exception escapes."""
+        import tempfile, types
+        for bad_path in ("/does/not/exist", ""):
+            try:
+                captured = []
+                with patch("ros2_bag.output", side_effect=captured.append):
+                    self.ros2_bag.cmd_bag_info(types.SimpleNamespace(bag_path=bad_path))
+                self.assertGreater(len(captured), 0, f"No output for path '{bad_path}'")
+                self.assertIn("error", captured[0], f"No 'error' key for path '{bad_path}'")
+            except Exception as exc:
+                self.fail(f"cmd_bag_info raised unexpectedly for '{bad_path}': {exc}")
+
+    def test_metadata_yaml_path_accepted_directly(self):
+        """Passing the metadata.yaml file path directly also works."""
+        self._skip_if_no_yaml()
+        import tempfile, pathlib
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_bag(tmpdir, self._base_meta(storage_identifier="mcap"))
+            meta_path = str(pathlib.Path(tmpdir) / "metadata.yaml")
+            result = self._run(meta_path)
+        self.assertEqual(result["storage_identifier"], "mcap")
+        self.assertNotIn("error", result)
+
+
+class TestArgumentIntrospection(unittest.TestCase):
+    """Verify every registered subcommand accepts --help (exit 0) and that
+    required positional arguments are enforced (non-zero exit) rather than
+    silently coerced to None.
+
+    Covers the 'no invention of arguments' and 'ambiguity handling' gaps:
+    if an agent passes an unrecognised flag the parser must reject it,
+    and if a required arg is omitted the parser must fail loudly.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        if not check_rclpy_available():
+            raise unittest.SkipTest("rclpy not available - requires ROS 2 environment")
+        import ros2_cli
+        cls.ros2_cli = ros2_cli
+        cls.parser = ros2_cli.build_parser()
+
+    def _assert_help_exits_zero(self, *args):
+        with patch("sys.stdout", new_callable=StringIO), \
+             self.assertRaises(SystemExit) as cm:
+            self.parser.parse_args(list(args) + ["--help"])
+        self.assertEqual(cm.exception.code, 0,
+                         f"Expected SystemExit(0) for {args!r} --help")
+
+    def _assert_missing_required_fails(self, *args):
+        with patch("sys.stderr", new_callable=StringIO), \
+             self.assertRaises(SystemExit) as cm:
+            self.parser.parse_args(list(args))
+        self.assertNotEqual(cm.exception.code, 0,
+                            f"Expected non-zero exit for missing required arg {args!r}")
+
+    def _assert_unknown_flag_fails(self, *args):
+        with patch("sys.stderr", new_callable=StringIO), \
+             self.assertRaises(SystemExit) as cm:
+            self.parser.parse_args(list(args))
+        self.assertNotEqual(cm.exception.code, 0,
+                            f"Expected non-zero exit for unknown flag in {args!r}")
+
+    # ------------------------------------------------------------------
+    # bag
+    # ------------------------------------------------------------------
+
+    def test_bag_info_help_exits_zero(self):
+        self._assert_help_exits_zero("bag", "info")
+
+    def test_bag_info_requires_bag_path(self):
+        """bag info without a positional argument must fail — not silently return None."""
+        self._assert_missing_required_fails("bag", "info")
+
+    def test_bag_info_rejects_unknown_flags(self):
+        """An agent must not invent flags; unknown flags are rejected."""
+        self._assert_unknown_flag_fails("bag", "info", "/path", "--invented-flag")
+
+    # ------------------------------------------------------------------
+    # component
+    # ------------------------------------------------------------------
+
+    def test_component_types_help_exits_zero(self):
+        self._assert_help_exits_zero("component", "types")
+
+    def test_component_types_rejects_unknown_flags(self):
+        self._assert_unknown_flag_fails("component", "types", "--invented-flag")
+
+    # ------------------------------------------------------------------
+    # Core commands — spot checks to catch global parser breakage
+    # ------------------------------------------------------------------
+
+    def test_estop_help_exits_zero(self):
+        self._assert_help_exits_zero("estop")
+
+    def test_topics_list_help_exits_zero(self):
+        self._assert_help_exits_zero("topics", "list")
+
+    def test_nodes_list_help_exits_zero(self):
+        self._assert_help_exits_zero("nodes", "list")
+
+    def test_tf_lookup_help_exits_zero(self):
+        self._assert_help_exits_zero("tf", "lookup")
+
+    def test_topics_subscribe_requires_topic(self):
+        """topics subscribe without a topic positional must fail — not silently return None."""
+        self._assert_missing_required_fails("topics", "subscribe")
+
+    def test_params_set_requires_name_and_value(self):
+        """params set without name:param and value must fail."""
+        self._assert_missing_required_fails("params", "set")
+
+    def test_all_dispatch_handlers_are_callable(self):
+        """Every handler in DISPATCH is callable — no stale string references."""
+        for key, handler in self.ros2_cli.DISPATCH.items():
+            self.assertTrue(callable(handler),
+                            f"DISPATCH[{key!r}] is not callable: {handler!r}")
+
+
+class TestErrorOutputStructure(unittest.TestCase):
+    """Verify that all error output dicts from command functions consistently
+    include the 'error' key with a non-empty string value.
+
+    Covers the 'critical error workflow' gap: any failure in a command must
+    produce a structured JSON-serialisable error rather than an uncaught
+    exception that would crash the agent.
+
+    Note: the functions under test make no rclpy calls, but ros2_utils
+    calls sys.exit(1) when rclpy is absent, so the rclpy guard is required.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        if not check_rclpy_available():
+            raise unittest.SkipTest("rclpy not available - requires ROS 2 environment")
+        import ros2_bag
+        import ros2_component
+        cls.ros2_bag = ros2_bag
+        cls.ros2_component = ros2_component
+
+    def _capture_once(self, module_name, func, args):
+        """Run func(args), assert output() was called exactly once, return the dict."""
+        captured = []
+        with patch(f"{module_name}.output", side_effect=captured.append):
+            func(args)
+        self.assertEqual(
+            len(captured), 1,
+            f"{func.__name__} must call output() exactly once per invocation"
+        )
+        return captured[0]
+
+    # ------------------------------------------------------------------
+    # bag info error paths
+    # ------------------------------------------------------------------
+
+    def test_bag_info_nonexistent_path_error_key(self):
+        import types
+        result = self._capture_once(
+            "ros2_bag", self.ros2_bag.cmd_bag_info,
+            types.SimpleNamespace(bag_path="/does/not/exist")
+        )
+        self.assertIn("error", result)
+        self.assertIsInstance(result["error"], str)
+        self.assertGreater(len(result["error"]), 0)
+
+    def test_bag_info_missing_metadata_has_hint_key(self):
+        """FileNotFoundError path must include both 'error' and 'hint' keys."""
+        import tempfile, types
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = self._capture_once(
+                "ros2_bag", self.ros2_bag.cmd_bag_info,
+                types.SimpleNamespace(bag_path=tmpdir)
+            )
+        self.assertIn("error", result)
+        self.assertIn("hint", result)
+        self.assertIsInstance(result["hint"], str)
+        self.assertGreater(len(result["hint"]), 0)
+
+    def test_bag_info_error_is_never_none(self):
+        """The 'error' value is always a non-None, non-empty string."""
+        import types
+        for bad_path in ("/no/such/path", ""):
+            result = self._capture_once(
+                "ros2_bag", self.ros2_bag.cmd_bag_info,
+                types.SimpleNamespace(bag_path=bad_path)
+            )
+            self.assertIn("error", result)
+            self.assertIsNotNone(result["error"])
+            self.assertGreater(len(result["error"]), 0)
+
+    def test_bag_info_output_called_exactly_once_on_error(self):
+        """output() is called exactly once even on error — not zero or twice."""
+        import types
+        captured = []
+        with patch("ros2_bag.output", side_effect=captured.append):
+            self.ros2_bag.cmd_bag_info(types.SimpleNamespace(bag_path="/no/such/path"))
+        self.assertEqual(len(captured), 1)
+
+    # ------------------------------------------------------------------
+    # component types error paths
+    # ------------------------------------------------------------------
+
+    def test_component_types_no_ament_error_and_detail_keys(self):
+        """ImportError path must produce {"error": ..., "detail": ...}."""
+        import sys
+        captured = []
+        with patch.dict(sys.modules, {"ament_index_python": None}), \
+             patch("ros2_component.output", side_effect=captured.append):
+            self.ros2_component.cmd_component_types(None)
+        result = captured[0]
+        self.assertIn("error", result)
+        self.assertIn("detail", result)
+        self.assertIsInstance(result["error"], str)
+        self.assertIsInstance(result["detail"], str)
+
+    def test_component_types_ament_index_failure_error_key(self):
+        """get_resources() raising an exception must produce {"error": ...}."""
+        import sys
+        from unittest.mock import MagicMock
+        mock_ament = MagicMock()
+        mock_ament.get_resources.side_effect = RuntimeError("ament index corrupt")
+        captured = []
+        with patch.dict(sys.modules, {"ament_index_python": mock_ament}), \
+             patch("ros2_component.output", side_effect=captured.append):
+            self.ros2_component.cmd_component_types(None)
+        self.assertIn("error", captured[0])
+
+    def test_component_types_output_called_exactly_once_on_error(self):
+        """output() is called exactly once per invocation even on failure."""
+        import sys
+        captured = []
+        with patch.dict(sys.modules, {"ament_index_python": None}), \
+             patch("ros2_component.output", side_effect=captured.append):
+            self.ros2_component.cmd_component_types(None)
+        self.assertEqual(len(captured), 1)
+
+
+class TestComponentTypesOutputValidation(unittest.TestCase):
+    """Structural validation of cmd_component_types output.
+
+    Covers the 'Component types command output validation' gap: verifies that
+    the output dict is always well-formed regardless of ament index content,
+    including edge cases (empty index, comments, blank lines, partial errors).
+
+    Note: the functions under test make no rclpy calls, but ros2_utils
+    calls sys.exit(1) when rclpy is absent, so the rclpy guard is required.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        if not check_rclpy_available():
+            raise unittest.SkipTest("rclpy not available - requires ROS 2 environment")
+        import ros2_component
+        cls.ros2_component = ros2_component
+
+    def _mock_ament(self, packages):
+        """Build a mock ament module from {pkg_name: [type_name, ...]} dict."""
+        from unittest.mock import MagicMock
+        mock = MagicMock()
+        mock.get_resources.return_value = {pkg: "/path" for pkg in packages}
+
+        def get_resource(resource_type, pkg):
+            lines = "\n".join(packages[pkg]) + "\n"
+            return (lines, "/path")
+
+        mock.get_resource.side_effect = get_resource
+        return mock
+
+    def _run(self, mock_ament):
+        import sys
+        captured = []
+        with patch.dict(sys.modules, {"ament_index_python": mock_ament}), \
+             patch("ros2_component.output", side_effect=captured.append):
+            self.ros2_component.cmd_component_types(None)
+        self.assertEqual(len(captured), 1)
+        return captured[0]
+
+    # ------------------------------------------------------------------
+    # Structure
+    # ------------------------------------------------------------------
+
+    def test_output_has_required_keys(self):
+        """Output always contains 'components', 'total', and 'packages'."""
+        result = self._run(self._mock_ament({"pkg_a": ["pkg_a::NodeA"]}))
+        for key in ("components", "total", "packages"):
+            self.assertIn(key, result)
+
+    def test_empty_ament_index_produces_empty_result(self):
+        """When no packages export components, result is empty — no crash."""
+        from unittest.mock import MagicMock
+        mock = MagicMock()
+        mock.get_resources.return_value = {}
+        result = self._run(mock)
+        self.assertEqual(result["total"], 0)
+        self.assertEqual(result["components"], [])
+        self.assertEqual(result["packages"], [])
+        self.assertNotIn("warnings", result)
+
+    def test_total_equals_len_components(self):
+        """total always equals len(components) — never stale."""
+        for n_types in (1, 3, 7):
+            types_list = [f"pkg::Node{i}" for i in range(n_types)]
+            result = self._run(self._mock_ament({"my_pkg": types_list}))
+            self.assertEqual(result["total"], n_types)
+            self.assertEqual(result["total"], len(result["components"]))
+
+    def test_packages_field_is_sorted_alphabetically(self):
+        """The 'packages' list is always sorted, regardless of dict iteration order."""
+        result = self._run(self._mock_ament({
+            "z_pkg": ["z_pkg::Z"],
+            "a_pkg": ["a_pkg::A"],
+            "m_pkg": ["m_pkg::M"],
+        }))
+        self.assertEqual(result["packages"], sorted(result["packages"]))
+        self.assertEqual(result["packages"][0], "a_pkg")
+        self.assertEqual(result["packages"][-1], "z_pkg")
+
+    def test_packages_field_contains_only_unique_names(self):
+        """Each package name appears exactly once in 'packages'."""
+        result = self._run(self._mock_ament({
+            "pkg_a": ["pkg_a::N1", "pkg_a::N2", "pkg_a::N3"],
+        }))
+        self.assertEqual(len(result["packages"]), 1)
+        self.assertEqual(result["packages"], ["pkg_a"])
+
+    def test_each_component_entry_has_package_and_type_name(self):
+        """Every component dict has non-empty 'package' and 'type_name' strings."""
+        result = self._run(self._mock_ament({
+            "my_pkg": ["my_pkg::Alpha", "my_pkg::Beta"],
+        }))
+        for comp in result["components"]:
+            self.assertIn("package", comp)
+            self.assertIn("type_name", comp)
+            self.assertIsInstance(comp["package"], str)
+            self.assertIsInstance(comp["type_name"], str)
+            self.assertGreater(len(comp["package"]), 0)
+            self.assertGreater(len(comp["type_name"]), 0)
+
+    def test_comment_and_blank_lines_are_excluded(self):
+        """Comment lines (# …) and blank lines in resource files are never emitted."""
+        from unittest.mock import MagicMock
+        mock = MagicMock()
+        mock.get_resources.return_value = {"pkg": "/path"}
+        mock.get_resource.return_value = (
+            "# This is a comment\n"
+            "pkg::RealNode\n"
+            "\n"
+            "   \n"           # whitespace-only line
+            "# another comment\n"
+            "pkg::AnotherNode\n",
+            "/path",
+        )
+        result = self._run(mock)
+        self.assertEqual(result["total"], 2)
+        type_names = [c["type_name"] for c in result["components"]]
+        self.assertIn("pkg::RealNode", type_names)
+        self.assertIn("pkg::AnotherNode", type_names)
+
+    def test_multi_package_components_ordered_by_package(self):
+        """Components from multiple packages are grouped/sorted by package name."""
+        result = self._run(self._mock_ament({
+            "beta_pkg":  ["beta_pkg::Node"],
+            "alpha_pkg": ["alpha_pkg::Node"],
+        }))
+        pkg_order = [c["package"] for c in result["components"]]
+        self.assertEqual(pkg_order, sorted(pkg_order))
+
+    # ------------------------------------------------------------------
+    # Partial-failure resilience
+    # ------------------------------------------------------------------
+
+    def test_warnings_absent_on_clean_run(self):
+        """'warnings' key must not appear when all packages load without error."""
+        result = self._run(self._mock_ament({"good_pkg": ["good_pkg::Node"]}))
+        self.assertNotIn("warnings", result)
+
+    def test_warnings_contain_package_and_error_keys(self):
+        """Each warning entry has 'package' and 'error' keys."""
+        from unittest.mock import MagicMock
+        import sys
+        mock = MagicMock()
+        mock.get_resources.return_value = {
+            "good_pkg": "/path",
+            "bad_pkg":  "/path",
+        }
+
+        def get_resource(res_type, pkg):
+            if pkg == "bad_pkg":
+                raise RuntimeError("disk error")
+            return ("good_pkg::GoodNode\n", "/path")
+
+        mock.get_resource.side_effect = get_resource
+        captured = []
+        with patch.dict(sys.modules, {"ament_index_python": mock}), \
+             patch("ros2_component.output", side_effect=captured.append):
+            self.ros2_component.cmd_component_types(None)
+
+        result = captured[0]
+        self.assertIn("warnings", result)
+        warning = result["warnings"][0]
+        self.assertIn("package", warning)
+        self.assertIn("error", warning)
+        self.assertEqual(warning["package"], "bad_pkg")
+        # Good package still enumerated despite bad_pkg failing
+        self.assertEqual(result["total"], 1)
+        self.assertIn("good_pkg", result["packages"])
 
 
 if __name__ == "__main__":
