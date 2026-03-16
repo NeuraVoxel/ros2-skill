@@ -776,44 +776,98 @@ Motion command received
 
 | User says... | Agent interprets as... | Agent must... |
 |--------------|----------------------|---------------|
-| "What topics exist?" | List topics | Run `topics list` |
-| "What nodes exist?" | List nodes | Run `nodes list` |
-| "What services exist?" | List services | Run `services list` |
-| "What actions exist?" | List actions | Run `actions list` |
-| "Read the LiDAR/scan" | Subscribe to LaserScan | Find LaserScan topic → subscribe |
-| "Read odometry/position" | Subscribe to Odometry | Find Odometry topic → subscribe |
-| "Read camera/image" | Subscribe to Image/CompressedImage | Find Image topics → subscribe |
-| "Read joint states/positions" | Subscribe to JointState | Find JointState topic → subscribe |
-| "Read IMU/accelerometer" | Subscribe to Imu | Find Imu topic → subscribe |
-| "Read battery/power" | Subscribe to BatteryState | Find BatteryState topic → subscribe |
-| "Read joystick/gamepad" | Subscribe to Joy | Find Joy topic → subscribe |
-| "Check robot diagnostics/health" | Subscribe to diagnostics | Find /diagnostics topic → subscribe |
-| "Check TF/transforms" | Check TF topics | Find /tf, /tf_static topics → subscribe |
-| **Any motion word** + direction + **specific distance** (e.g. "move forward 1 m", "drive back 0.5 m", "go forward 2 metres") | Closed-loop distance if odom available, else timed open-loop | **Odom available** → `publish-until --field pose.pose.position --delta N --timeout <calc>`<br>**No odom** → `publish-sequence` with duration `N / v`; notify user |
-| **Any motion word** + direction + **specific angle** (e.g. "rotate 90°", "turn left 45 degrees", "spin right 1.57 rad") | Closed-loop rotation if odom available, else timed open-loop | **Odom available** → `publish-until --rotate ±N --degrees --timeout <calc>`<br>**No odom** → `publish-sequence` with duration `θ_rad / ω`; notify user |
-| **Any motion word** + direction, **no target** (e.g. "move forward", "drive ahead", "go left", "roll back") | Open-ended movement — run until stopped | `publish-sequence` with move payload then zero payload (regardless of odom availability — no delta target exists for `publish-until`) |
-| **Any motion word** with no direction or target (e.g. "move", "drive", "go") | Ambiguous quantity → ask once (Rule 5 condition 3) | Ask: *"Which direction, and how far or for how long?"* |
-| "Move arm/joint (manipulator)" | Publish JointTrajectory | Find JointTrajectory topic → publish |
-| "Control gripper" | Publish GripperCommand or JointTrajectory | Find gripper topic → publish |
-| "Stop the robot" | Publish zero velocity | Find Twist/TwistStamped → `topics type` to confirm → publish zeros |
-| "Emergency stop" | Publish zero velocity | Run `estop` command |
-| "Call /reset" | Call service | Find service → call |
-| "Navigate to..." | Send action | Find action → send goal |
-| "Execute trajectory" | Send action | Find FollowJointTrajectory or ExecuteTrajectory → send |
-| "Run launch file" | Launch file | Find package → find launch file → launch in tmux |
-| "List running launches" | List sessions | Run `launch list` |
-| "Kill launch" | Kill session | Run `launch kill <session>` |
-| "What controllers?" | List controllers | Run `control list-controllers` |
-| "What hardware?" | List hardware | Run `control list-hardware-components` |
-| "What lifecycle nodes?" | List managed nodes | Run `lifecycle nodes` |
-| "Check lifecycle state" | Get node state | Run `lifecycle get <node>` |
-| "Configure/activate lifecycle node" | Set lifecycle state | Run `lifecycle set <node> <transition>` |
-| "Run diagnostics/health check" | Run doctor | Run `doctor` |
-| "Test connectivity" | Run multicast test | Run `doctor hello` |
-| "What parameters?" | List params | Find node → `params list` |
-| "What is the max speed?" | Get params | Find controller → get velocity limits |
-| "Save/load parameter config" | Use presets | Run `params preset-save` / `params preset-load` |
-| "Check battery level" | Subscribe to BatteryState | Run `topics battery` or find BatteryState topic |
+| **— INTROSPECTION —** | | |
+| "what topics / what's publishing / list topics / show all topics" | List all active topics | `topics list` |
+| "what nodes / what's running / list nodes / what processes" | List all running nodes | `nodes list` |
+| "what services / list services / what services are available" | List all services | `services list` |
+| "what actions / list actions / what can the robot do" | List all actions | `actions list` |
+| "what controllers / list controllers / controller status / which controller is active" | List ros2_control controllers | `control list-controllers` |
+| "what hardware / hardware components / actuators / sensors available" | List hardware components | `control list-hardware-components` |
+| "what hardware interfaces / command interfaces / state interfaces" | List hardware interfaces | `control list-hardware-interfaces` |
+| "what controller types / available controller types" | List loadable controller types | `control list-controller-types` |
+| "what lifecycle nodes / managed nodes / list lifecycle" | List lifecycle-managed nodes | `lifecycle nodes` |
+| "what TF frames / list frames / what coordinate frames / show TF tree" | List all TF frames | `tf list` |
+| "what parameters / list params / show config / what settings does X have" | List parameters on a node | `nodes list` → `params list <node>` |
+| "what type is topic X / what message type does X use" | Get topic message type | `topics type <topic>` |
+| "show details of topic X / how many subscribers does X have / QoS of X" | Get topic details | `topics details <topic>` |
+| "what fields does X message have / show X structure / X message layout" | Get message field structure | `topics message <type>` or `interface show <type>` |
+| "give me X message template / X payload template / copy-paste template for X" | Get default message values | `interface proto <type>` |
+| "what does service X do / service X request fields / service X signature" | Get service request/response | `services details <service>` |
+| "what does action X take / action X goal fields / action X signature" | Get action goal/result/feedback | `actions details <action>` |
+| "what does node X do / topics of node X / services of node X" | Get node details | `nodes details <node>` |
+| "controller chain / how controllers connect / view controller chain" | View controller chain | `control view-controller-chains` |
+| **— READING / MONITORING —** | | |
+| "read / listen to / monitor / subscribe to / show me data from / what is X publishing" | Subscribe to a topic | `topics find <type>` → `topics subscribe <discovered_topic>` |
+| "read the LiDAR / scan data / laser scan / obstacles" | Subscribe to LaserScan | Find `sensor_msgs/msg/LaserScan` → subscribe |
+| "read odometry / where is the robot / current position / current pose / where am I" | Subscribe to Odometry | Find `nav_msgs/msg/Odometry` → subscribe (post-motion: Rule 8 protocol) |
+| "read camera / take a picture / capture image / take a photo / snap / grab a frame / screenshot" | Capture image | Find `sensor_msgs/msg/Image` + `CompressedImage` → `topics capture-image --topic <topic>` |
+| "read joint states / joint positions / joint angles" | Subscribe to JointState | Find `sensor_msgs/msg/JointState` → subscribe |
+| "read IMU / accelerometer / gyroscope / orientation data" | Subscribe to Imu | Find `sensor_msgs/msg/Imu` → subscribe |
+| "check battery / battery level / how much charge / power level / battery status" | Subscribe to BatteryState | `topics battery` (auto-discovers) or find `sensor_msgs/msg/BatteryState` |
+| "read joystick / gamepad input / joystick data" | Subscribe to Joy | Find `sensor_msgs/msg/Joy` → subscribe |
+| "check diagnostics / diagnostic status / what's wrong / robot health / hardware errors" | Subscribe to diagnostics | `topics diag` or find `/diagnostics` topic → subscribe |
+| "how fast is X publishing / topic rate / is X active / Hz of X" | Check topic publish rate | `topics hz <topic>` |
+| "bandwidth of X / how much data is X sending / throughput of X" | Check topic bandwidth | `topics bw <topic>` |
+| "latency of X / delay on X / how delayed is X" | Check topic delay | `topics delay <topic>` |
+| "where is X in Y frame / transform from X to Y / position of X relative to Y" | Look up TF transform | `tf list` (discover frames) → `tf lookup <source> <target>` |
+| "stream transform / monitor TF / watch transform from X to Y" | Echo TF transform continuously | `tf echo <source> <target>` |
+| "is TF updating / TF health / TF alive" | Monitor TF update rate | `tf monitor` |
+| "convert quaternion to euler / what's the roll pitch yaw / euler angles from quaternion" | Convert quaternion → euler | `tf euler-from-quaternion` |
+| "convert euler to quaternion / quaternion from roll pitch yaw" | Convert euler → quaternion | `tf quaternion-from-euler` |
+| "transform point / where is point X in frame Y" | Transform a point between frames | `tf transform-point` |
+| **— MOTION (mobile robot) —** | | |
+| **Any motion word** + direction + **specific distance** (e.g. "move forward 1 m", "drive back 0.5 m", "go forward 2 metres", "travel 3 m ahead") | Closed-loop distance if odom ≥ 5 Hz, else timed open-loop | **Odom available** → `publish-until --field pose.pose.position --delta N --timeout <calc>`<br>**No odom** → `publish-sequence` duration `N/v`; notify user |
+| **Any motion word** + direction + **specific angle** (e.g. "rotate 90°", "turn left 45 degrees", "spin right 1.57 rad", "pivot 180°") | Closed-loop rotation if odom ≥ 5 Hz, else timed open-loop | **Odom available** → `publish-until --rotate ±N --degrees --timeout <calc>`<br>**No odom** → `publish-sequence` duration `θ_rad/ω`; notify user |
+| **Any motion word** + direction, **no target** (e.g. "move forward", "drive ahead", "go left", "roll back", "head right") | Open-ended — run until stopped | `publish-sequence` move payload + zero payload |
+| **Any motion word**, no direction, no target (e.g. bare "move", "drive", "go") | Ambiguous — ask once (Rule 5 condition 3) | Ask: *"Which direction, and how far?"* |
+| "stop / halt / freeze / stop moving / hold position" | Publish zero velocity | Find Twist/TwistStamped → publish zeros |
+| "emergency stop / e-stop / STOP / kill velocity" | Emergency stop | `estop` |
+| **— MANIPULATOR / ARM —** | | |
+| "move arm / move joint / send trajectory / execute trajectory / move to pose" | Send JointTrajectory or action | Find `trajectory_msgs/msg/JointTrajectory` or `FollowJointTrajectory` action → send |
+| "control gripper / open gripper / close gripper / grip / release" | Publish GripperCommand or trajectory | Find `control_msgs/msg/GripperCommand` or gripper trajectory topic → publish |
+| **— SERVICES & ACTIONS —** | | |
+| "call service X / trigger X / invoke X / reset X / clear X / initialize X" | Call a ROS 2 service | `services find <type>` or `services list` → `services call <service> <json>` |
+| "navigate to / go to pose / move to coordinates / send navigation goal" | Send navigation action | `actions find <type>` → `actions send <action> <goal_json>` |
+| "cancel navigation / abort goal / stop action / cancel goal / preempt" | Cancel an action goal | `actions cancel <goal_id>` |
+| "watch service calls / monitor service X / echo service X" | Monitor service calls | `services echo <service>` |
+| "watch action / monitor action X / echo action feedback" | Monitor action feedback | `actions echo <action>` |
+| **— LAUNCH & NODE EXECUTION —** | | |
+| "start launch file / run launch file / launch X / bring up X / start bringup / start the robot / boot X / start X stack / spin up X" | Start a launch file in tmux | `launch new <package> <launch_file>` |
+| "list launches / what's launched / running sessions / what launch files are running / show active launches" | List active tmux launch sessions | `launch list` |
+| "stop launch / kill launch / kill session X / stop bringup / shut down X / tear down X" | Kill a tmux launch session | `launch kill <session>` |
+| "restart launch / restart bringup / restart session X" | Restart a tmux launch session | `launch restart <session>` |
+| "open foxglove / start foxglove / visualize robot / foxglove bridge" | Start Foxglove via launch | `launch foxglove` |
+| "start node X / run node X / run executable X / execute X node / spawn X node" | Run a single node | `run new <package> <executable>` |
+| **— PARAMETERS —** | | |
+| "what is X parameter / get X value / current value of X / what's X set to" | Get parameter value | `nodes list` → `params get <node:param>` |
+| "set X to Y / change X parameter / configure X to Y / update X setting / adjust X" | Set parameter value | `params describe` (type check) → `params set <node:param> <value>` → `params get` (verify) |
+| "describe X parameter / what type is X / valid range of X / is X read-only" | Describe parameter type and constraints | `params describe <node:param>` |
+| "dump parameters / export config / save current params / dump all params" | Dump all params from a node | `params dump <node>` |
+| "load parameters / restore config / load params from file" | Load params from YAML file | `params load <node> <file>` |
+| "delete parameter / remove param X" | Delete a parameter | `params delete <node:param>` |
+| "save parameter preset / save config preset / save settings as X / save preset" | Save parameter preset to file | `params preset-save` |
+| "load parameter preset / apply preset X / restore preset X / load saved settings" | Load parameter preset | `params preset-load <name>` |
+| "list presets / show saved presets / what presets exist" | List saved parameter presets | `params preset-list` |
+| "delete preset X / remove saved preset" | Delete a parameter preset | `params preset-delete <name>` |
+| **— CONTROLLERS (ros2_control) —** | | |
+| "load controller X / add controller X" | Load a controller into the controller manager | `control load-controller <name>` |
+| "unload controller X / remove controller X" | Unload a controller | `control unload-controller <name>` |
+| "configure controller X / initialize controller X / set controller X to inactive" | Configure (transition to inactive) | `control configure-controller <name>` |
+| "switch to X controller / activate X controller / enable X controller / use X controller / change controller to X" | Switch active controllers | `control list-controllers` → `control switch-controllers --activate <new> --deactivate <old> --strictness STRICT` |
+| "set controller state / deactivate controller X / stop controller X" | Set controller state directly | `control set-controller-state <name> <state>` |
+| "enable hardware / activate hardware component X / bring up hardware" | Set hardware component state | `control set-hardware-component-state <name> active` |
+| "disable hardware / deactivate hardware X" | Set hardware component state | `control set-hardware-component-state <name> inactive` |
+| **— LIFECYCLE NODES —** | | |
+| "check lifecycle state / what state is X / is X active / X node status" | Get lifecycle node state | `lifecycle get <node>` |
+| "configure X node / initialize X lifecycle node" | Lifecycle configure transition | `lifecycle set <node> configure` → verify `inactive` |
+| "activate X node / start X node / enable X node / bring up X node" | Lifecycle activate transition | `lifecycle set <node> activate` → verify `active` |
+| "deactivate X node / stop X node / disable X node / pause X node" | Lifecycle deactivate transition | `lifecycle set <node> deactivate` → verify `inactive` |
+| "clean up X node / reset X lifecycle / cleanup X" | Lifecycle cleanup transition | `lifecycle set <node> cleanup` → verify `unconfigured` |
+| "shut down X node / shutdown X" | Lifecycle shutdown transition | `lifecycle set <node> shutdown` → verify `finalized` |
+| **— DIAGNOSTICS & HEALTH —** | | |
+| "run health check / diagnose the robot / is everything OK / run diagnostics / check the system / ros2 doctor" | Run full ROS 2 health check | `doctor` |
+| "test connectivity / test DDS / test network / test multicast" | Test DDS multicast connectivity | `doctor hello` |
+| "check skill version / what version is this" | Get ros2_cli version | `version` |
 
 ### Step 2: Find What Exists
 
