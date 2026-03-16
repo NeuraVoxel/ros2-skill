@@ -43,10 +43,17 @@ Internal refactor: centralized rclpy lifecycle management via `ros2_context()`, 
 
 - `MSG_ALIASES` dict removed from `ros2_utils.py`; message type aliases (e.g. `twist` → `geometry_msgs/Twist`, `odom` → `nav_msgs/Odometry`) are no longer supported — use full type names
 
+### Internal — defensive module guards
+
+- Added `if __name__ == "__main__"` guards to all 17 internal `ros2_*.py` modules (`ros2_action`, `ros2_bag`, `ros2_component`, `ros2_control`, `ros2_daemon`, `ros2_doctor`, `ros2_interface`, `ros2_launch`, `ros2_lifecycle`, `ros2_multicast`, `ros2_node`, `ros2_param`, `ros2_run`, `ros2_service`, `ros2_tf`, `ros2_topic`, `ros2_utils`). Running any submodule directly now prints a clear error to stderr and exits with code 1 — no silent no-op. Error message derives the canonical CLI path from `__file__` via `os.path.abspath` + `os.path.dirname` so the shown invocation is correct regardless of working directory.
+
 ### Documentation
 
 - `README.md` — removed "Message Type Aliases" section; updated TF2 helper command list to use full names instead of removed short aliases
 - `references/COMMANDS.md` — removed stale alias references from the `topics message` command table and a broken link to the removed aliases section
+- `references/RULES.md` — Rule 2 updated: added explicit prohibition on running any `ros2_*.py` submodule directly; corrected description of what happens when a submodule is run (prints error and exits, not silent); generalised listed filenames to the `ros2_*.py` pattern
+- `SKILL.md` — corrected internal-modules callout: "produces no output and does nothing" → "prints an error to stderr and exits with code 1"; generalised listed filenames to the `ros2_*.py` pattern
+- `AGENTS.md` — new agent guide for ros2-skill; covers entry-point rules, session-start protocol, output folder conventions (`.artifacts/`, `.presets/`, `.profiles/`), core operational rules, safety, self-correction behaviour, troubleshooting table, and reference document index with RULES.md override priority
 
 ---
 
