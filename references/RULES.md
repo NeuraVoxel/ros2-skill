@@ -186,7 +186,7 @@ The failure mode to avoid: inventing a subcommand like `launch start` or a flag 
 
 **All ROS 2 operations must go through `ros2_cli.py`. Never call `ros2 topic list`, `ros2 node list`, `ros2 service call`, or any other `ros2 <command>` CLI directly.**
 
-**Never run individual module files directly.** `ros2_daemon.py`, `ros2_topic.py`, `ros2_param.py`, and every other `ros2_*.py` file in `scripts/` are **internal modules** — running them directly produces no output and does nothing. The only valid entry point is `ros2_cli.py`:
+**Never run any `ros2_*.py` file other than `ros2_cli.py` directly.** Every other file matching `ros2_*.py` in `scripts/` is a submodule — running one directly produces no output and does nothing. The only valid entry point is `ros2_cli.py`:
 ```bash
 python3 {baseDir}/scripts/ros2_cli.py <command> [subcommand] [args]
 ```
