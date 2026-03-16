@@ -239,10 +239,12 @@ Record the discovered topic name — call it `ODOM_TOPIC`.
 
 **Step 3 — Choose the execution method**
 
+**Closed-loop motion (`publish-until` with odometry monitoring) is always the required method when odometry is available.** Open-loop (`publish-sequence`) is a fallback of last resort, used only when odometry is confirmed unavailable. Never choose open-loop when an active `<ODOM_TOPIC>` has been found — even if the task "seems simple."
+
 | Situation | Method |
 |---|---|
-| Distance or angle specified **and** odometry found | `publish-until` with `--monitor <ODOM_TOPIC>` — closed loop, stops on sensor feedback |
-| Distance or angle specified **and** no odometry | `publish-sequence` with calculated duration — open loop. Tell the user: "No odometry found. Running open-loop. Distance/angle accuracy is not guaranteed." |
+| Distance or angle specified **and** odometry found | `publish-until` with `--monitor <ODOM_TOPIC>` — **closed loop, mandatory**; stops precisely on sensor feedback |
+| Distance or angle specified **and** no odometry | `publish-sequence` with calculated duration — **open loop, last resort only**. Notify user: *"No odometry found. Running open-loop. Distance/angle accuracy is not guaranteed."* |
 | No distance or angle specified (open-ended movement) | `publish-sequence` with a stop command as the final message |
 
 **Step 4 — Execute using only discovered names**
@@ -290,7 +292,7 @@ This applies without exception to:
 - Starting or stopping controllers
 - Any command where the intent and target are unambiguous
 
-**There are exactly two conditions that permit asking the user:**
+**There are exactly three conditions that permit asking the user:**
 
 1. **Genuine ambiguity that cannot be resolved by introspection:**
    - Multiple packages or launch files match and you cannot determine which one the user means
@@ -301,7 +303,12 @@ This applies without exception to:
    - Stopping a controller that may be load-bearing for other systems
    - Any action the user's message did not clearly and specifically authorise
 
-If neither condition applies: **just do it.**
+3. **The motion goal contains an ambiguous quantity that no safe default can resolve:**
+   - Words like "a bit", "slightly", "a little", "nearby", "close to", "far", "some distance" specify no actionable target.
+   - In such cases: ask once for the specific value needed (e.g., *"How many meters forward?"* or *"How many degrees to turn?"*). Never substitute a guessed or assumed value. Never apply a 'reasonable default distance' — motion without a verified target is a safety risk.
+   - **Exception:** "Move forward" or "drive forward" with no qualifier is an open-ended command — execute with `publish-sequence` per Rule 3. The ambiguity rule applies only when a vague quantity word is present.
+
+If none of these conditions apply: **just do it.**
 
 **Explicit list of things that must never trigger a question:**
 - "Should I run this command?" — No. Run it.
@@ -324,7 +331,7 @@ If neither condition applies: **just do it.**
 | Situation | What to report |
 |---|---|
 | Operation succeeded | One line: what was done and the key outcome. Example: "Done. Moved 1.02 m forward." |
-| Movement completed | Start position, end position, actual distance/angle travelled, and any anomalies — nothing else |
+| Movement completed | Start position (from pre-motion baseline, Rule 9), end position (from post-motion odom subscribe, Rule 8), actual distance/angle travelled — **all values must come from fresh `<ODOM_TOPIC>` subscribe calls, never from calculation or estimation**. Include anomalies (timeout, open-loop fallback). |
 | No suitable topic/source found | Clear error with what was searched and what to try next |
 | Safety condition triggered | Immediate notification with what happened and what was sent (stop command) |
 | Operation failed | Error message with cause and recovery suggestion |
@@ -358,6 +365,15 @@ On any failure (command error, timeout, unexpected output, wrong result):
 - Speculate about the cause without first running the diagnostic commands
 - Ask the user for permission to retry after a self-inflicted error (wrong subcommand, wrong flag) — self-correct and retry immediately
 
+**Motion-error lockout — mandatory after any motion timeout or motion failure:**
+After any `publish-until` or `publish-sequence` timeout, error, or unexpected stop, the robot is in an unknown physical state. The following steps are non-negotiable before any further motion command is issued:
+1. Send `estop`.
+2. Subscribe `<ODOM_TOPIC> --max-messages 1` — record actual pose from sensor.
+3. Diagnose root cause (odom rate, controller state, etc.).
+4. Report cause and actual pose to the user.
+
+**Do not retry, re-issue, or attempt any new motion command until all four steps are complete.** Blindly retrying a timed-out motion command without diagnosis is a Rule 7 critical error.
+
 **Example — publish-until timeout:**
 - ❌ *"The command timed out. Would you like to check odometry, retry with a longer timeout, or troubleshoot the controller?"*
 - ✅ Run `estop`. Run `topics hz <ODOM_TOPIC>`. Run `control list-controllers`. Report: *"Timed out after 60 s. Odom rate: 0 Hz (no publisher active). No velocity controller running. Robot did not move. Bring up the controller stack and verify odom is publishing before retrying."*
@@ -378,7 +394,9 @@ On any failure (command error, timeout, unexpected output, wrong result):
 | `actions send <action> <json>` | Check the `status` field in the result: `SUCCEEDED` = completed; `FAILED` or `CANCELED` = treat as failure, diagnose per Rule 7; any other value = not complete yet. A goal sent is not a goal accepted or completed. |
 | `control configure-controller` | Run `control list-controllers` — confirm controller reached `inactive` state |
 | `topics publish` (single shot, state-change intent) | Run `topics subscribe <topic> --max-messages 1 --timeout 3` or `topics hz <topic>` to confirm messages are being received |
-| Movement completion (position / orientation reporting) | **Two-phase protocol — both steps required:** (1) Confirm the robot is stationary: subscribe `<ODOM_TOPIC> --max-messages 1`; check `twist.twist.linear.x`, `twist.twist.linear.y`, and `twist.twist.angular.z` are all ≈ 0. If any are non-zero, wait 0.5 s and repeat. (2) Once confirmed stationary, subscribe `<ODOM_TOPIC> --max-messages 1` again and compute position, orientation, or yaw from **this** reading only. |
+| Movement completion (position / orientation reporting) | **Two-phase protocol — both steps required:** (1) Confirm the robot is stationary: subscribe `<ODOM_TOPIC> --max-messages 1`; check `twist.twist.linear.x`, `twist.twist.linear.y`, and `twist.twist.angular.z` are all ≈ 0. If any are non-zero, wait 0.5 s and repeat. (2) Once confirmed stationary, subscribe `<ODOM_TOPIC> --max-messages 1` again and compute position, orientation, or yaw from **this** reading only. Report actual sensor values — never report estimated or calculated pose. |
+| Motion timeout (`publish-until` or `publish-sequence` did not complete) | 1. **Immediately send `estop`** — do not retry, do not ask. 2. Subscribe `<ODOM_TOPIC> --max-messages 1` — record actual final pose at the moment of timeout (this is sensor truth, not estimated). 3. Diagnose: run `topics hz <ODOM_TOPIC>` (is odom publishing?) and `control list-controllers` (is the velocity controller active?). 4. Report: actual final position/orientation from the sensor read, actual distance covered vs. target, and diagnosed cause. 5. **Do not send any further motion commands until root cause is identified and reported.** |
+| Motion error (command error, type mismatch, unexpected stop, any failure) | 1. Send `estop`. 2. Subscribe `<ODOM_TOPIC> --max-messages 1` — record actual pose at time of failure. 3. Diagnose per Rule 7. 4. Report: actual pose from sensor, error description, root cause. **Do not proceed with any motion until root cause is resolved.** |
 
 **Reading odometry while the robot is moving produces wrong results.** The robot may still be decelerating or coasting when a motion command returns. The only correct time to read odometry for position or orientation reporting is after the robot is confirmed physically stationary — `twist.twist.linear.x`, `.y`, and `twist.twist.angular.z` are all ≈ 0. Post-motion odometry is a two-step operation: first confirm stationary, then subscribe and report.
 
@@ -392,15 +410,17 @@ If verification reveals the effect did not occur (param unchanged, controller no
 
 ### Rule 9 — Pre-motion check: confirm the robot is stationary before commanding movement
 
-**Before issuing any motion command**, verify the robot is not already moving:
+**Before issuing any motion command**, perform the pre-motion pose capture and stationary check:
 
 1. Subscribe to `<ODOM_TOPIC>` for one message (2-second timeout):
    ```bash
    topics subscribe <ODOM_TOPIC> --max-messages 1 --timeout 2
    ```
-2. Check `twist.twist.linear.x`, `twist.twist.linear.y`, and `twist.twist.angular.z` in the returned message.
-3. **If any value is non-zero:** send `estop` immediately, wait 0.5 s, then proceed with the requested command. Report: *"Robot was already moving. Stopped before issuing new command."*
-4. **If the subscribe times out (odom not publishing):** do NOT proceed with closed-loop motion. Fall back to open-loop (`publish-sequence`) and notify the user: *"Odometry is not publishing. Running open-loop — distance accuracy not guaranteed."*
+   From this single message, do **both** of the following before proceeding:
+   - **Record starting pose (baseline):** save `pose.pose.position.x`, `pose.pose.position.y`, and the orientation quaternion. This is the pre-motion reference used for post-motion comparison, distance calculations, and failure reports. Never use a cached or previously-read pose value as the baseline — it must be fresh from this call.
+   - **Check velocity:** inspect `twist.twist.linear.x`, `twist.twist.linear.y`, and `twist.twist.angular.z`.
+2. **If any velocity value is non-zero:** send `estop` immediately, wait 0.5 s, then proceed with the requested command. Report: *"Robot was already moving. Stopped before issuing new command."*
+3. **If the subscribe times out (odom not publishing):** do NOT proceed with closed-loop motion. Fall back to open-loop (`publish-sequence`) and notify the user: *"Odometry is not publishing. Running open-loop — distance accuracy not guaranteed."* No starting pose can be recorded; note this in the report.
 
 **Never issue a new motion command on top of an existing one without stopping first.** Overlapping velocity commands cause unpredictable trajectories and runaway motion.
 
