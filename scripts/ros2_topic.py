@@ -712,11 +712,11 @@ def cmd_topics_publish_until(args):
             rotate_angle = math.radians(rotate_angle)
         if rotate_angle == 0:
             return output({"error": "--rotate angle must be non-zero"})
+        field_paths = ['pose.pose.orientation']
     else:
         if not args.field:
             return output({"error": "--field argument is required (or use --rotate for rotation)"})
-
-    field_paths = args.field if args.field else []
+        field_paths = args.field
     euclidean = getattr(args, 'euclidean', False)
 
     if rotate_angle is None and len(field_paths) > 1 and not euclidean:
@@ -758,18 +758,6 @@ def cmd_topics_publish_until(args):
             pub_msg_class = get_msg_type(pub_msg_type)
             if not pub_msg_class:
                 return output(get_msg_error(pub_msg_type))
-
-            # Re-read rotate_angle so any degree conversion is applied consistently
-            rotate_angle = getattr(args, 'rotate', None)
-            use_degrees = getattr(args, 'degrees', False)
-            if rotate_angle is not None:
-                try:
-                    rotate_angle = float(rotate_angle)
-                except (TypeError, ValueError):
-                    return output({"error": "--rotate must be a numeric value"})
-                if use_degrees:
-                    rotate_angle = math.radians(rotate_angle)
-                field_paths = ['pose.pose.orientation']
 
             stop_event = threading.Event()
             publisher = TopicPublisher(args.topic, pub_msg_type)

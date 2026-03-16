@@ -374,7 +374,7 @@ def cmd_tf_static(args):
     else:
         tmux_cmd = f"tmux new-session -d -s {session_name} '{cmd} 2>&1'"
 
-    stdout, stderr, rc = run_cmd(tmux_cmd, timeout=30)
+    _, stderr, rc = run_cmd(tmux_cmd, timeout=30)
 
     if rc != 0:
         return output({

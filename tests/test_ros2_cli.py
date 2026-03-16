@@ -162,6 +162,10 @@ class TestGetMsgType(unittest.TestCase):
         # None/empty inputs return None
         self.assertIsNone(self.ros2_cli.get_msg_type(None))
         self.assertIsNone(self.ros2_cli.get_msg_type(''))
+        # Known resolvable type returns the class
+        msg_type = self.ros2_cli.get_msg_type('std_msgs/msg/String')
+        self.assertIsNotNone(msg_type)
+        self.assertEqual(msg_type.__name__, 'String')
 
 
 

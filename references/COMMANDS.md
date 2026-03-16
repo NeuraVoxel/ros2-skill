@@ -764,7 +764,7 @@ Get the full field structure of a message type as a JSON template.
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `message_type` | Yes | Full message type (e.g. `geometry_msgs/Twist`, `sensor_msgs/LaserScan`) |
+| `message_type` | Yes | Message type (e.g. `geometry_msgs/msg/Twist`, `sensor_msgs/msg/LaserScan`) |
 
 ```bash
 python3 {baseDir}/scripts/ros2_cli.py topics message geometry_msgs/Twist

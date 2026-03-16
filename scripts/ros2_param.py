@@ -79,7 +79,7 @@ def cmd_params_list(args):
         from rcl_interfaces.srv import ListParameters
         with ros2_context():
             node = ROS2CLI()
-            node_name, param_name = parse_node_param(args.node)
+            node_name, _ = parse_node_param(args.node)
             if not node_name.startswith('/'):
                 node_name = '/' + node_name
 
