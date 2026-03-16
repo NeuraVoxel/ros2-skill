@@ -31,9 +31,19 @@ Controls and monitors ROS 2 robots directly via rclpy. This skill provides a uni
 
 ## 🏗️ Architecture
 
-- **Entry Point:** `scripts/ros2_cli.py`
+- **Entry Point:** `scripts/ros2_cli.py` — **this is the only file you should ever run directly.**
 - **Interface:** Agent → `ros2_cli.py` → rclpy → ROS 2 Graph
 - **Format:** All commands output JSON. Errors contain `{"error": "..."}`.
+
+> ⚠️ **Internal modules — do not run directly.**
+> `scripts/ros2_daemon.py`, `ros2_topic.py`, `ros2_param.py`, and all other
+> `ros2_*.py` files are **internal implementation modules**, not standalone
+> scripts. Running them directly produces no output and does nothing.
+> Always invoke commands through `ros2_cli.py`:
+> ```bash
+> python3 scripts/ros2_cli.py <command> [subcommand] [args]
+> python3 scripts/ros2_cli.py --help   # list all commands
+> ```
 
 ## 📚 Documentation Reference
 

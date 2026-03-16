@@ -372,3 +372,16 @@ def cmd_run_restart(args):
     result = cmd_run(args_restart)
     result["message"] = "Session restarted"
     return result
+
+
+if __name__ == "__main__":
+    import sys
+    _mod = __file__.rsplit("/", 1)[-1]
+    print(
+        f"[ros2-skill] '{_mod}' is an internal module — do not run it directly.\n"
+        "Use the main entry point:\n"
+        "  python3 ros2_cli.py <command> [subcommand] [args]\n"
+        "See all commands:  python3 ros2_cli.py --help",
+        file=sys.stderr,
+    )
+    sys.exit(1)
