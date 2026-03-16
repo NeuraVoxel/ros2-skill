@@ -25,14 +25,14 @@ This rule exists because:
 
 | Action type | Required introspection |
 |---|---|
-| Publish to a topic | 1. `topics find <msg_type>` to discover the real topic name<br>2. `topics type <discovered_topic>` to confirm the exact type<br>3. `interface proto <exact_type>` to get the default payload template |
+| Publish to a topic | 1. `topics find <msg_type>` to discover the real topic name<br>2. `topics type <discovered_topic>` to confirm the exact type<br>3. `interface proto <exact_type>` to get the default payload template — **copy this output and modify only the fields required by the task; never construct payloads from memory** |
 | Call a service | 1. `services list` or `services find <srv_type>` to discover the real name<br>2. `services details <discovered_service>` to get request/response fields |
 | Send an action goal | 1. `actions list` or `actions find <action_type>` to discover the real name<br>2. `actions details <discovered_action>` to get goal/result/feedback fields |
 | Move a robot | Full Movement Workflow — see Rule 3 and the canonical section below |
 | Read a sensor / subscribe | `topics find <msg_type>` to discover the topic; `topics type <topic>` to confirm type; never subscribe to a hardcoded name |
 | Capture a camera image | `topics find sensor_msgs/msg/CompressedImage` and `topics find sensor_msgs/msg/Image` to discover available camera topics; use the result in `topics capture-image --topic <CAMERA_TOPIC>` |
 | Query a TF transform | `tf list` to discover available frames; never hardcode frame names like `map`, `base_link`, `odom` |
-| Switch or control a controller | `control list-controllers` to discover controller names and states; never hardcode controller names |
+| Switch or control a controller | `control list-controllers` to discover controller names and states; never hardcode controller names; always use `--strictness STRICT` for `switch-controllers` unless explicitly instructed otherwise |
 | Any operation involving a node | `nodes list` first; never assume a node name |
 | Set / get / dump parameters | `nodes list` to discover the node name; `params list <node>` to discover parameter names |
 
@@ -55,6 +55,7 @@ This rule exists because:
 - ❌ Never use a service name without first discovering it with `services list` or `services find`
 - ❌ Never use `--yaw`, `--yaw-delta`, or `--field` for rotation — the only correct flag is `--rotate N --degrees` (or `--rotate N` for radians). Use negative N for CW; `--rotate` sign and `angular.z` sign must always match.
 - ❌ Never assume a message type from a topic name
+- ❌ Never construct a message payload from memory — always use `interface proto <type>` output as the starting template and modify only the fields required by the task
 - ❌ Never revert to hardcoded or legacy behaviors after a robust introspection-driven workflow is established — even if the hardcoded name "usually works" on this specific robot
 - ❌ Never bypass, skip, or abbreviate safety checks even if the user explicitly requests it — safety rules are not negotiable
 
@@ -337,7 +338,7 @@ On any failure (command error, timeout, unexpected output, wrong result):
 | `params set <node:param> <val>` | Run `params get <node:param>` — confirm returned value matches what was set |
 | `control switch-controllers` | Run `control list-controllers` — confirm new controller is `active`, old is `inactive` |
 | `lifecycle set <node> <transition>` | Run `lifecycle get <node>` — confirm the node reached the expected state |
-| `actions send <action> <json>` | Check the action result field — a goal sent is not a goal accepted or completed |
+| `actions send <action> <json>` | Check the `status` field in the result: `SUCCEEDED` = completed; `FAILED` or `CANCELED` = treat as failure, diagnose per Rule 7; any other value = not complete yet. A goal sent is not a goal accepted or completed. |
 | `control configure-controller` | Run `control list-controllers` — confirm controller reached `inactive` state |
 | `topics publish` (single shot, state-change intent) | Run `topics subscribe <topic> --max-messages 1 --timeout 3` or `topics hz <topic>` to confirm messages are being received |
 
@@ -488,6 +489,29 @@ Before publishing to a topic intended for a subscriber:
 2. **If `subscriber_count == 0`:** there is no node listening. Still publish (the subscriber may be transient or latched), but report: *"No subscribers detected on `<topic>` — command may not reach any controller."*
 
 **This check costs one CLI call and prevents the most common cause of subscribe timeouts.** Run it as part of any workflow that depends on receiving a message within a timeout window.
+
+### Rule 16 — Multi-step tasks: complete and verify each step before starting the next
+
+When a user's request involves a sequence of sub-commands (e.g., "move forward 1 m, then rotate 90°", "switch to controller A, then send a trajectory"), treat each sub-command as an independent atomic step:
+
+1. **Execute step N.**
+2. **Verify step N completed successfully (Rule 8)** — confirm the effect occurred, not just that the command returned without error.
+3. **Only then start step N+1.**
+4. **If step N fails:** stop the sequence immediately. Diagnose per Rule 7. Do not proceed to step N+1 with a failed or partial state from step N.
+
+**Never pipeline or parallelise dependent steps.** Starting step N+1 before step N is confirmed complete risks compounding errors: the second command acts on a state the first command never achieved.
+
+**Independent steps within the same phase** (e.g., discovering the velocity topic and discovering the odom topic) can and should run in parallel (Rule 12). The sequencing requirement applies only to steps where step N+1 depends on step N's outcome.
+
+**Examples:**
+
+| Request | Correct sequencing |
+|---|---|
+| "Move 1 m forward, then rotate 90° right" | 1. Discover topics → 2. publish-until forward → **verify odom delta** → 3. publish-until rotate → verify rotation |
+| "Configure the arm controller, then send a trajectory" | 1. `control configure-controller` → **verify `inactive`** → 2. `control switch-controllers --activate` → **verify `active`** → 3. `actions send` |
+| "Set max speed to 0.3, then move forward" | 1. `params set` → **`params get` to verify** → 2. discover topics → 3. publish-until |
+
+**If any step in the sequence changes the robot's physical state** (position, controller state, parameter value), verify that change before building on it.
 
 ---
 
