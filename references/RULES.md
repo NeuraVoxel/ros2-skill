@@ -16,6 +16,9 @@ This rule exists because:
 - The velocity topic is not always `/cmd_vel`. It may be `/base/cmd_vel`, `/robot/cmd_vel`, `/mobile_base/cmd_vel`, or anything else.
 - The message type is not always `Twist`. Many robots use `TwistStamped`, and the payload structure differs.
 - The odometry topic is not always `/odom`. It may be `/wheel_odom`, `/robot/odom`, `/base/odometry`, etc.
+- Camera topics are not always `/camera/image_raw`. There may be multiple cameras with namespaced topics.
+- TF frame names are not always `map`, `base_link`, `odom`. They vary by robot configuration.
+- Controller names are not always `joint_trajectory_controller` or similar. They are defined in the robot's config.
 - Convention-based guessing causes silent failures, wrong topics, and physical accidents.
 
 **Pre-flight introspection protocol — run ALL applicable steps before acting:**
@@ -26,8 +29,12 @@ This rule exists because:
 | Call a service | 1. `services list` or `services find <srv_type>` to discover the real name<br>2. `services details <discovered_service>` to get request/response fields |
 | Send an action goal | 1. `actions list` or `actions find <action_type>` to discover the real name<br>2. `actions details <discovered_action>` to get goal/result/feedback fields |
 | Move a robot | Full Movement Workflow — see Rule 3 and the canonical section below |
-| Read a sensor | `topics find <msg_type>` to discover the topic; never subscribe to a hardcoded name |
+| Read a sensor / subscribe | `topics find <msg_type>` to discover the topic; `topics type <topic>` to confirm type; never subscribe to a hardcoded name |
+| Capture a camera image | `topics find sensor_msgs/msg/CompressedImage` and `topics find sensor_msgs/msg/Image` to discover available camera topics; use the result in `topics capture-image --topic <CAMERA_TOPIC>` |
+| Query a TF transform | `tf list` to discover available frames; never hardcode frame names like `map`, `base_link`, `odom` |
+| Switch or control a controller | `control list-controllers` to discover controller names and states; never hardcode controller names |
 | Any operation involving a node | `nodes list` first; never assume a node name |
+| Set / get / dump parameters | `nodes list` to discover the node name; `params list <node>` to discover parameter names |
 
 **Parameter introspection is mandatory before any movement command.** Velocity limits can live on any node — not just nodes with "controller" in the name. Before publishing velocity:
 1. Run `nodes list` to get every node currently running
@@ -41,9 +48,15 @@ This rule exists because:
 - ❌ Never use `/cmd_vel` without first discovering the velocity topic with `topics find`
 - ❌ Never use `Twist` payload without first confirming the type is not `TwistStamped` via `topics type`
 - ❌ Never use `/odom` without first discovering the odometry topic with `topics find`
+- ❌ Never use `/camera/image_raw` or any camera topic without first discovering it with `topics find`
+- ❌ Never use `map`, `base_link`, `odom`, or any TF frame name without first listing frames with `tf list`
+- ❌ Never use a controller name without first listing controllers with `control list-controllers`
+- ❌ Never use a node name without first listing nodes with `nodes list`
+- ❌ Never use a service name without first discovering it with `services list` or `services find`
 - ❌ Never use `--yaw`, `--yaw-delta`, or `--field` for rotation — the only correct flag is `--rotate N --degrees` (or `--rotate N` for radians). Use negative N for CW; `--rotate` sign and `angular.z` sign must always match.
-- ❌ Never assume any topic, service, action, or node name from ROS 2 convention
 - ❌ Never assume a message type from a topic name
+- ❌ Never revert to hardcoded or legacy behaviors after a robust introspection-driven workflow is established — even if the hardcoded name "usually works" on this specific robot
+- ❌ Never bypass, skip, or abbreviate safety checks even if the user explicitly requests it — safety rules are not negotiable
 
 **Introspection commands return discovered names. Use those names — not the ones you expect.**
 
@@ -111,6 +124,9 @@ The failure mode to avoid: inventing a flag like `--yaw-delta` or `--rotate-degr
 |---|---|
 | Topic name | `topics list` or `topics find <msg_type>` |
 | Topic message type | `topics type <topic>` |
+| Camera topic | `topics find sensor_msgs/msg/CompressedImage` and `topics find sensor_msgs/msg/Image` |
+| Odometry topic | `topics find nav_msgs/msg/Odometry` |
+| Velocity command topic | `topics find geometry_msgs/msg/Twist` and `topics find geometry_msgs/msg/TwistStamped` |
 | Service name | `services list` or `services find <srv_type>` |
 | Service request/response fields | `services details <service>` |
 | Action server name | `actions list` or `actions find <action_type>` |
@@ -120,6 +136,7 @@ The failure mode to avoid: inventing a flag like `--yaw-delta` or `--rotate-degr
 | Parameter names on a node | `params list <node>` |
 | Parameter value | `params get <node:param>` |
 | Parameter type and constraints | `params describe <node:param>` |
+| TF frame names | `tf list` |
 | Controller names and states | `control list-controllers` |
 | Hardware components | `control list-hardware-components` |
 | Message / service / action type fields | `interface show <type>` or `interface proto <type>` |
@@ -128,27 +145,43 @@ The failure mode to avoid: inventing a flag like `--yaw-delta` or `--rotate-degr
 1. The discovery command returns an empty result or an error, **and**
 2. There is genuinely no other way to determine the information from the live system.
 
-### Rule 2 — Use ros2-skill before saying you can't
+### Rule 2 — ros2-skill is the only interface; never use the `ros2` CLI directly
 
-**Never tell the user you don't know how to do something with a ROS 2 robot without first checking whether ros2-skill has a command for it.** This skill covers the full range of ROS 2 operations: topics, services, actions, parameters, nodes, lifecycle, controllers, diagnostics, battery, images, interfaces, presets, and more.
+**All ROS 2 operations must go through `ros2_cli.py`. Never call `ros2 topic list`, `ros2 node list`, `ros2 service call`, or any other `ros2 <command>` CLI directly.**
 
-When a task seems unfamiliar, look it up in the quick reference tables below before responding. Common operations that agents sometimes miss:
+This rule exists because:
+- The `ros2` CLI returns unstructured human-readable text that agents misparse.
+- `ros2_cli.py` returns structured JSON with consistent fields — no parsing errors, no format drift.
+- Using `ros2` directly bypasses retry logic, timeout handling, and safety checks built into this skill.
 
-| Task | ros2-skill command |
-|---|---|
-| Capture a camera image | `topics capture-image --topic <topic> --output <file>` |
-| Read laser / camera / IMU / odom data | `topics subscribe <topic>` |
-| Call a ROS 2 service | `services call <service> <json>` |
-| Send a navigation or manipulation goal | `actions send <action> <json>` |
-| Change a node parameter at runtime | `params set <node:param> <value>` |
-| Save/restore a parameter configuration | `params preset-save` / `params preset-load` |
-| Activate or deactivate a controller | `control set-controller-state <name> active\|inactive` |
-| Run a health check | `doctor` |
-| Emergency stop | `estop` |
-| Check diagnostics | `topics diag` |
-| Check battery | `topics battery` |
+**The hierarchy:**
+1. **ros2-skill first** — use `ros2_cli.py` for everything. It covers the full ROS 2 operation surface.
+2. **ros2 CLI as last resort only** — if and only if no ros2-skill command exists for the required operation AND the operation cannot be approximated using existing skill commands. This is rare. Document why ros2-skill was insufficient.
+3. **Never use `ros2` CLI for anything ros2-skill can do** — even if it seems simpler or faster.
 
-If you genuinely cannot find a matching command after checking both the quick reference and the COMMANDS.md reference, **say so clearly and explain what you checked** — do not silently guess or use a partial solution.
+**Never tell the user you don't know how to do something** without first checking ros2-skill for a matching command. Common operations that agents sometimes use `ros2 CLI` for unnecessarily:
+
+| Task | ❌ Do NOT use | ✅ Use instead |
+|---|---|---|
+| List all topics | `ros2 topic list` | `topics list` |
+| Get topic type | `ros2 topic info /topic` | `topics type <topic>` |
+| Subscribe to topic | `ros2 topic echo /topic` | `topics subscribe <topic>` |
+| List nodes | `ros2 node list` | `nodes list` |
+| Get node info | `ros2 node info /node` | `nodes details <node>` |
+| List services | `ros2 service list` | `services list` |
+| Call a service | `ros2 service call /srv ...` | `services call <service> <json>` |
+| List actions | `ros2 action list` | `actions list` |
+| Send action goal | `ros2 action send_goal ...` | `actions send <action> <json>` |
+| Get parameter | `ros2 param get /node param` | `params get <node:param>` |
+| Set parameter | `ros2 param set /node param val` | `params set <node:param> <value>` |
+| List parameters | `ros2 param list /node` | `params list <node>` |
+| List TF frames | `ros2 run tf2_tools view_frames` | `tf list` |
+| Get transform | `ros2 run tf2_ros tf2_echo ...` | `tf lookup <source> <target>` |
+| List controllers | `ros2 control list_controllers` | `control list-controllers` |
+| Check health | `ros2 doctor` | `doctor` |
+| Capture image | custom scripts | `topics capture-image --topic <topic>` |
+
+If you genuinely cannot find a matching command after checking both the quick reference and the COMMANDS.md reference, **say so clearly and explain what you checked** — do not silently fall back to the `ros2` CLI without logging it.
 
 ### Rule 3 — Movement algorithm (always follow this sequence)
 
@@ -231,12 +264,18 @@ This applies without exception to:
 - Starting or stopping controllers
 - Any command where the intent and target are unambiguous
 
-**The only time to stop and ask is when there is genuine ambiguity** that cannot be resolved from the live system — for example:
-- Multiple packages or launch files match and you cannot determine which one the user means
-- A required argument has no match in `--show-args` and no reasonable fuzzy match exists
-- The user's request contradicts itself or is physically unsafe to guess
+**There are exactly two conditions that permit asking the user:**
 
-Everything else: **just do it.**
+1. **Genuine ambiguity that cannot be resolved by introspection:**
+   - Multiple packages or launch files match and you cannot determine which one the user means
+   - A required argument has no match in `--show-args` and no reasonable fuzzy match exists
+
+2. **The action is destructive, irreversible, or safety-critical:**
+   - Deleting data (preset files, logs) when the target is ambiguous
+   - Stopping a controller that may be load-bearing for other systems
+   - Any action the user's message did not clearly and specifically authorise
+
+If neither condition applies: **just do it.**
 
 **Explicit list of things that must never trigger a question:**
 - "Should I run this command?" — No. Run it.
@@ -245,6 +284,10 @@ Everything else: **just do it.**
 - "Shall I launch the file now?" — No. Launch it.
 - "Do you want me to set this parameter?" — No. Set it.
 - "I found Y — would you like me to use it?" — No. Use it.
+- "Would you like me to use the closed-loop workflow?" — No. Use it.
+- "Would you like me to auto-detect the topics and run the command?" — No. Detect and run.
+- "Would you like me to fetch the --help output?" — No. Fetch it and proceed.
+- "The command timed out — would you like to check odometry / retry / troubleshoot?" — No. Check odometry and report findings immediately, without asking first.
 
 ### Rule 6 — Minimal reporting by default
 
@@ -265,6 +308,161 @@ Everything else: **just do it.**
 - Step-by-step narration of what you are about to do
 
 **Report everything (verbose mode) only when the user explicitly asks** — e.g. "show me what topics you found", "give me the full details", "what type did you use?"
+
+### Rule 7 — Diagnose failures immediately; never ask the user to diagnose
+
+On any failure (command error, timeout, unexpected output, wrong result):
+
+1. **Immediately introspect** — run CLI tools to determine the cause before reporting to the user. Do not ask the user what happened.
+2. **Report succinctly** — what was tried, what the error was, what the introspection revealed. No speculation, no options list.
+3. **Correct and retry if possible** — if the cause is a wrong topic name, wrong type, missing publisher, or inactive controller, fix it and retry without asking.
+4. **Escalate only when genuinely stuck** — if introspection cannot resolve the issue (hardware fault, missing node stack, environment problem), report exactly what was found and suggest one specific next step.
+
+**Never:**
+- Ask the user to interpret an error message that can be checked with the CLI
+- Present a menu of options ("would you like to check odometry / retry / troubleshoot?") — pick the right action and do it
+- Silently ignore an error or continue as if it did not happen
+- Speculate about the cause without first running the diagnostic commands
+
+**Example — publish-until timeout:**
+- ❌ *"The command timed out. Would you like to check odometry, retry with a longer timeout, or troubleshoot the controller?"*
+- ✅ Run `estop`. Run `topics hz <ODOM_TOPIC>`. Run `control list-controllers`. Report: *"Timed out after 60 s. Odom rate: 0 Hz (no publisher active). No velocity controller running. Robot did not move. Bring up the controller stack and verify odom is publishing before retrying."*
+
+### Rule 8 — Verify the effect; never trust exit codes alone
+
+**A command returning without error means the request was delivered — it does not mean the effect occurred.** Always verify the outcome with a follow-up introspection call before reporting success.
+
+| Operation | Verification |
+|---|---|
+| `params set <node:param> <val>` | Run `params get <node:param>` — confirm returned value matches what was set |
+| `control switch-controllers` | Run `control list-controllers` — confirm new controller is `active`, old is `inactive` |
+| `lifecycle set <node> <transition>` | Run `lifecycle get <node>` — confirm the node reached the expected state |
+| `actions send <action> <json>` | Check the action result field — a goal sent is not a goal accepted or completed |
+| `control configure-controller` | Run `control list-controllers` — confirm controller reached `inactive` state |
+| `topics publish` (single shot, state-change intent) | Run `topics subscribe <topic> --max-messages 1 --timeout 3` or `topics hz <topic>` to confirm messages are being received |
+
+**Never report "Done" based solely on a zero-error response.** If verification reveals the effect did not occur (param unchanged, controller not switched, lifecycle state unchanged), diagnose immediately per Rule 7 — do not report success.
+
+**Exception:** For `publish-until` and `publish-sequence`, the command's own stop condition or duration is the success criterion. Do not add a separate `topics hz` check during an active motion sequence.
+
+### Rule 9 — Pre-motion check: confirm the robot is stationary before commanding movement
+
+**Before issuing any motion command**, verify the robot is not already moving:
+
+1. Subscribe to `<ODOM_TOPIC>` for one message (2-second timeout):
+   ```bash
+   topics subscribe <ODOM_TOPIC> --max-messages 1 --timeout 2
+   ```
+2. Check `twist.twist.linear.x`, `twist.twist.linear.y`, and `twist.twist.angular.z` in the returned message.
+3. **If any value is non-zero:** send `estop` immediately, wait 0.5 s, then proceed with the requested command. Report: *"Robot was already moving. Stopped before issuing new command."*
+4. **If the subscribe times out (odom not publishing):** do NOT proceed with closed-loop motion. Fall back to open-loop (`publish-sequence`) and notify the user: *"Odometry is not publishing. Running open-loop — distance accuracy not guaranteed."*
+
+**Never issue a new motion command on top of an existing one without stopping first.** Overlapping velocity commands cause unpredictable trajectories and runaway motion.
+
+### Rule 10 — Empty discovery: broaden the search, never guess
+
+When `topics find <type>` returns an empty list:
+
+1. **Do not guess a topic name.**
+2. **Do not fall back to a hardcoded name** (Rule 0).
+3. **Broaden the search immediately and in parallel:**
+   ```bash
+   topics list    # All active topics — scan for anything plausibly relevant
+   nodes list     # Are the nodes that publish this type even running?
+   ```
+4. **If nodes are missing:** the robot stack may not be up. Run `doctor` and report what is absent.
+5. **If nodes are running but topic is absent:** the publisher may not have started yet, or the topic may be differently typed than expected. Check `nodes details <candidate_node>` for its published topics.
+6. **Report exactly:** what was searched, what `topics list` and `nodes list` returned, and one specific next step. Never present a menu. Never speculate.
+
+**This rule applies equally to `services find`, `actions find`, and any other type-based search.** Empty results are information, not permission to guess.
+
+### Rule 11 — Use discovered names verbatim; never mutate them
+
+Topic names, service names, action names, node names, and TF frame names returned by discovery commands must be used **exactly as returned** — character for character, including leading slashes, namespace prefixes, and suffixes.
+
+**Never:**
+- Strip a namespace prefix (e.g., convert `/robot_1/cmd_vel` → `/cmd_vel`)
+- Add a namespace that was not in the discovery result
+- Normalise, shorten, or "clean up" a discovered name
+- Assume that a short name and a namespaced name refer to the same entity
+
+**When multiple topics of the same type exist in different namespaces**, select based on user context:
+- User mentioned "front camera" → prefer topics containing `front` in the name
+- User mentioned "robot 1", "arm", or a specific subsystem → prefer topics under that namespace prefix
+- No context clue → use the **first result** and state which one was selected (Rule 6)
+
+Namespace selection is never a reason to ask the user (Rule 5). Use context, pick one, report it.
+
+### Rule 12 — Run independent discovery commands in parallel
+
+When a task requires discovering multiple independent facts (velocity topic, odom topic, velocity limits, controller state, etc.), issue all discovery commands simultaneously — never sequentially.
+
+Sequential discovery is slower and masks partial failures. If velocity discovery succeeds but odom discovery fails, sequential execution hides that failure until the motion command times out.
+
+**Correct (parallel):**
+```bash
+# All three issued simultaneously
+topics find geometry_msgs/msg/Twist
+topics find geometry_msgs/msg/TwistStamped
+topics find nav_msgs/msg/Odometry
+```
+
+**Wrong (sequential):**
+```
+topics find geometry_msgs/msg/Twist → wait → topics find TwistStamped → wait → ...
+```
+
+**This also applies to parameter scanning (Rule 0, Step 2):** run `params list <NODE>` for all nodes simultaneously, not one node at a time. Process all results together to find the binding velocity ceiling.
+
+**Dependency exception:** if command B requires a result from command A (e.g., you need the topic name before you can check its type), sequential execution is correct for those two steps only. Run everything else in parallel around them.
+
+### Rule 13 — Never reuse stale session state for a new task
+
+Topic names, controller states, node lists, lifecycle states, and parameter values discovered earlier in the session **must not be reused as-is** for a new task. Robot state can change between tasks: nodes crash, controllers switch, topics appear or disappear.
+
+**Per-task re-discovery is mandatory.** The only exception is within the consecutive steps of the same single task (e.g., `VEL_TOPIC` discovered in step 1 of a motion command is used in step 4 of that same command — that is valid).
+
+**Re-discover unconditionally when:**
+- The user issues a new request (any request that is not an explicit continuation of the current command)
+- An error suggests the graph changed (a topic previously seen is now absent)
+- A node that was present is no longer in `nodes list`
+
+**Never say "I already discovered this earlier" as a reason to skip introspection.** Discovery takes under a second. Stale assumptions cause hard-to-debug failures.
+
+### Rule 14 — Check lifecycle state before using any managed node's interface
+
+If `lifecycle nodes` shows a node is lifecycle-managed, its state determines whether its topics, services, and parameters function:
+
+| State | Behaviour |
+|---|---|
+| `unconfigured` | Node is up but not configured — topics and services do not exist yet |
+| `inactive` | Node is configured but not active — topics exist but messages are silently dropped |
+| `active` | Node is fully operational |
+| `finalized` / `error` | Node has shut down or faulted — do not attempt to use it |
+
+**Before using any topic, service, or parameter from a lifecycle-managed node:**
+1. Run `lifecycle get <node>` to check current state.
+2. If not `active`, apply the correct transitions:
+   ```bash
+   lifecycle set <node> configure   # unconfigured → inactive
+   lifecycle set <node> activate    # inactive → active
+   ```
+3. Verify with `lifecycle get <node>` that the node reached `active` (Rule 8) before proceeding.
+
+**Do not skip this check even if the node "usually works."** A node in `inactive` silently discards all messages — it produces no error, no warning, and no feedback. This is the most common source of inexplicable publish failures on managed-node robots.
+
+### Rule 15 — Check publisher and subscriber counts before waiting on a topic
+
+Before subscribing to a topic and waiting for a message, verify a publisher exists:
+1. Run `topics details <topic>` — check `publisher_count`.
+2. **If `publisher_count == 0`:** do not subscribe (you will timeout). Report: *"No publisher on `<topic>`. Check `nodes list` to verify the publishing node is running."* Then diagnose per Rule 7.
+3. **If `publisher_count > 0` but subscribe still times out:** run `topics hz <topic>` to confirm messages are actively flowing (a publisher node may be up but not sending). Check QoS profile mismatch in `topics details <topic>` output.
+
+Before publishing to a topic intended for a subscriber:
+1. Run `topics details <topic>` — check `subscriber_count`.
+2. **If `subscriber_count == 0`:** there is no node listening. Still publish (the subscriber may be transient or latched), but report: *"No subscribers detected on `<topic>` — command may not reach any controller."*
+
+**This check costs one CLI call and prevents the most common cause of subscribe timeouts.** Run it as part of any workflow that depends on receiving a message within a timeout window.
 
 ---
 
@@ -341,11 +539,13 @@ Agent does (for movement):
 **ALWAYS start by exploring what's available:**
 
 ```bash
-# These 4 commands tell you EVERYTHING about the system
-python3 {baseDir}/scripts/ros2_cli.py topics list      # All topics
-python3 {baseDir}/scripts/ros2_cli.py services list    # All services
-python3 {baseDir}/scripts/ros2_cli.py actions list    # All actions
-python3 {baseDir}/scripts/ros2_cli.py nodes list      # All nodes
+# These commands tell you everything about the system
+python3 {baseDir}/scripts/ros2_cli.py topics list             # All topics
+python3 {baseDir}/scripts/ros2_cli.py services list           # All services
+python3 {baseDir}/scripts/ros2_cli.py actions list            # All actions
+python3 {baseDir}/scripts/ros2_cli.py nodes list              # All nodes
+python3 {baseDir}/scripts/ros2_cli.py tf list                 # All TF frames
+python3 {baseDir}/scripts/ros2_cli.py control list-controllers # All controllers
 ```
 
 ### Step 3: Search by Message Type
@@ -354,18 +554,20 @@ python3 {baseDir}/scripts/ros2_cli.py nodes list      # All nodes
 
 | Need to find... | Search command... |
 |-----------------|------------------|
-| Velocity command topic (mobile) | `topics find geometry_msgs/Twist` AND `topics find geometry_msgs/TwistStamped` |
-| Position/odom topic | `topics find nav_msgs/Odometry` |
-| Joint positions | `topics find sensor_msgs/JointState` |
-| Joint trajectory (arm control) | `topics find trajectory_msgs/JointTrajectory` |
-| LiDAR data | `topics find sensor_msgs/LaserScan` |
-| Camera feed | `topics find sensor_msgs/Image` OR `topics find sensor_msgs/CompressedImage` |
-| IMU data | `topics find sensor_msgs/Imu` |
-| Joystick | `topics find sensor_msgs/Joy` |
-| Battery/power | `topics find sensor_msgs/BatteryState` |
-| TF transforms | Subscribe to `/tf` or `/tf_static` |
-| Diagnostics | Subscribe to `/diagnostics` |
-| Clock (simulated time) | Subscribe to `/clock` |
+| Velocity command topic (mobile) | `topics find geometry_msgs/msg/Twist` AND `topics find geometry_msgs/msg/TwistStamped` |
+| Position/odom topic | `topics find nav_msgs/msg/Odometry` |
+| Joint positions | `topics find sensor_msgs/msg/JointState` |
+| Joint trajectory (arm control) | `topics find trajectory_msgs/msg/JointTrajectory` |
+| LiDAR data | `topics find sensor_msgs/msg/LaserScan` |
+| Camera feed | `topics find sensor_msgs/msg/Image` AND `topics find sensor_msgs/msg/CompressedImage` |
+| IMU data | `topics find sensor_msgs/msg/Imu` |
+| Joystick | `topics find sensor_msgs/msg/Joy` |
+| Battery/power | `topics find sensor_msgs/msg/BatteryState` |
+| TF frame names | `tf list` |
+| TF transforms (subscribe) | Subscribe to `/tf` or `/tf_static` |
+| Diagnostics | `topics diag-list` (discovers by type) |
+| Clock (simulated time) | `topics find rosgraph_msgs/msg/Clock` |
+| Controller names | `control list-controllers` |
 | Service by type | `services find <service_type>` |
 | Action by type | `actions find <action_type>` |
 
@@ -433,10 +635,13 @@ python3 {baseDir}/scripts/ros2_cli.py params list <NODE_2>
 
 ### Movement / publish-until Failures
 
+**A `publish-until` timeout is a robot or sensor issue — not a missing command.** `publish-until` exists and works; the timeout means the odometry delta was never reached. Do not conclude the command is unavailable.
+
 | Error | Recovery |
 |-------|----------|
-| `publish-until` times out without reaching target | 1. **Immediately send `estop`** — do not wait, do not retry, do not ask the user first<br>2. Subscribe to `<ODOM_TOPIC>` and check `twist.twist.linear` / `twist.twist.angular`: if any value > 0.01, the robot is still moving — keep estop sent and wait for it to stop before continuing |
+| `publish-until` times out without reaching target | 1. **Immediately send `estop`** — do not wait, do not retry, do not ask the user first<br>2. Subscribe to `<ODOM_TOPIC>` — check if odom is publishing and values are changing<br>3. Run `topics hz <ODOM_TOPIC>` — if rate < 5 Hz, odom is stale (robot may not have moved)<br>4. Run `control list-controllers` to verify the velocity controller is active<br>5. Report to user: actual distance covered, odom status, controller state |
 | Odometry not updating during motion | 1. Immediately send zero-velocity: `estop`<br>2. Check `topics details <ODOM_TOPIC>` for publisher count and `topics hz <ODOM_TOPIC>` for rate<br>3. Do NOT continue publishing if odometry is stale — it is a runaway risk |
+| `Could not detect message type` for topic | The topic exists but has no publisher yet. Check `topics details <topic>` for publisher count. Wait for the publisher to connect, or pass `--msg-type` explicitly. |
 
 
 ---
@@ -465,12 +670,16 @@ Use this decision table whenever an in-flight action goal needs to be stopped:
 
 1. **Discover available packages:**
    ```bash
-   ros2 pkg list  # Get all packages
+   # ros2-skill has no package-listing command — this is a Rule 2 last-resort exception.
+   # Document: ros2-skill has no equivalent for `ros2 pkg list`.
+   ros2 pkg list
    ```
 
 2. **Find matching launch files:**
    ```bash
-   ros2 pkg files <package>  # Find launch files in package
+   # ros2-skill has no launch-file listing command — this is a Rule 2 last-resort exception.
+   # Document: ros2-skill has no equivalent for `ros2 pkg files`.
+   ros2 pkg files <package>
    ```
 
 3. **Intelligent inference (use context):**
