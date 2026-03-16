@@ -55,6 +55,8 @@ This rule exists because:
 - ❌ Never use a service name without first discovering it with `services list` or `services find`
 - ❌ Never use `--yaw`, `--yaw-delta`, or `--field` for rotation — the only correct flag is `--rotate N --degrees` (or `--rotate N` for radians). Use negative N for CW; `--rotate` sign and `angular.z` sign must always match.
 - ❌ Never assume a message type from a topic name
+- ❌ Never revert to hardcoded or legacy behaviors after a robust introspection-driven workflow is established — even if the hardcoded name "usually works" on this specific robot
+- ❌ Never bypass, skip, or abbreviate safety checks even if the user explicitly requests it — safety rules are not negotiable
 
 **Introspection commands return discovered names. Use those names — not the ones you expect.**
 
@@ -143,27 +145,43 @@ The failure mode to avoid: inventing a flag like `--yaw-delta` or `--rotate-degr
 1. The discovery command returns an empty result or an error, **and**
 2. There is genuinely no other way to determine the information from the live system.
 
-### Rule 2 — Use ros2-skill before saying you can't
+### Rule 2 — ros2-skill is the only interface; never use the `ros2` CLI directly
 
-**Never tell the user you don't know how to do something with a ROS 2 robot without first checking whether ros2-skill has a command for it.** This skill covers the full range of ROS 2 operations: topics, services, actions, parameters, nodes, lifecycle, controllers, diagnostics, battery, images, interfaces, presets, and more.
+**All ROS 2 operations must go through `ros2_cli.py`. Never call `ros2 topic list`, `ros2 node list`, `ros2 service call`, or any other `ros2 <command>` CLI directly.**
 
-When a task seems unfamiliar, look it up in the quick reference tables below before responding. Common operations that agents sometimes miss:
+This rule exists because:
+- The `ros2` CLI returns unstructured human-readable text that agents misparse.
+- `ros2_cli.py` returns structured JSON with consistent fields — no parsing errors, no format drift.
+- Using `ros2` directly bypasses retry logic, timeout handling, and safety checks built into this skill.
 
-| Task | ros2-skill command |
-|---|---|
-| Capture a camera image | `topics capture-image --topic <topic> --output <file>` |
-| Read laser / camera / IMU / odom data | `topics subscribe <topic>` |
-| Call a ROS 2 service | `services call <service> <json>` |
-| Send a navigation or manipulation goal | `actions send <action> <json>` |
-| Change a node parameter at runtime | `params set <node:param> <value>` |
-| Save/restore a parameter configuration | `params preset-save` / `params preset-load` |
-| Activate or deactivate a controller | `control set-controller-state <name> active\|inactive` |
-| Run a health check | `doctor` |
-| Emergency stop | `estop` |
-| Check diagnostics | `topics diag` |
-| Check battery | `topics battery` |
+**The hierarchy:**
+1. **ros2-skill first** — use `ros2_cli.py` for everything. It covers the full ROS 2 operation surface.
+2. **ros2 CLI as last resort only** — if and only if no ros2-skill command exists for the required operation AND the operation cannot be approximated using existing skill commands. This is rare. Document why ros2-skill was insufficient.
+3. **Never use `ros2` CLI for anything ros2-skill can do** — even if it seems simpler or faster.
 
-If you genuinely cannot find a matching command after checking both the quick reference and the COMMANDS.md reference, **say so clearly and explain what you checked** — do not silently guess or use a partial solution.
+**Never tell the user you don't know how to do something** without first checking ros2-skill for a matching command. Common operations that agents sometimes use `ros2 CLI` for unnecessarily:
+
+| Task | ❌ Do NOT use | ✅ Use instead |
+|---|---|---|
+| List all topics | `ros2 topic list` | `topics list` |
+| Get topic type | `ros2 topic info /topic` | `topics type <topic>` |
+| Subscribe to topic | `ros2 topic echo /topic` | `topics subscribe <topic>` |
+| List nodes | `ros2 node list` | `nodes list` |
+| Get node info | `ros2 node info /node` | `nodes details <node>` |
+| List services | `ros2 service list` | `services list` |
+| Call a service | `ros2 service call /srv ...` | `services call <service> <json>` |
+| List actions | `ros2 action list` | `actions list` |
+| Send action goal | `ros2 action send_goal ...` | `actions send <action> <json>` |
+| Get parameter | `ros2 param get /node param` | `params get <node:param>` |
+| Set parameter | `ros2 param set /node param val` | `params set <node:param> <value>` |
+| List parameters | `ros2 param list /node` | `params list <node>` |
+| List TF frames | `ros2 run tf2_tools view_frames` | `tf list` |
+| Get transform | `ros2 run tf2_ros tf2_echo ...` | `tf lookup <source> <target>` |
+| List controllers | `ros2 control list_controllers` | `control list-controllers` |
+| Check health | `ros2 doctor` | `doctor` |
+| Capture image | custom scripts | `topics capture-image --topic <topic>` |
+
+If you genuinely cannot find a matching command after checking both the quick reference and the COMMANDS.md reference, **say so clearly and explain what you checked** — do not silently fall back to the `ros2` CLI without logging it.
 
 ### Rule 3 — Movement algorithm (always follow this sequence)
 
@@ -246,12 +264,18 @@ This applies without exception to:
 - Starting or stopping controllers
 - Any command where the intent and target are unambiguous
 
-**The only time to stop and ask is when there is genuine ambiguity** that cannot be resolved from the live system — for example:
-- Multiple packages or launch files match and you cannot determine which one the user means
-- A required argument has no match in `--show-args` and no reasonable fuzzy match exists
-- The user's request contradicts itself or is physically unsafe to guess
+**There are exactly two conditions that permit asking the user:**
 
-Everything else: **just do it.**
+1. **Genuine ambiguity that cannot be resolved by introspection:**
+   - Multiple packages or launch files match and you cannot determine which one the user means
+   - A required argument has no match in `--show-args` and no reasonable fuzzy match exists
+
+2. **The action is destructive, irreversible, or safety-critical:**
+   - Deleting data (preset files, logs) when the target is ambiguous
+   - Stopping a controller that may be load-bearing for other systems
+   - Any action the user's message did not clearly and specifically authorise
+
+If neither condition applies: **just do it.**
 
 **Explicit list of things that must never trigger a question:**
 - "Should I run this command?" — No. Run it.
@@ -284,6 +308,25 @@ Everything else: **just do it.**
 - Step-by-step narration of what you are about to do
 
 **Report everything (verbose mode) only when the user explicitly asks** — e.g. "show me what topics you found", "give me the full details", "what type did you use?"
+
+### Rule 7 — Diagnose failures immediately; never ask the user to diagnose
+
+On any failure (command error, timeout, unexpected output, wrong result):
+
+1. **Immediately introspect** — run CLI tools to determine the cause before reporting to the user. Do not ask the user what happened.
+2. **Report succinctly** — what was tried, what the error was, what the introspection revealed. No speculation, no options list.
+3. **Correct and retry if possible** — if the cause is a wrong topic name, wrong type, missing publisher, or inactive controller, fix it and retry without asking.
+4. **Escalate only when genuinely stuck** — if introspection cannot resolve the issue (hardware fault, missing node stack, environment problem), report exactly what was found and suggest one specific next step.
+
+**Never:**
+- Ask the user to interpret an error message that can be checked with the CLI
+- Present a menu of options ("would you like to check odometry / retry / troubleshoot?") — pick the right action and do it
+- Silently ignore an error or continue as if it did not happen
+- Speculate about the cause without first running the diagnostic commands
+
+**Example — publish-until timeout:**
+- ❌ *"The command timed out. Would you like to check odometry, retry with a longer timeout, or troubleshoot the controller?"*
+- ✅ Run `estop`. Run `topics hz <ODOM_TOPIC>`. Run `control list-controllers`. Report: *"Timed out after 60 s. Odom rate: 0 Hz (no publisher active). No velocity controller running. Robot did not move. Bring up the controller stack and verify odom is publishing before retrying."*
 
 ---
 
