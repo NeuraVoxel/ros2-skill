@@ -4,10 +4,10 @@
 Implements daemon status, start, and stop using the ros2cli Python API where
 available, with a PID-file + SIGTERM fallback.
 
-No rclpy or live ROS 2 graph is required.  The ROS 2 daemon is a background
-service that caches DDS discovery results (nodes, topics, services) to speed
-up CLI queries.  It is not required for ros2_cli.py to function — it only
-affects the responsiveness of raw 'ros2' CLI commands.
+No live ROS 2 graph is required for any of these commands.  Note: importing
+this module requires rclpy to be installed because the ``output`` helper is
+imported from ros2_utils, which validates the rclpy environment at import
+time.  The daemon commands themselves make no rclpy calls.
 
 Domain ID is always read from the ROS_DOMAIN_ID environment variable
 (default: 0), mirroring the behaviour of the 'ros2 daemon' CLI.
@@ -33,12 +33,18 @@ def _get_domain_id() -> int:
         return 0
 
 
-def _find_pid_files() -> list:
-    """Find daemon PID files in ~/.ros/ matching standard name patterns."""
+def _find_pid_files(domain_id: int) -> list:
+    """Find daemon PID files for *domain_id* in ~/.ros/.
+
+    ROS 2 daemon PID files follow the pattern
+    ``daemon_{domain_id}_{rmw_impl}_{distro}.pid``, so filtering by domain ID
+    avoids accidentally picking up daemons for a different domain running on
+    the same host.
+    """
     ros_dir = pathlib.Path.home() / ".ros"
     if not ros_dir.is_dir():
         return []
-    return list(ros_dir.glob("daemon_*.pid"))
+    return list(ros_dir.glob(f"daemon_{domain_id}_*.pid"))
 
 
 def _read_pid(pid_file) -> int | None:
@@ -88,7 +94,7 @@ def _daemon_pid_status(domain_id: int) -> dict:
 
     Returns a status dict compatible with the command output schema.
     """
-    pid_files = _find_pid_files()
+    pid_files = _find_pid_files(domain_id)
 
     if not pid_files:
         return {"status": "not_running", "domain_id": domain_id}
@@ -138,7 +144,7 @@ def cmd_daemon_status(args):
         output(result)
 
     except Exception as exc:
-        output({"error": str(exc)})
+        output({"error": str(exc), "domain_id": _get_domain_id()})
 
 
 def cmd_daemon_start(args):
@@ -185,14 +191,20 @@ def cmd_daemon_start(args):
         # Brief pause then verify via PID files.
         time.sleep(0.5)
         pid_info = _daemon_pid_status(domain_id)
-        result = {"status": "started", "domain_id": domain_id}
+
         if "pid" in pid_info:
-            result["pid"] = pid_info["pid"]
+            # PID confirmed — daemon is definitely up.
+            result = {"status": "started", "domain_id": domain_id, "pid": pid_info["pid"]}
+        else:
+            # spawn_daemon() succeeded but we cannot yet confirm the PID.
+            # Daemons may take longer than 0.5 s on slow systems.
+            result = {"status": "starting", "domain_id": domain_id,
+                      "note": "spawn_daemon() called; daemon PID not yet visible in ~/.ros/"}
 
         output(result)
 
     except Exception as exc:
-        output({"error": str(exc)})
+        output({"error": str(exc), "domain_id": _get_domain_id()})
 
 
 def cmd_daemon_stop(args):
@@ -205,9 +217,13 @@ def cmd_daemon_stop(args):
     try:
         domain_id = _get_domain_id()
 
-        # --- Check if running -----------------------------------------------
+        # --- Check if running (both PID files and native API) ---------------
         pid_info = _daemon_pid_status(domain_id)
-        if pid_info["status"] == "not_running":
+        native   = _daemon_status_native(domain_id)
+        pid_says_running    = (pid_info["status"] == "running")
+        native_says_running = (native is not None and native["running"])
+        if not pid_says_running and not native_says_running:
+            # Both sources agree: daemon is not running.
             output({"status": "not_running", "domain_id": domain_id})
             return
 
@@ -217,7 +233,10 @@ def cmd_daemon_stop(args):
             from ros2cli.daemon import shutdown_daemon  # type: ignore[import]
             shutdown_daemon(domain_id=domain_id)
             stopped_via_api = True
-        except ImportError:
+        except Exception:
+            # ImportError → ros2cli not installed; any other exception (e.g.
+            # ConnectionRefusedError, RuntimeError from the daemon protocol)
+            # also falls through so the SIGTERM path can take over.
             pass
 
         if not stopped_via_api:
@@ -244,4 +263,4 @@ def cmd_daemon_stop(args):
             })
 
     except Exception as exc:
-        output({"error": str(exc)})
+        output({"error": str(exc), "domain_id": _get_domain_id()})

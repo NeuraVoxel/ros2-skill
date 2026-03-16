@@ -2215,46 +2215,50 @@ class TestDaemonCommands(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_start_already_running_is_idempotent(self):
-        """Daemon already running → already_running; spawn is NOT called."""
+        """Daemon already running → already_running; spawn_daemon is NOT called."""
+        import types
         spawn_mock = MagicMock()
+        fake_daemon_module = MagicMock(spawn_daemon=spawn_mock)
+        captured = []
         with patch.object(self.ros2_daemon, "_daemon_status_native",
                           return_value={"running": True}), \
              patch.object(self.ros2_daemon, "_daemon_pid_status",
                           return_value={"status": "running", "domain_id": 0, "pid": 9999}), \
-             patch("ros2_daemon.output", side_effect=lambda r: None) as out_mock:
-            import types
-            captured = []
-            with patch("ros2_daemon.output", side_effect=captured.append):
-                self.ros2_daemon.cmd_daemon_start(types.SimpleNamespace())
+             patch.dict("sys.modules", {
+                 "ros2cli": MagicMock(),
+                 "ros2cli.daemon": fake_daemon_module,
+             }), \
+             patch("ros2_daemon.output", side_effect=captured.append):
+            self.ros2_daemon.cmd_daemon_start(types.SimpleNamespace())
         result = captured[0]
         self.assertEqual(result["status"], "already_running")
+        spawn_mock.assert_not_called()
 
     def test_start_not_running_spawn_succeeds(self):
-        """Daemon not running, spawn_daemon importable → status is 'started'."""
+        """Daemon not running, spawn_daemon importable → spawn called once, status 'started'."""
         import types
+        spawn_mock = MagicMock()
+        fake_daemon_module = MagicMock(spawn_daemon=spawn_mock)
         captured = []
         with patch.object(self.ros2_daemon, "_daemon_status_native",
                           return_value={"running": False}), \
-             patch.object(self.ros2_daemon, "_daemon_pid_status",
-                          return_value={"status": "not_running", "domain_id": 0}), \
              patch("ros2_daemon.time.sleep"), \
-             patch("builtins.__import__", wraps=__import__) as import_mock:
-            # Patch spawn_daemon inside ros2cli.daemon
-            with patch.dict("sys.modules", {
-                "ros2cli": MagicMock(),
-                "ros2cli.daemon": MagicMock(spawn_daemon=MagicMock()),
-            }):
-                # After spawn, re-check returns running
-                with patch.object(self.ros2_daemon, "_daemon_pid_status",
-                                  side_effect=[
-                                      {"status": "not_running", "domain_id": 0},
-                                      {"status": "running", "domain_id": 0, "pid": 1234},
-                                  ]):
-                    with patch("ros2_daemon.output", side_effect=captured.append):
-                        self.ros2_daemon.cmd_daemon_start(types.SimpleNamespace())
+             patch.dict("sys.modules", {
+                 "ros2cli": MagicMock(),
+                 "ros2cli.daemon": fake_daemon_module,
+             }), \
+             patch.object(self.ros2_daemon, "_daemon_pid_status",
+                          side_effect=[
+                              {"status": "not_running", "domain_id": 0},  # already-running check
+                              {"status": "running", "domain_id": 0, "pid": 1234},  # post-spawn verify
+                          ]), \
+             patch("ros2_daemon.output", side_effect=captured.append):
+            self.ros2_daemon.cmd_daemon_start(types.SimpleNamespace())
         result = captured[0]
         self.assertEqual(result["status"], "started")
         self.assertIn("domain_id", result)
+        self.assertEqual(result["pid"], 1234)
+        spawn_mock.assert_called_once()
 
     def test_start_ros2cli_unavailable_returns_error_with_hint(self):
         """ros2cli not installed → error with hint key."""
@@ -2282,7 +2286,7 @@ class TestDaemonCommands(unittest.TestCase):
             def _import_raiser(name, *a, **kw):
                 if name == "ros2cli.daemon":
                     raise ImportError("no ros2cli")
-                return __import__(name, *a, **kw)
+                return real_import(name, *a, **kw)  # delegate to original, not the patched version
 
             import builtins
             with patch.object(builtins, "__import__", side_effect=_import_raiser):
@@ -2312,6 +2316,8 @@ class TestDaemonCommands(unittest.TestCase):
         captured = []
         with patch.object(self.ros2_daemon, "_daemon_pid_status",
                           return_value={"status": "not_running", "domain_id": 0}), \
+             patch.object(self.ros2_daemon, "_daemon_status_native",
+                          return_value={"running": False}), \
              patch("ros2_daemon.output", side_effect=captured.append):
             self.ros2_daemon.cmd_daemon_stop(types.SimpleNamespace())
         result = captured[0]
@@ -2327,6 +2333,8 @@ class TestDaemonCommands(unittest.TestCase):
                               {"status": "running", "domain_id": 0, "pid": 9999},
                               {"status": "not_running", "domain_id": 0},
                           ]), \
+             patch.object(self.ros2_daemon, "_daemon_status_native",
+                          return_value={"running": True}), \
              patch("ros2_daemon.time.sleep"), \
              patch.dict("sys.modules", {
                  "ros2cli": MagicMock(),
@@ -2346,6 +2354,8 @@ class TestDaemonCommands(unittest.TestCase):
                               {"status": "running", "domain_id": 0, "pid": 9999},
                               {"status": "running", "domain_id": 0, "pid": 9999},
                           ]), \
+             patch.object(self.ros2_daemon, "_daemon_status_native",
+                          return_value={"running": True}), \
              patch("ros2_daemon.time.sleep"), \
              patch.dict("sys.modules", {
                  "ros2cli": MagicMock(),
@@ -2364,6 +2374,8 @@ class TestDaemonCommands(unittest.TestCase):
         with patch.dict(os.environ, {"ROS_DOMAIN_ID": "7"}), \
              patch.object(self.ros2_daemon, "_daemon_pid_status",
                           return_value={"status": "not_running", "domain_id": 7}), \
+             patch.object(self.ros2_daemon, "_daemon_status_native",
+                          return_value=None), \
              patch("ros2_daemon.output", side_effect=captured.append):
             self.ros2_daemon.cmd_daemon_stop(types.SimpleNamespace())
         self.assertIn("domain_id", captured[0])
