@@ -369,23 +369,49 @@ State the movement (direction, distance/angle, velocity). Wait for user acknowle
 
 ### Phase 3 — Execute
 
-**Velocity capping — sign preservation is mandatory:**
+**Step 1 — Compute speed from requested distance/angle (before building the payload):**
+
+Speed scales proportionally with distance/angle, then is capped at the discovered velocity limit.
+
+```
+linear_speed  = clamp(distance_m  × 0.3,  min=0.05 m/s,   max=velocity_limit or 0.20 m/s)
+angular_speed = clamp(angle_deg   × 0.006, min=0.15 rad/s, max=angular_limit  or 0.50 rad/s)
+```
+
+| Distance | linear_speed | | Angle | angular_speed |
+|---|---|---|---|---|
+| 0.15 m | 0.05 m/s (min) | | 10° | 0.15 rad/s (min) |
+| 0.30 m | 0.09 m/s | | 30° | 0.18 rad/s |
+| 0.50 m | 0.15 m/s | | 50° | 0.30 rad/s |
+| ≥ 0.67 m | 0.20 m/s (default cap) | | ≥ 83° | 0.50 rad/s (default cap) |
+
+**Step 2 — Velocity capping — sign preservation is mandatory:**
+
 Discovered limits are magnitudes. Apply as `|velocity| ≤ limit`. Never strip or invert the sign:
 - ✅ `angular.z: -0.3` capped to `max 0.75` → `angular.z: -0.3` (sign preserved)
 - ❌ `angular.z: -0.3` → `abs(-0.3) = 0.3` (sign stripped → robot turns the wrong way)
 
+**Step 3 — Execute with deceleration zone:**
+
+Always include `--slow-last` and `--slow-factor`. The skill ramps velocity down linearly for the last N units so the robot arrives precisely rather than overshooting.
+
+- If `distance ≤ slow-last`: the decel zone covers the entire move (velocity starts scaled down from the beginning).
+- If `distance > slow-last`: full speed for `distance - slow-last`, then deceleration for the final `slow-last`.
+
 **Drive N metres forward (Euclidean closed-loop — frame-independent):**
 ```bash
 python3 {baseDir}/scripts/ros2_cli.py topics publish-until <vel_topic> \
-  '{"linear":{"x":0.2},"angular":{"z":0}}' \
-  --monitor <odom_topic> --field pose.pose.position --euclidean --delta <distance> --timeout 60
+  '{"linear":{"x":<linear_speed>},"angular":{"z":0}}' \
+  --monitor <odom_topic> --field pose.pose.position --euclidean --delta <distance> \
+  --slow-last 0.3 --slow-factor 0.25 --timeout 60
 ```
 
 **Rotate N degrees (closed-loop):**
 ```bash
 python3 {baseDir}/scripts/ros2_cli.py topics publish-until <vel_topic> \
   '{"linear":{"x":0},"angular":{"z":<angular_vel>}}' \
-  --monitor <odom_topic> --rotate <angle> --degrees --timeout 30
+  --monitor <odom_topic> --rotate <angle> --degrees \
+  --slow-last 20 --slow-factor 0.25 --timeout 30
 ```
 
 **Sign convention — `--rotate` and `angular.z` MUST always have the same sign:**

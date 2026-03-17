@@ -776,6 +776,16 @@ def build_parser():
                         "Requires --monitor with an odometry topic.")
     p.add_argument("--degrees", action="store_true", default=False,
                    help="Interpret --rotate angle in degrees instead of radians")
+    p.add_argument("--slow-last", dest="slow_last", type=float, default=None,
+                   help="Begin decelerating when this many units remain before the target. "
+                        "Units match the movement type: metres for --field/--euclidean distance, "
+                        "degrees if --degrees is set, radians otherwise for --rotate. "
+                        "Velocity ramps linearly from full commanded speed at --slow-last remaining "
+                        "down to --slow-factor × full speed at the target.")
+    p.add_argument("--slow-factor", dest="slow_factor", type=float, default=0.25,
+                   help="Minimum velocity as a fraction of the commanded velocity at the end of "
+                        "the decel zone (0–1, default 0.25). E.g. 0.25 means the robot finishes "
+                        "at 25%% of its commanded speed.")
     p.add_argument("--rate", type=float, default=10.0,
                    help="Publish rate in Hz (default: 10)")
     p.add_argument("--timeout", type=float, default=60.0,

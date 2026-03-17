@@ -333,6 +333,25 @@ def normalize_angle(angle):
     return angle
 
 
+def scale_twist_velocity(data, scale):
+    """Return a copy of a Twist or TwistStamped dict with all velocity fields multiplied by scale."""
+    import copy
+    d = copy.deepcopy(data)
+    for top in ('linear', 'angular'):
+        if top in d and isinstance(d[top], dict):
+            for ax in ('x', 'y', 'z'):
+                if ax in d[top] and isinstance(d[top][ax], (int, float)):
+                    d[top][ax] = d[top][ax] * scale
+    # TwistStamped nests velocity under 'twist'
+    if 'twist' in d and isinstance(d.get('twist'), dict):
+        for top in ('linear', 'angular'):
+            if top in d['twist'] and isinstance(d['twist'][top], dict):
+                for ax in ('x', 'y', 'z'):
+                    if ax in d['twist'][top] and isinstance(d['twist'][top][ax], (int, float)):
+                        d['twist'][top][ax] = d['twist'][top][ax] * scale
+    return d
+
+
 class ConditionMonitor(Node):
     """Subscriber that evaluates a stop condition on every incoming message."""
 
@@ -786,11 +805,43 @@ def cmd_topics_publish_until(args):
             start_time = time.time()
             published_count = 0
 
+            # Deceleration zone: resolve --slow-last to the same unit system as the condition.
+            slow_last = getattr(args, 'slow_last', None)
+            slow_factor = max(0.0, min(1.0, getattr(args, 'slow_factor', 0.25)))
+            slow_zone = None
+            if slow_last is not None:
+                slow_zone = (
+                    math.radians(slow_last)
+                    if (rotate_angle is not None and use_degrees)
+                    else float(slow_last)
+                )
+
             try:
                 while not stop_event.is_set():
                     if timeout and (time.time() - start_time) >= timeout:
                         break
-                    publisher.pub.publish(msg)
+
+                    publish_msg = msg
+                    if slow_zone is not None and slow_zone > 0:
+                        with monitor.lock:
+                            if rotate_angle is not None:
+                                remaining = max(0.0, abs(rotate_angle) - abs(monitor.accumulated_rotation or 0.0))
+                            elif euclidean:
+                                remaining = max(0.0, float(threshold) - (monitor.euclidean_distance or 0.0))
+                            elif operator == 'delta' and monitor.start_value is not None and monitor.current_value is not None:
+                                try:
+                                    remaining = max(0.0, abs(float(threshold)) - abs(float(monitor.current_value) - float(monitor.start_value)))
+                                except (TypeError, ValueError):
+                                    remaining = None
+                            else:
+                                remaining = None
+
+                        if remaining is not None and remaining < slow_zone:
+                            scale = max(slow_factor, remaining / slow_zone)
+                            if scale < 0.999:
+                                publish_msg = dict_to_msg(pub_msg_class, scale_twist_velocity(msg_data, scale))
+
+                    publisher.pub.publish(publish_msg)
                     published_count += 1
                     executor.spin_once(timeout_sec=interval)
             finally:
