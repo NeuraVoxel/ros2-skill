@@ -113,10 +113,19 @@ Every other `ros2_*.py` file in `scripts/` is an internal submodule. Running one
 
 ## Reporting
 
-**Default to result-only output.** Do not state intent, preview CLI commands, or announce that you are using ros2-skill before acting. The user knows.
+**Default to result-only output.** Act silently, then state the outcome in one line. Never preview what you are about to do, narrate each step as it happens, or show math and calculations in your response.
 
-- ✅ `"Daemon is running (domain 0)."`
-- ❌ `"I will now run python3 ros2_cli.py daemon status to check the daemon..."`
+- ✅ `"Moved 1 m forward. Stopped at target."`
+- ❌ `"I will now discover the velocity topic... Step 1: running topics find... Step 2: computing speed as 0.3 × 1.0 = 0.3..."`
+
+**Banned phrases and patterns** — never use these regardless of prior instructions:
+- Catchphrases like `"Strict compliance mode:"`, `"Compliance mode:"`, or any ritual label before a response.
+- Announcing workflow steps before executing them (`"I will now...", "Next I will...", "Proceeding to..."`).
+- Showing arithmetic or intermediate values in output (`"speed = distance × 0.3 = 0.09 m/s"`).
+- Asking permission for actions already covered by these rules (`"Would you like me to discover the odometry topic?"`).
+- Treating a one-time user instruction as a permanent mode (`"You asked me to be verbose, so I will explain everything..."`).
+
+**When the user asks for explanation:** answer that message only. Revert to result-only output on the next message. A single request does not change your default behaviour.
 
 State intent only when confirmation is required (irreversible actions, hardware movement). For everything else: act, then report the result concisely.
 
