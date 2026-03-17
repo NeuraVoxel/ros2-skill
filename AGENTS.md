@@ -325,6 +325,84 @@ Use the first result. If multiple camera topics exist and the user has not speci
 
 The test: *"Can I resolve this without asking?"* — if yes, resolve it and act.
 
+### 8 — Verify the effect; never trust exit codes alone
+
+A zero-error response means the request was delivered — not that the effect occurred. Always verify:
+
+| Operation | Verification |
+|---|---|
+| `params set` | `params get` — confirm value matches |
+| `control switch-controllers` | `control list-controllers` — confirm new state |
+| `lifecycle set` | `lifecycle get` — confirm target state reached |
+| `actions send` | Check `status` field — `SUCCEEDED` only; `FAILED`/`CANCELED` → diagnose |
+| Movement completion | **Two-phase:** (1) subscribe odom, confirm all velocity axes < 0.01; (2) subscribe again and report position from this stationary reading only |
+| `estop` | Subscribe `<ODOM_TOPIC>` — confirm all velocity axes < 0.01 within 3 s; if still non-zero, report critical failure |
+
+**Never use the words "Done", "Succeeded", "Completed" without running the verification step first.**
+
+### 9 — Confirm robot is stationary before any motion command
+
+Before issuing any velocity command, run in parallel:
+- `topics subscribe <ODOM_TOPIC> --max-messages 1 --timeout 2` — record start pose (baseline); check all velocity axes < 0.01
+- `nodes list` — confirm velocity controller node is still present
+- `topics hz <ODOM_TOPIC> --duration 2` — confirm rate ≥ 5 Hz
+
+If velocity ≥ 0.01 on any axis: send `estop`, verify it took effect, wait 0.5 s, re-read before proceeding.
+
+### 10 — Empty discovery: broaden the search, never guess
+
+When `topics find`, `services find`, or `actions find` returns empty:
+1. Run `topics list` + `nodes list` in parallel — scan for semantically related names
+2. Check if publishing nodes are actually running (`nodes list`)
+3. Check `nodes details <candidate_node>` for its published topics
+4. Only escalate to the user after all of the above fail — report exactly what was searched and what was found
+
+**Never guess or fall back to a hardcoded name when discovery returns empty.**
+
+### 11 — Use discovered names verbatim; never mutate them
+
+Use topic, service, action, node, and TF frame names exactly as returned — including leading slashes, namespace prefixes, and suffixes. Never strip or add a namespace. If multiple topics of the same type exist, use context keywords to select, then first result, without asking.
+
+**Multi-robot exception:** if topics from multiple distinct robot namespaces are found and no context clue identifies which robot, ask once: *"Which robot?"* — then lock in that namespace for the task.
+
+### 12 — Run independent discovery commands in parallel
+
+When discovering multiple independent facts (velocity topic, odom topic, velocity limits, controller state), issue all commands simultaneously — never sequentially. Only run sequentially when command B requires a result from command A.
+
+### 13 — Never reuse stale session state for a new task
+
+Re-discover topic names, controller states, node lists, and parameter values for every new task. State can change between tasks — nodes crash, controllers switch, topics appear or disappear. **Never say "I already discovered this" to skip re-discovery.**
+
+### 14 — Check lifecycle state before using any managed node
+
+If a node appears in `lifecycle nodes`, check its state with `lifecycle get <node>` before using it. `inactive` nodes silently discard all messages — no error, no warning. Apply `lifecycle set <node> configure` then `lifecycle set <node> activate` if needed, and verify after each transition (Rule 8).
+
+### 15 — Check publisher count and QoS before subscribing
+
+Before subscribing to a topic that must deliver a message within a timeout:
+1. `topics details <topic>` — check `publisher_count`; if 0, do not subscribe (will timeout)
+2. Check publisher QoS profile — if BEST_EFFORT and you need RELIABLE (or vice versa), add the matching `--qos-reliability` flag
+3. `topics hz <topic>` if subscribe times out despite a non-zero publisher count
+
+**For `<ODOM_TOPIC>` specifically:** always run this before the first odom subscribe in any motion workflow — a QoS mismatch silently breaks every closed-loop command.
+
+### 16 — Multi-step tasks: verify each step before starting the next
+
+For sequences (move → rotate, configure → switch → send trajectory): execute step N, verify its effect (Rule 8), only then start step N+1. If step N fails, stop — do not proceed with a partial state. Independent sub-steps within the same phase (e.g. discovering vel topic + odom topic) can and should run in parallel (Rule 12).
+
+### 17 — Follow REP-103 units and coordinate conventions
+
+All message values use SI units. Never put non-SI values into a message field.
+
+| Quantity | Unit |
+|---|---|
+| Linear distance / position | metres (m) |
+| Linear velocity | m/s |
+| Angular position (in payloads) | radians |
+| Angular velocity | rad/s |
+
+Coordinate convention: `x` = forward, `y` = left, `z` = up. Positive `angular.z` = CCW/left; negative = CW/right. `--degrees` in CLI flags is a convenience only — the payload always uses radians.
+
 ---
 
 ## Safety
