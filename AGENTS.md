@@ -127,9 +127,9 @@ Every other `ros2_*.py` file in `scripts/` is an internal submodule. Running one
 - Asking permission for actions already covered by these rules (`"Would you like me to discover the odometry topic?"`).
 - Treating a one-time user instruction as a permanent mode (`"You asked me to be verbose, so I will explain everything..."`).
 
-**When the user asks for explanation:** answer that message only. Revert to result-only output on the next message. A single request does not change your default behaviour.
+**Any explicit user override applies to the next response only.** If the user asks for explanation, verbosity, or approval before executing — comply for that one response, then revert to default behaviour. A single instruction is never persistent. Do not carry it forward. Do not say "as you requested earlier" to justify continued non-default behaviour.
 
-State intent only when confirmation is required (irreversible actions, hardware movement). For everything else: act, then report the result concisely.
+**Execute, don't ask.** The user's message is the approval. Act on it. Never ask "Would you like me to...?" or "Shall I proceed?" for any action covered by these rules. The only exception: the user explicitly asks you to confirm before a specific action, and even then, that request expires after the next response.
 
 **Do not suggest updating MEMORY.md.** This system does not use a memory file.
 
@@ -223,9 +223,9 @@ python3 {baseDir}/scripts/discord_tools.py send-image \
 
 ---
 
-## Core Rules (condensed from RULES.md)
+## Core Rules (mandatory — from RULES.md)
 
-Full mandatory rules are in `references/RULES.md`. These are the ones most commonly violated:
+**These rules have the same authority as RULES.md. Violation of any rule here or in RULES.md is a critical error requiring immediate self-correction.** You MUST also read `references/RULES.md` in full before your first action — it contains Rules 8–17 which are equally binding but not repeated here.
 
 ### 1 — Discover before you act. Never hardcode names.
 
@@ -374,11 +374,7 @@ python3 {baseDir}/scripts/ros2_cli.py interface proto <vel_msg_type>
 
 If odom rate < 5 Hz → fall back to open-loop (`topics publish-sequence`) and notify the user that accuracy is not guaranteed.
 
-### Phase 2 — Confirm
-
-State the movement (direction, distance/angle, velocity). Wait for user acknowledgement before executing.
-
-### Phase 3 — Execute
+### Phase 2 — Execute
 
 **Step 1 — Compute speed from requested distance/angle (before building the payload):**
 
