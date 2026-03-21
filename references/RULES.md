@@ -896,37 +896,67 @@ If the field is not found in the subscribed message, stop and re-run `interface 
 
 **Distinguishing QoS failure from genuine timeout:** If `publish-until` returns `condition_met: false` on the first attempt and the cause is uncertain, run `topics hz <ODOM_TOPIC> --duration 2` immediately after estop. If the rate is 0 Hz → the odom publisher was not being received (QoS mismatch or publisher offline) — fall back to open-loop. If rate > 0 Hz → odom was flowing; the condition was genuinely not met within the timeout — apply Rule 21 (re-issue for remaining distance).
 
-### Rule 20 — Use `--slow-last` for all movements exceeding 2 m or 180°
+### Rule 20 — Deceleration zone: auto-computed for every `publish-until` move
 
-The deceleration zone (`--slow-last`) ramps down to `--slow-factor` speed over the final N metres or degrees of a movement. Without it, the robot arrives at the target at full commanded velocity and immediately stops — producing overshoot on any platform with non-negligible inertia.
+The deceleration zone ramps velocity down linearly from full commanded speed to a fine-control floor over the final N units of a movement. Without it, the robot arrives at full velocity and overshoots any platform with non-negligible inertia.
 
-**Mandatory thresholds:**
+**The skill computes the zone automatically** from the commanded velocity and discovered params. Do not add `--slow-last` manually unless you need to override the computed value.
 
-| Movement type | Threshold | Default recommendation |
-|---|---|---|
-| Linear (forward/backward) | > 2 m | `--slow-last 0.5 --slow-factor 0.3` |
-| Rotation | > 180° (π rad) | `--slow-last 30 --slow-factor 0.4` (degrees) |
-| Strafing (holonomic) | > 2 m | `--slow-last 0.5 --slow-factor 0.3` |
+#### How auto-compute works
 
-**Rule:** If the movement distance or angle exceeds the threshold, **always** add `--slow-last` and `--slow-factor` to the `publish-until` command. Never omit them for long moves, even if the user does not mention smoothness.
+For **linear** moves:
+```
+a_max     = param scan (max_accel / accel_limit / decel_limit); fallback 0.5 m/s²
+v_min     = param scan (min_vel_x / min_vel / min_speed);       fallback: x=0.125 m/s, y=0.1 m/s
+v_cmd     = |linear.x| or |linear.y| (x preferred)
+
+slow_last = clamp( v_cmd² / (2 × a_max),  min=0.05 m,  max=distance × 0.4 )
+slow_factor = clamp( v_min / v_cmd,  min=0.10,  max=0.50 )
+```
+
+For **rotation** moves:
+```
+α_max     = param scan (max_ang_accel / ang_accel_limit);       fallback 1.0 rad/s²
+ω_min     = param scan (min_ang_vel / min_angular_speed);       fallback 0.375 rad/s
+ω_cmd     = |angular.z|
+
+slow_last = clamp( ω_cmd² / (2 × α_max),  min=3°,  max=angle × 0.4 )
+slow_factor = clamp( ω_min / ω_cmd,  min=0.10,  max=0.50 )
+```
+
+Param fetch runs at startup with a **2 s hard timeout**. If no matching params are found, the fallback defaults above are used silently. The computed values are reported in the output JSON under `"decel_zone"`.
+
+**Example output:**
+```json
+"decel_zone": {
+  "auto_computed": true,
+  "slow_last": 0.32,
+  "slow_factor": 0.28,
+  "params_source": "/velocity_controller:max_accel"
+}
+```
+
+#### Manual override
+
+If `--slow-last` is provided explicitly, auto-compute is skipped entirely and the provided value is used as-is. Use this only if the computed zone produces observed overshoot or when testing:
 
 ```bash
-# Long forward move (> 2 m) — decel zone required
+# Manual override — suppress auto-compute
 python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
   '{"linear":{"x":0.4},"angular":{"z":0.0}}' \
   --monitor <ODOM_TOPIC> --field pose.pose.position.x --delta 3.0 \
   --slow-last 0.5 --slow-factor 0.3
-
-# Long rotation (> 180°) — decel zone required
-python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
-  '{"linear":{"x":0.0},"angular":{"z":0.6}}' \
-  --monitor <ODOM_TOPIC> --field pose.pose.orientation.z --rotate 200 --degrees \
-  --slow-last 30 --slow-factor 0.4
 ```
 
-**Adjust `--slow-factor` for platform inertia:** heavier or faster platforms need a lower factor (more aggressive slow-down). If overshoot is observed even with the default factor, reduce `--slow-factor` (e.g., 0.2) and increase `--slow-last` (e.g., 0.8 m).
+#### Fallback defaults (when params unavailable)
 
-**Short moves (≤ 2 m / ≤ 180°):** `--slow-last` is optional but recommended. The default velocity cap (Rule 0.5) limits harm from overshoot on short moves.
+| Axis | Fine-control floor (`v_min`) | Accel fallback (`a_max`) |
+|------|------------------------------|--------------------------|
+| linear.x | 0.125 m/s | 0.5 m/s² |
+| linear.y | 0.100 m/s | 0.5 m/s² |
+| angular.z | 0.375 rad/s | 1.0 rad/s² |
+
+**If overshoot is observed** with auto-computed values: increase `--slow-last` (larger zone) or decrease `--slow-factor` (lower floor). Report both values from `"decel_zone"` output so the user can see what was used.
 
 ### Rule 21 — After a `publish-until` timeout, verify position before re-issuing
 

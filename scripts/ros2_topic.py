@@ -348,6 +348,188 @@ def normalize_angle(angle):
     return angle
 
 
+# ---------------------------------------------------------------------------
+# Dynamic decel-zone computation
+# ---------------------------------------------------------------------------
+
+# Per-axis fallback minimums (fine-control floor) and accel defaults.
+_DECEL_DEFAULTS = {
+    'a_max_linear':  0.5,    # m/s²   — conservative linear accel fallback
+    'a_max_angular': 1.0,    # rad/s² — conservative angular accel fallback
+    'v_min_x':       0.125,  # m/s    — fine-control floor, linear x
+    'v_min_y':       0.100,  # m/s    — fine-control floor, linear y
+    'omega_min':     0.375,  # rad/s  — fine-control floor, angular z
+}
+
+# Param keyword groups (searched case-insensitively, first numeric match wins).
+_ACCEL_KEYWORDS     = ['max_accel', 'accel_limit', 'decel_limit']
+_ANG_ACCEL_KEYWORDS = ['max_ang_accel', 'ang_accel_limit', 'angular_accel_limit']
+_MIN_VEL_KEYWORDS   = ['min_vel_x', 'min_vel', 'min_speed', 'speed_limit_min']
+_MIN_ANG_VEL_KEYWORDS = ['min_ang_vel', 'min_angular_speed', 'min_angular_vel']
+
+
+def _fetch_first_param(node, nodes_to_search, keywords, deadline):
+    """Scan *nodes_to_search* for any param whose name contains a keyword.
+
+    Returns (float_value, "node_name:param_name") or (None, "defaults").
+    Stops as soon as one numeric value is found, or when *deadline* (epoch s) passes.
+    """
+    from rcl_interfaces.srv import ListParameters, GetParameters
+
+    for node_name in nodes_to_search:
+        if time.time() >= deadline:
+            break
+        try:
+            list_client = node.create_client(ListParameters, f"{node_name}/list_parameters")
+            svc_timeout = max(0.1, min(1.0, deadline - time.time()))
+            if not list_client.wait_for_service(timeout_sec=svc_timeout):
+                continue
+
+            future = list_client.call_async(ListParameters.Request())
+            while time.time() < deadline and not future.done():
+                rclpy.spin_once(node, timeout_sec=0.05)
+            if not future.done():
+                future.cancel()
+                continue
+
+            result = future.result()
+            names = result.result.names if result and result.result else []
+            kws_lower = [k.lower() for k in keywords]
+            matched = [n for n in names if any(kw in n.lower() for kw in kws_lower)]
+            if not matched:
+                continue
+
+            get_client = node.create_client(GetParameters, f"{node_name}/get_parameters")
+            svc_timeout = max(0.1, min(1.0, deadline - time.time()))
+            if not get_client.wait_for_service(timeout_sec=svc_timeout):
+                continue
+
+            req = GetParameters.Request()
+            req.names = matched[:1]
+            future2 = get_client.call_async(req)
+            while time.time() < deadline and not future2.done():
+                rclpy.spin_once(node, timeout_sec=0.05)
+            if not future2.done():
+                future2.cancel()
+                continue
+
+            values = future2.result().values if future2.result() else []
+            if not values:
+                continue
+
+            pval = values[0]
+            for attr in ('double_value', 'integer_value'):
+                raw = getattr(pval, attr, None)
+                if raw is not None and float(raw) > 0:
+                    return float(raw), f"{node_name}:{matched[0]}"
+        except Exception:
+            continue
+
+    return None, "defaults"
+
+
+def compute_decel_params(msg_data, distance, is_rotation, is_degrees, node):
+    """Auto-compute the decel zone (slow_zone) and slow_factor for publish-until.
+
+    Uses kinematics:
+      linear:   slow_zone = v_cmd² / (2 × a_max);  slow_factor = v_min / v_cmd
+      rotation: slow_zone = ω_cmd² / (2 × α_max);  slow_factor = ω_min / ω_cmd
+
+    Accel and min-vel values are fetched from live node params (2 s hard timeout).
+    Falls back to _DECEL_DEFAULTS on any failure.
+
+    Args:
+        msg_data:    Parsed Twist or TwistStamped dict from the publish-until message.
+        distance:    Total move in condition units (metres for linear, radians for rotation).
+        is_rotation: True when using --rotate.
+        is_degrees:  True when --degrees is set (affects display value in meta only).
+        node:        A live ROS2CLI node to use for param service calls.
+
+    Returns:
+        (slow_zone, slow_factor, meta_dict)
+        slow_zone is in condition units (metres or radians).
+        meta_dict: {"auto_computed": True/False, "slow_last": X, "slow_factor": Y,
+                    "params_source": "node:param" | "defaults"}
+    """
+    deadline = time.time() + 2.0  # hard 2-second cap for all param fetches
+
+    # Unwrap TwistStamped → Twist
+    twist = msg_data.get('twist', msg_data)
+    linear  = twist.get('linear',  {})
+    angular = twist.get('angular', {})
+
+    # ------------------------------------------------------------------ rotation
+    if is_rotation:
+        omega_cmd = abs(angular.get('z', 0.0))
+        if omega_cmd < 1e-6:
+            return None, 0.25, {"auto_computed": False, "reason": "zero angular velocity"}
+
+        try:
+            node_info = node.get_node_names_and_namespaces()
+            nodes_list = [f"{ns.rstrip('/')}/{n}" for n, ns in node_info]
+        except Exception:
+            nodes_list = []
+
+        alpha_val, alpha_src = _fetch_first_param(node, nodes_list, _ANG_ACCEL_KEYWORDS, deadline)
+        alpha_max = alpha_val if alpha_val else _DECEL_DEFAULTS['a_max_angular']
+
+        omega_val, omega_src = _fetch_first_param(node, nodes_list, _MIN_ANG_VEL_KEYWORDS, deadline)
+        omega_min = omega_val if omega_val else _DECEL_DEFAULTS['omega_min']
+
+        # Kinematic braking distance (radians)
+        raw_zone   = omega_cmd ** 2 / (2.0 * alpha_max)
+        slow_zone  = max(math.radians(3.0), min(raw_zone, abs(distance) * 0.4))
+        slow_factor = max(0.10, min(0.50, omega_min / omega_cmd))
+
+        display_val  = math.degrees(slow_zone) if is_degrees else round(slow_zone, 4)
+        params_source = alpha_src if alpha_src != "defaults" else omega_src
+
+        meta = {
+            "auto_computed": True,
+            "slow_last":   round(display_val, 4),
+            "slow_factor": round(slow_factor, 4),
+            "params_source": params_source,
+        }
+        return slow_zone, slow_factor, meta
+
+    # ------------------------------------------------------------------ linear
+    vx = abs(linear.get('x', 0.0))
+    vy = abs(linear.get('y', 0.0))
+
+    if vx >= vy and vx > 1e-6:
+        v_cmd, v_min_default, axis_kws = vx, _DECEL_DEFAULTS['v_min_x'], ['min_vel_x'] + _MIN_VEL_KEYWORDS
+    elif vy > 1e-6:
+        v_cmd, v_min_default, axis_kws = vy, _DECEL_DEFAULTS['v_min_y'], ['min_vel_y'] + _MIN_VEL_KEYWORDS
+    else:
+        return None, 0.25, {"auto_computed": False, "reason": "zero linear velocity"}
+
+    try:
+        node_info = node.get_node_names_and_namespaces()
+        nodes_list = [f"{ns.rstrip('/')}/{n}" for n, ns in node_info]
+    except Exception:
+        nodes_list = []
+
+    accel_val, accel_src = _fetch_first_param(node, nodes_list, _ACCEL_KEYWORDS, deadline)
+    a_max = accel_val if accel_val else _DECEL_DEFAULTS['a_max_linear']
+
+    vmin_val, vmin_src = _fetch_first_param(node, nodes_list, axis_kws, deadline)
+    v_min = vmin_val if vmin_val else v_min_default
+
+    raw_zone  = v_cmd ** 2 / (2.0 * a_max)
+    slow_zone = max(0.05, min(raw_zone, abs(distance) * 0.4))
+    slow_factor = max(0.10, min(0.50, v_min / v_cmd))
+
+    params_source = accel_src if accel_src != "defaults" else vmin_src
+
+    meta = {
+        "auto_computed": True,
+        "slow_last":   round(slow_zone, 4),
+        "slow_factor": round(slow_factor, 4),
+        "params_source": params_source,
+    }
+    return slow_zone, slow_factor, meta
+
+
 def scale_twist_velocity(data, scale):
     """Return a copy of a Twist or TwistStamped dict with all velocity fields multiplied by scale."""
     import copy
@@ -830,16 +1012,40 @@ def cmd_topics_publish_until(args):
             start_time = time.time()
             published_count = 0
 
-            # Deceleration zone: resolve --slow-last to the same unit system as the condition.
-            slow_last = getattr(args, 'slow_last', None)
-            slow_factor = max(0.0, min(1.0, getattr(args, 'slow_factor', 0.25)))
-            slow_zone = None
-            if slow_last is not None:
+            # Deceleration zone: auto-compute from kinematics, or use manual --slow-last override.
+            slow_last_arg = getattr(args, 'slow_last', None)
+            slow_factor   = max(0.0, min(1.0, getattr(args, 'slow_factor', 0.25)))
+            slow_zone     = None
+            decel_meta    = {"auto_computed": False}
+
+            if slow_last_arg is not None:
+                # Manual override: resolve to condition units (radians for --rotate --degrees).
                 slow_zone = (
-                    math.radians(slow_last)
+                    math.radians(slow_last_arg)
                     if (rotate_angle is not None and use_degrees)
-                    else float(slow_last)
+                    else float(slow_last_arg)
                 )
+            else:
+                # Auto-compute: derive slow_zone and slow_factor from commanded velocity + params.
+                condition_distance = (
+                    abs(rotate_angle) if rotate_angle is not None
+                    else float(threshold) if threshold is not None else 0.0
+                )
+                param_node = ROS2CLI("decel_probe")
+                try:
+                    auto_zone, auto_factor, decel_meta = compute_decel_params(
+                        msg_data,
+                        distance=condition_distance,
+                        is_rotation=(rotate_angle is not None),
+                        is_degrees=use_degrees,
+                        node=param_node,
+                    )
+                finally:
+                    param_node.destroy_node()
+
+                if auto_zone is not None:
+                    slow_zone   = auto_zone
+                    slow_factor = auto_factor
 
             try:
                 while not stop_event.is_set():
@@ -928,12 +1134,14 @@ def cmd_topics_publish_until(args):
                     output({**base,
                             "success": True,
                             "condition_met": True,
+                            "decel_zone": decel_meta,
                             "start_msg": monitor.start_msg,
                             "end_msg": monitor.end_msg})
                 else:
                     output({**base,
                             "success": False,
                             "condition_met": False,
+                            "decel_zone": decel_meta,
                             "error": f"Timeout after {timeout}s: condition not met"})
 
     except Exception as e:

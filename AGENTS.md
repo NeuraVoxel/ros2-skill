@@ -434,9 +434,17 @@ Coordinate convention: `x` = forward, `y` = left, `z` = up. Positive `angular.z`
 
 2. **Monitor field validation:** subscribe once to `<MONITOR_TOPIC>` and trace the full dotted `--field` path in the returned JSON. Common traps: `twist.linear.x` vs `twist.twist.linear.x` (Odometry), `pose.position.x` vs `pose.pose.position.x`. If the field is absent, stop — re-run `interface show <MSG_TYPE>` to find the correct path. A wrong field path causes `publish-until` to run silently to timeout at full speed.
 
-### 20 — Use `--slow-last` for movements > 2 m or > 180°
+### 20 — Decel zone is auto-computed; do not add `--slow-last` manually
 
-Always add `--slow-last 0.5 --slow-factor 0.3` (linear) or `--slow-last 30 --slow-factor 0.4` (rotation) to `publish-until` when the target distance exceeds 2 m or the rotation exceeds 180°. Never omit the decel zone for long moves — stopping at full speed on a platform with inertia causes overshoot. For short moves (≤ 2 m / ≤ 180°), `--slow-last` is optional but recommended.
+`publish-until` now auto-computes `--slow-last` and `--slow-factor` for every move from the commanded velocity and discovered params. **Do not add `--slow-last` manually** unless you need to override (observed overshoot, testing).
+
+Auto-compute formula:
+- Linear: `slow_last = v_cmd² / (2 × a_max)`, `slow_factor = v_min / v_cmd`
+- Rotation: `slow_last = ω_cmd² / (2 × α_max)`, `slow_factor = ω_min / ω_cmd`
+
+Params fetched at startup (2 s timeout). Fallbacks when params unavailable: `linear.x=0.125 m/s`, `linear.y=0.1 m/s`, `angular.z=0.375 rad/s` (fine-control floor); accel fallbacks: `0.5 m/s²` linear, `1.0 rad/s²` angular.
+
+Computed values appear in output as `"decel_zone": {"auto_computed": true, "slow_last": X, "slow_factor": Y, "params_source": "..."}`. Report these to the user on any motion command.
 
 ### 21 — After `publish-until` timeout, verify position before re-issuing
 

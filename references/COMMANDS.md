@@ -330,10 +330,34 @@ Publish a message at a fixed rate while simultaneously monitoring a second topic
 | `--timeout SECONDS` | No | `60` | Safety stop if condition not met within this time |
 | `--msg-type TYPE` | No | auto-detect | Override publish topic message type |
 | `--monitor-msg-type TYPE` | No | auto-detect | Override monitor topic message type |
-| `--slow-last N` | No | off | Begin decelerating when N units remain before the target. Units match the movement type: metres for `--field`/`--euclidean` distance; degrees if `--degrees` is set, radians otherwise for `--rotate`. Velocity ramps linearly from full commanded speed at N remaining down to `--slow-factor × full speed` at the target. |
-| `--slow-factor F` | No | `0.25` | Minimum velocity as a fraction of the commanded velocity at the end of the decel zone (0–1). E.g. `0.25` = robot reaches target at 25% of its commanded speed. |
+| `--slow-last N` | No | **auto** | Override the auto-computed deceleration zone (see below). Units: metres for `--field`/`--euclidean`; degrees if `--degrees` set, radians otherwise for `--rotate`. |
+| `--slow-factor F` | No | **auto** | Override the auto-computed fine-control floor (0–1 fraction of commanded speed). |
 
 **Note:** Either `--field` OR `--rotate` must be specified, but not both. `--slow-last` works with `--delta`, `--euclidean --delta`, and `--rotate`; ignored for `--above`/`--below`/`--equals`.
+
+#### Auto-computed deceleration zone
+
+When `--slow-last` is **not** provided, the skill computes the decel zone automatically at startup from the commanded velocity and live node params (2 s timeout):
+
+| Move type | Formula | Fallback `a_max` | Fallback fine-control floor |
+|-----------|---------|-----------------|----------------------------|
+| linear.x | `v_cmd² / (2 × a_max)`, clamped [0.05 m, distance × 0.4] | 0.5 m/s² | 0.125 m/s |
+| linear.y | same | 0.5 m/s² | 0.100 m/s |
+| angular.z | `ω_cmd² / (2 × α_max)`, clamped [3°, angle × 0.4] | 1.0 rad/s² | 0.375 rad/s |
+
+Params searched: `max_accel`, `accel_limit`, `decel_limit` (accel); `min_vel_x/y`, `min_vel`, `min_speed` (min vel); `max_ang_accel`, `ang_accel_limit` (angular accel); `min_ang_vel`, `min_angular_speed` (min angular vel). First numeric match wins. Falls back to defaults if nothing found.
+
+The computed zone is reported in every `publish-until` result:
+```json
+"decel_zone": {
+  "auto_computed": true,
+  "slow_last": 0.32,
+  "slow_factor": 0.28,
+  "params_source": "/velocity_controller:max_accel"
+}
+```
+
+If `--slow-last` **is** provided, auto-compute is skipped and `"decel_zone": {"auto_computed": false}` is returned.
 
 **Move forward until x-position increases by 1 m (straight path):**
 ```bash
