@@ -336,7 +336,7 @@ A zero-error response means the request was delivered — not that the effect oc
 | `lifecycle set` | `lifecycle get` — confirm target state reached |
 | `actions send` | Check `status` field — `SUCCEEDED` only; `FAILED`/`CANCELED` → diagnose |
 | Movement completion | **Two-phase:** (1) subscribe odom, confirm all velocity axes < 0.01; (2) subscribe again and report position from this stationary reading only |
-| `estop` | Subscribe `<ODOM_TOPIC>` — confirm all velocity axes < 0.01 within 3 s; if still non-zero, report critical failure |
+| `estop` | Subscribe `<ODOM_TOPIC>` — confirm all velocity axes < 0.01 within **5 s** (10 s for heavy platforms > 20 kg); if still non-zero, report critical failure |
 
 **Never use the words "Done", "Succeeded", "Completed" without running the verification step first.**
 
@@ -345,17 +345,24 @@ A zero-error response means the request was delivered — not that the effect oc
 Before issuing any velocity command, run in parallel:
 - `topics subscribe <ODOM_TOPIC> --max-messages 1 --timeout 2` — record start pose (baseline); check all velocity axes < 0.01
 - `nodes list` — confirm velocity controller node is still present
-- `topics hz <ODOM_TOPIC> --duration 2` — confirm rate ≥ 5 Hz
+- `topics hz <ODOM_TOPIC> --duration 2` — confirm rate ≥ 5 Hz (mandatory every motion; never carry forward from a previous command)
 
 If velocity ≥ 0.01 on any axis: send `estop`, verify it took effect, wait 0.5 s, re-read before proceeding.
+
+**Hard gate:** if `estop` fails to stop the robot within the verification window, or the controller node is absent and does not recover, do not proceed — escalate immediately.
+
+**Sequential moves:** the confirmed final stationary position from the prior move serves as the baseline for the next move. Still re-run the velocity check and hz check before each new command.
+
+**Long-motion segmentation (expected duration > 30 s):** break into max-30 s segments. Between segments: estop → verify stopped → `topics hz` → re-record baseline → issue next segment for remaining distance/angle.
 
 ### 10 — Empty discovery: broaden the search, never guess
 
 When `topics find`, `services find`, or `actions find` returns empty:
-1. Run `topics list` + `nodes list` in parallel — scan for semantically related names
-2. Check if publishing nodes are actually running (`nodes list`)
-3. Check `nodes details <candidate_node>` for its published topics
-4. Only escalate to the user after all of the above fail — report exactly what was searched and what was found
+1. **Retry once** after 1 s — DDS discovery is eventually-consistent; a newly-started node may not yet be visible
+2. Run `topics list` + `nodes list` in parallel — scan for semantically related names
+3. Check if publishing nodes are actually running (`nodes list`)
+4. Check `nodes details <candidate_node>` for its published topics
+5. Only escalate to the user after all of the above fail — report exactly what was searched and what was found
 
 **Never guess or fall back to a hardcoded name when discovery returns empty.**
 
@@ -407,9 +414,13 @@ Coordinate convention: `x` = forward, `y` = left, `z` = up. Positive `angular.z`
 
 `publish-until` does **not** send a stop message when it exits — the robot coasts at the last commanded velocity. Run `estop` immediately after `publish-until` in all three cases: condition met, timeout, or error. After a timeout, `estop` is the **first** action — before diagnosing, before re-reading odom, before reporting. Verify `estop` took effect (Rule 8 estop row): odom velocity < 0.01 within 3 s.
 
-### 19 — Verify QoS compatibility before `publish-until`
+### 19 — Verify QoS compatibility and monitor field before `publish-until`
 
-Run `topics details <ODOM_TOPIC>` before every `publish-until`. If `publisher_count == 0`, fall back to open-loop. If `reliability: BEST_EFFORT`, `publish-until` auto-matches (M5), but verify `condition_met` in the output. If QoS is mismatched and auto-matching fails, fall back to `publish-sequence` and notify the user.
+**Pre-flight gate — run before every `publish-until`:**
+
+1. `topics details <ODOM_TOPIC>` — if `publisher_count == 0`: do not attempt, fall back to open-loop immediately. If `reliability: BEST_EFFORT`: auto-matches (M5), verify `condition_met` in output. QoS mismatch + auto-match failure: fall back to `publish-sequence`, notify user.
+
+2. **Monitor field validation:** subscribe once to `<MONITOR_TOPIC>` and trace the full dotted `--field` path in the returned JSON. Common traps: `twist.linear.x` vs `twist.twist.linear.x` (Odometry), `pose.position.x` vs `pose.pose.position.x`. If the field is absent, stop — re-run `interface show <MSG_TYPE>` to find the correct path. A wrong field path causes `publish-until` to run silently to timeout at full speed.
 
 ### 20 — Use `--slow-last` for movements > 2 m or > 180°
 

@@ -463,7 +463,7 @@ After any `publish-until` or `publish-sequence` timeout, error, or unexpected st
 | `control load-controller` / `control switch-controllers` / `control configure-controller` | 1. Run `control list-controllers` — confirm controller reached the expected state (`active` or `inactive`). 2. Run `control list-hardware-components` — confirm the hardware component is still `active`. If the hardware component is `inactive` after a controller operation, no velocity commands will be executed — this is the most common silent failure in ros2_control. |
 | `services call` response | After any service call, inspect the response JSON. If it contains a `success`, `status`, `result`, or `error` field whose value indicates failure (e.g., `"success": false`, `"status": "ERROR"`, non-empty `"error"` string), treat as a failure and diagnose per Rule 7. A zero-error CLI return code only means the request was delivered — it does not mean the operation succeeded. |
 | `topics publish` (single shot, state-change intent) | Run `topics subscribe <topic> --max-messages 1 --timeout 3` or `topics hz <topic>` to confirm messages are being received |
-| `estop` (emergency stop) | After sending `estop`, verify it took effect: subscribe `<ODOM_TOPIC> --max-messages 1 --timeout 3` and check `twist.twist.linear.x`, `.y`, and `twist.twist.angular.z` are all < 0.01. If velocity is still non-zero after 3 s: the estop was not received (controller may be down or topic is wrong). **Critical failure — do not proceed with any command.** Report immediately: *"Estop sent but velocity still non-zero — robot may not have stopped. Controller or velocity topic may be offline."* |
+| `estop` (emergency stop) | After sending `estop`, verify it took effect: subscribe `<ODOM_TOPIC> --max-messages 1 --timeout 5` and check `twist.twist.linear.x`, `.y`, and `twist.twist.angular.z` are all < 0.01. If velocity is still non-zero after 5 s: the estop was not received (controller may be down or topic is wrong). **Critical failure — do not proceed with any command.** Report immediately: *"Estop sent but velocity still non-zero — robot may not have stopped. Controller or velocity topic may be offline."* **Heavy platforms (> 20 kg or platforms with significant mechanical inertia):** allow 10 s before declaring critical failure — braking distance is longer and the deceleration phase will exceed the standard window. |
 | Movement completion (position / orientation reporting) | **Three-phase protocol — all steps required:** (1) Confirm odom is still live: run `topics hz <ODOM_TOPIC> --duration 1` — if rate < 5 Hz, flag as degraded before reporting. (2) Confirm the robot is stationary: subscribe `<ODOM_TOPIC> --max-messages 1`; check `twist.twist.linear.x`, `twist.twist.linear.y`, and `twist.twist.angular.z` are all < 0.01 m/s or rad/s. If any exceed 0.01, wait 0.5 s and repeat. (3) Once confirmed stationary, subscribe `<ODOM_TOPIC> --max-messages 1` and report position, orientation, or yaw from **this** reading only. **Covariance check:** if `pose.covariance[0]` (x-variance) > 0.1 m² or `pose.covariance[35]` (yaw-variance) > 0.1 rad², qualify the report: *"Pose reported but covariance is high — estimate may be unreliable."* |
 | Motion timeout (`publish-until` or `publish-sequence` did not complete) | 1. **Immediately send `estop`** — verify it took effect (see estop row above). 2. Subscribe `<ODOM_TOPIC> --max-messages 1` — record actual final pose (sensor truth, not estimated). 3. Diagnose: run `topics hz <ODOM_TOPIC>` and `control list-controllers`. 4. Report: actual final position/orientation, distance covered vs. target, diagnosed cause. 5. **Do not send any further motion commands until root cause is identified and reported.** |
 | Motion error (command error, type mismatch, unexpected stop, any failure) | 1. Send `estop` and verify it took effect. 2. Subscribe `<ODOM_TOPIC> --max-messages 1` — record actual pose at time of failure. 3. Diagnose per Rule 7. 4. Report: actual pose from sensor, error description, root cause. **Do not proceed with any motion until root cause is resolved.** |
@@ -506,10 +506,18 @@ topics hz <ODOM_TOPIC> --duration 2
 - Rate 1–4 Hz → warn user, fall back to open-loop.
 - Rate 0 Hz → odom is stale despite the topic existing. Treat as absent. Fall back to open-loop.
 
+**This check is mandatory before every motion command.** The odom rate from a previous motion or session cannot be assumed to still be valid — the odom publisher may have died, restarted, or changed rate between tasks.
+
 **Evaluate results:**
 - **Velocity ≥ 0.01 on any axis:** send `estop` immediately, verify it took effect (Rule 8 estop row), wait 0.5 s, re-read odom, then proceed. Report: *"Robot was already moving. Stopped before issuing new command."*
 - **Subscribe timeout or rate = 0 Hz:** do NOT proceed with closed-loop. Fall back to `publish-sequence`. Notify user: *"Odometry not available. Running open-loop — distance accuracy not guaranteed."* No starting pose can be recorded; note in report.
 - **Controller node absent:** halt. Re-run Rule 0.1 health check. Do not proceed until the velocity controller is confirmed running.
+
+**Hard gate — if pre-motion recovery fails:** If the robot was moving and `estop` fails to stop it within the verification window (Rule 8), or if the controller node is absent and does not reappear after `doctor`, **do not proceed with any motion command**. Escalate immediately: *"Pre-motion checks failed and recovery was unsuccessful. Manual intervention required."* A failed pre-motion check that is overridden by proceeding anyway is a safety violation.
+
+**Carry-forward baseline for sequential moves:** For tasks involving multiple sequential move commands, the confirmed final position from the previous move (recorded after the post-motion two-phase odom read, Rule 8) serves as the pre-motion baseline for the next move — do not re-subscribe for a pose if you already have a fresh stationary reading from the prior move's completion. However, the velocity check (step A) and odom rate check (step C) must still run fresh for every motion command — they cannot be carried forward.
+
+**Long-motion segmentation to detect stale odom:** For any `publish-until` where the expected duration exceeds 30 s (estimated as `distance_m / linear_speed_m_s` or `angle_deg / angular_speed_deg_s`), break the motion into max-30 s segments. Between segments: send `estop`, verify stopped, run `topics hz <ODOM_TOPIC> --duration 1` to confirm odom is still live, re-record the current position as the new baseline, then issue the next segment for the remaining distance/angle. This ensures odom health is verified at each segment boundary and limits the maximum exposure to a stale-odom silent failure.
 
 **Never issue a new motion command on top of an existing one without stopping first.** Overlapping velocity commands cause unpredictable trajectories and runaway motion.
 
@@ -519,7 +527,8 @@ When `topics find <type>` returns an empty list:
 
 1. **Do not guess a topic name.**
 2. **Do not fall back to a hardcoded name** (Rule 0).
-3. **Broaden the search immediately and in parallel:**
+3. **Retry once before broadening.** ROS 2 DDS discovery is eventually-consistent — a node that started seconds ago may not yet be visible to the daemon. Wait 1 s and re-run the exact same `topics find` command. If the second call returns a result, use it. If still empty, proceed to step 4.
+4. **Broaden the search immediately and in parallel:**
    ```bash
    topics list    # All active topics — scan for anything plausibly relevant
    nodes list     # Are the nodes that publish this type even running?
@@ -777,7 +786,7 @@ Apply this rule in all three exit cases:
 
 **After timeout specifically:** send `estop` before diagnosing whether the condition was met, before re-reading odometry, before considering a retry, before reporting to the user. The robot may still be moving at commanded velocity. Stopping is always safe; not stopping is never safe.
 
-**Verify `estop` took effect (Rule 8):** subscribe to `<ODOM_TOPIC>` and confirm all velocity axes < 0.01 within 3 s. If velocity remains non-zero after 3 s, report a critical failure — the velocity controller may have disconnected.
+**Verify `estop` took effect (Rule 8):** subscribe to `<ODOM_TOPIC>` and confirm all velocity axes < 0.01 within 5 s (10 s for heavy platforms > 20 kg). If velocity remains non-zero after the window, report a critical failure — the velocity controller may have disconnected.
 
 **This rule supersedes any perceived urgency to diagnose quickly.** An unstopped robot during diagnosis creates a moving-hazard context that makes every subsequent action more dangerous.
 
@@ -801,6 +810,23 @@ Inspect the output, then apply the hard gate:
 | QoS mismatch detected and auto-matching fails | **Do not attempt `publish-until`.** Fall back to `publish-sequence` immediately. Notify the user: *"Odometry QoS incompatible. Running open-loop — accuracy not guaranteed."* |
 
 **Never attempt `publish-until` first and discover a QoS mismatch at timeout.** The gate is pre-flight, not post-hoc.
+
+**Monitor field validation — verify the `--field` path before starting the loop:**
+
+Before issuing `publish-until --monitor <TOPIC> --field <PATH>`, subscribe once to the monitor topic and confirm the field exists:
+
+```bash
+topics subscribe <MONITOR_TOPIC> --max-messages 1 --timeout 3
+```
+
+Inspect the JSON output and trace the full dotted field path (e.g. `pose.pose.position.x`). If the field is absent — either the path is wrong, the message type differs from expectation, or the field uses a different name — `publish-until` will run to timeout without ever evaluating a condition, and the robot will coast to its timeout limit at full speed.
+
+**Common mistakes:**
+- `twist.linear.x` vs `twist.twist.linear.x` (Odometry wraps Twist in a second `twist` field)
+- `pose.position.x` vs `pose.pose.position.x` (PoseWithCovarianceStamped vs Odometry)
+- `data` vs `range` vs `distance` (sensor message types vary)
+
+If the field is not found in the subscribed message, stop and re-run `interface show <MSG_TYPE>` to find the correct path before proceeding.
 
 **This check is already required by Rule 15 (odom subscribe).** Treating it as a distinct pre-`publish-until` step ensures it is not skipped when the agent goes directly to motion without an explicit odom-subscribe step first.
 
