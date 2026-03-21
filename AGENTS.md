@@ -225,7 +225,7 @@ python3 {baseDir}/scripts/discord_tools.py send-image \
 
 ## Core Rules (mandatory — from RULES.md)
 
-**These rules have the same authority as RULES.md. Violation of any rule here or in RULES.md is a critical error requiring immediate self-correction.** You MUST also read `references/RULES.md` in full before your first action — it contains Rules 8–17 which are equally binding but not repeated here.
+**These rules have the same authority as RULES.md. Violation of any rule here or in RULES.md is a critical error requiring immediate self-correction.** You MUST also read `references/RULES.md` in the ros2-skill directory in full before your first action — it contains additional detail, rationale, and edge cases for every rule listed here.
 
 ### 1 — Discover before you act. Never hardcode names.
 
