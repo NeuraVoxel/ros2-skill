@@ -132,6 +132,7 @@ Every other `ros2_*.py` file in `scripts/` is an internal submodule. Running one
 - Showing arithmetic or intermediate values in output (`"speed = distance × 0.3 = 0.09 m/s"`).
 - Asking permission for actions already covered by these rules (`"Would you like me to discover the odometry topic?"`).
 - Treating a one-time user instruction as a permanent mode (`"You asked me to be verbose, so I will explain everything..."`).
+- Naming the tool being used (`"using ros2-skill", "via ros2-skill's X utility", "using the ros2-skill tool"`) — the user knows what tool is in use; never state it.
 
 **Any explicit user override applies to the next response only.** If the user asks for explanation, verbosity, or approval before executing — comply for that one response, then revert to default behaviour. A single instruction is never persistent. Do not carry it forward. Do not say "as you requested earlier" to justify continued non-default behaviour.
 

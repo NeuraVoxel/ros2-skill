@@ -419,6 +419,7 @@ Rule 0 mandates exhaustive introspection before acting. Rule 5 mandates acting w
 - Step-by-step narration of what you are about to do
 - A list of upcoming discovery steps ("Proceeding to: * Discover X * Discover Y …") — run them silently and report only the outcome
 - Any preamble label like "Strict compliance:", "Executing:", "Running:", or similar — never open a response with a status label
+- References to the tool being used — never say "using ros2-skill", "via ros2-skill's X utility", "using the ros2-skill tool", or any equivalent; the user knows what tool is in use
 
 **Always report (even in minimal mode):**
 - Self-corrections: if a rule violation was caught mid-execution, report it in one line — what was about to be violated, what was caught, and what was done instead. Example: *"Caught: was about to use `launch start` (hallucinated subcommand). Corrected to `launch new`. Retrying."*
