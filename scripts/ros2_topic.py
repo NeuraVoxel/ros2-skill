@@ -341,18 +341,20 @@ def scale_twist_velocity(data, scale):
     """Return a copy of a Twist or TwistStamped dict with all velocity fields multiplied by scale."""
     import copy
     d = copy.deepcopy(data)
-    for top in ('linear', 'angular'):
-        if top in d and isinstance(d[top], dict):
-            for ax in ('x', 'y', 'z'):
-                if ax in d[top] and isinstance(d[top][ax], (int, float)):
-                    d[top][ax] = d[top][ax] * scale
-    # TwistStamped nests velocity under 'twist'
     if 'twist' in d and isinstance(d.get('twist'), dict):
+        # TwistStamped: velocity nested under 'twist' key
         for top in ('linear', 'angular'):
             if top in d['twist'] and isinstance(d['twist'][top], dict):
                 for ax in ('x', 'y', 'z'):
                     if ax in d['twist'][top] and isinstance(d['twist'][top][ax], (int, float)):
                         d['twist'][top][ax] = d['twist'][top][ax] * scale
+    else:
+        # Twist: velocity at top level
+        for top in ('linear', 'angular'):
+            if top in d and isinstance(d[top], dict):
+                for ax in ('x', 'y', 'z'):
+                    if ax in d[top] and isinstance(d[top][ax], (int, float)):
+                        d[top][ax] = d[top][ax] * scale
     return d
 
 
