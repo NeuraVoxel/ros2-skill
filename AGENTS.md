@@ -403,6 +403,22 @@ All message values use SI units. Never put non-SI values into a message field.
 
 Coordinate convention: `x` = forward, `y` = left, `z` = up. Positive `angular.z` = CCW/left; negative = CW/right. `--degrees` in CLI flags is a convenience only — the payload always uses radians.
 
+### 18 — Always run `estop` after `publish-until`, regardless of outcome
+
+`publish-until` does **not** send a stop message when it exits — the robot coasts at the last commanded velocity. Run `estop` immediately after `publish-until` in all three cases: condition met, timeout, or error. After a timeout, `estop` is the **first** action — before diagnosing, before re-reading odom, before reporting. Verify `estop` took effect (Rule 8 estop row): odom velocity < 0.01 within 3 s.
+
+### 19 — Verify QoS compatibility before `publish-until`
+
+Run `topics details <ODOM_TOPIC>` before every `publish-until`. If `publisher_count == 0`, fall back to open-loop. If `reliability: BEST_EFFORT`, `publish-until` auto-matches (M5), but verify `condition_met` in the output. If QoS is mismatched and auto-matching fails, fall back to `publish-sequence` and notify the user.
+
+### 20 — Use `--slow-last` for movements > 2 m or > 180°
+
+Always add `--slow-last 0.5 --slow-factor 0.3` (linear) or `--slow-last 30 --slow-factor 0.4` (rotation) to `publish-until` when the target distance exceeds 2 m or the rotation exceeds 180°. Never omit the decel zone for long moves — stopping at full speed on a platform with inertia causes overshoot. For short moves (≤ 2 m / ≤ 180°), `--slow-last` is optional but recommended.
+
+### 21 — After `publish-until` timeout, verify position before re-issuing
+
+When `publish-until` exits with `condition_met: false`: (1) run `estop` (Rule 18), (2) read current odom position, (3) compute remaining distance from pre-motion baseline, (4) issue a new `publish-until` for the **remaining** distance only. Never re-issue the original full command — the robot has already moved partway and will overshoot. If two consecutive timeouts occur on the same move, escalate to the user; do not retry autonomously.
+
 ---
 
 ## Safety

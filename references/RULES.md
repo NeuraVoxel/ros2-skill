@@ -738,6 +738,105 @@ map → odom → base_link (→ sensor frames)
 
 ---
 
+### Rule 18 — Always run `estop` after `publish-until`, regardless of outcome
+
+`publish-until` publishes velocity commands continuously until a condition is met or the timeout expires. When it exits — for any reason — the robot is left at whatever velocity was last commanded. It does **not** send a zero-velocity stop message automatically. Unless `estop` is called immediately after, the robot will coast or drift.
+
+**Mandatory post-`publish-until` protocol:**
+
+```bash
+# Always run estop immediately after publish-until, before doing anything else
+python3 {baseDir}/scripts/ros2_cli.py estop
+```
+
+Apply this rule in all three exit cases:
+
+| `publish-until` exit reason | `estop` required? | Rationale |
+|---|---|---|
+| Condition met (`condition_met: true`) | **Yes** | Robot is at the last commanded velocity; stop it cleanly |
+| Timeout (`condition_met: false`) | **Yes — first priority** | Robot may be at full commanded speed; stop before diagnosing |
+| Exception / error | **Yes** | Unknown state; stop before attempting any recovery |
+
+**After timeout specifically:** send `estop` before diagnosing whether the condition was met, before re-reading odometry, before considering a retry, before reporting to the user. The robot may still be moving at commanded velocity. Stopping is always safe; not stopping is never safe.
+
+**Verify `estop` took effect (Rule 8):** subscribe to `<ODOM_TOPIC>` and confirm all velocity axes < 0.01 within 3 s. If velocity remains non-zero after 3 s, report a critical failure — the velocity controller may have disconnected.
+
+**This rule supersedes any perceived urgency to diagnose quickly.** An unstopped robot during diagnosis creates a moving-hazard context that makes every subsequent action more dangerous.
+
+### Rule 19 — Verify QoS compatibility before `publish-until` (and before any subscribe)
+
+`publish-until` creates a `ConditionMonitor` subscriber internally. If the odometry publisher uses `BEST_EFFORT` reliability and the subscriber uses `RELIABLE`, messages are silently discarded — the condition is never met, the loop runs to timeout, and the robot coasts (Rule 18).
+
+**Pre-`publish-until` QoS check:**
+
+```bash
+topics details <ODOM_TOPIC>
+```
+
+Inspect the output:
+- If `reliability: BEST_EFFORT` → the publisher is best-effort; `publish-until` auto-matches (M5 fix), but verify by checking `condition_met` in the output.
+- If `publisher_count == 0` → there is no odom publisher; fall back to open-loop (Rule 9).
+- If `publisher_count > 0` but `reliability` is absent from the details output → treat as unknown; run `topics hz <ODOM_TOPIC> --duration 2` to confirm messages are flowing before committing to closed-loop.
+
+**This check is already required by Rule 15 (odom subscribe).** Treating it as a distinct pre-`publish-until` step ensures it is not skipped when the agent goes directly to motion without an explicit odom-subscribe step first.
+
+**If QoS is mismatched and auto-matching fails:** report the mismatch, fall back to `publish-sequence` with a time-based estimate, and notify the user: *"Odometry QoS is incompatible. Running open-loop — accuracy not guaranteed."*
+
+### Rule 20 — Use `--slow-last` for all movements exceeding 2 m or 180°
+
+The deceleration zone (`--slow-last`) ramps down to `--slow-factor` speed over the final N metres or degrees of a movement. Without it, the robot arrives at the target at full commanded velocity and immediately stops — producing overshoot on any platform with non-negligible inertia.
+
+**Mandatory thresholds:**
+
+| Movement type | Threshold | Default recommendation |
+|---|---|---|
+| Linear (forward/backward) | > 2 m | `--slow-last 0.5 --slow-factor 0.3` |
+| Rotation | > 180° (π rad) | `--slow-last 30 --slow-factor 0.4` (degrees) |
+| Strafing (holonomic) | > 2 m | `--slow-last 0.5 --slow-factor 0.3` |
+
+**Rule:** If the movement distance or angle exceeds the threshold, **always** add `--slow-last` and `--slow-factor` to the `publish-until` command. Never omit them for long moves, even if the user does not mention smoothness.
+
+```bash
+# Long forward move (> 2 m) — decel zone required
+python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
+  '{"linear":{"x":0.4},"angular":{"z":0.0}}' \
+  --monitor <ODOM_TOPIC> --field pose.pose.position.x --delta 3.0 \
+  --slow-last 0.5 --slow-factor 0.3
+
+# Long rotation (> 180°) — decel zone required
+python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
+  '{"linear":{"x":0.0},"angular":{"z":0.6}}' \
+  --monitor <ODOM_TOPIC> --field pose.pose.orientation.z --rotate 200 --degrees \
+  --slow-last 30 --slow-factor 0.4
+```
+
+**Adjust `--slow-factor` for platform inertia:** heavier or faster platforms need a lower factor (more aggressive slow-down). If overshoot is observed even with the default factor, reduce `--slow-factor` (e.g., 0.2) and increase `--slow-last` (e.g., 0.8 m).
+
+**Short moves (≤ 2 m / ≤ 180°):** `--slow-last` is optional but recommended. The default velocity cap (Rule 0.5) limits harm from overshoot on short moves.
+
+### Rule 21 — After a `publish-until` timeout, verify position before re-issuing
+
+When `publish-until` exits with `condition_met: false`, the robot did not reach the intended target. The robot's actual position is unknown — it may have moved partway, not at all, or past the target (e.g., if the condition field was being read incorrectly).
+
+**Mandatory re-issue protocol:**
+
+1. **Stop the robot first** (Rule 18 — estop always).
+2. **Subscribe to odom and record the current position:**
+   ```bash
+   topics subscribe <ODOM_TOPIC> --max-messages 1 --timeout 5
+   ```
+3. **Compare current position to the pre-motion baseline** (recorded per Rule 9).
+4. **Determine remaining distance/angle** from the delta, then decide:
+   - If remaining > 0 → issue a new `publish-until` for the remaining distance only.
+   - If remaining ≈ 0 (position already reached despite `condition_met: false`) → report success with a note about the monitoring field.
+   - If position is unknown (odom unavailable) → **do not re-issue**. Report to the user and fall back to open-loop only if explicitly authorised.
+
+**Never re-issue the original full command.** Sending the same distance/angle again from a partially-moved position will overshoot the target by whatever distance was already covered.
+
+**If two consecutive `publish-until` calls timeout on the same move:** escalate to the user. Do not attempt a third retry autonomously. Report: current position, target, remaining distance, and the reason for the timeouts (QoS? Odom dropout? Velocity controller issue?).
+
+---
+
 ## Quick Decision Card
 
 **Every user request follows this pattern:**
