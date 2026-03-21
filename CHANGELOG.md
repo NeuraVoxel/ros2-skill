@@ -72,6 +72,11 @@ Comprehensive review of RULES.md, AGENTS.md, and SKILL.md targeting agent self-r
 - **Process interrupt cleanup** (Rule 18) — any abrupt CLI exit during motion = potential coasting robot; send estop immediately as first recovery action. Notes known signal handler gap in `ros2_cli.py`.
 - **AGENTS.md Rules 28–32** — condensed coverage for all seven Wave 3 additions; full RULES.md → AGENTS.md coverage audit confirmed (all 25 rules, 0–23, covered across entries 1–32).
 
+### Workflow and Self-Reliance (Wave 4)
+
+- **Launch discovery** — keyword inference table added (bringup/nav/camera/arm/sim); planned native `launch list <keyword>` noted for Wave 5; `ros2 pkg list` / `ros2 pkg files` documented as Rule 2 exceptions until then.
+- **Rule 24 / AGENTS.md Rule 33** — conditional and branching task sequences: retry limits per failure type, fallback chain table, escalation message format. Two consecutive identical failures → escalate immediately.
+
 ### New Commands
 
 - `bag info <bag_path>` — show metadata for a ROS 2 bag (duration, message counts, per-topic stats); no live graph required
