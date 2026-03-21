@@ -3183,8 +3183,11 @@ class TestConditionMonitorCallback(unittest.TestCase):
         import math as _math
         m = self._make_monitor(rotate=_math.pi / 2)
         self._call(m, {'orientation': {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0}})
-        sz = _math.sin(_math.pi / 4)
-        cw = _math.cos(_math.pi / 4)
+        # Use 100° (> 90° target) to avoid floating-point boundary on ARM vs x86:
+        # sin/cos of exactly pi/4 can round to a yaw just below pi/2 on some platforms.
+        angle = _math.radians(100)
+        sz = _math.sin(angle / 2)
+        cw = _math.cos(angle / 2)
         self._call(m, {'orientation': {'x': 0.0, 'y': 0.0, 'z': sz, 'w': cw}})
         self.assertTrue(m.stop_event.is_set())
 
@@ -3192,8 +3195,10 @@ class TestConditionMonitorCallback(unittest.TestCase):
         import math as _math
         m = self._make_monitor(rotate=-_math.pi / 2)
         self._call(m, {'orientation': {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0}})
-        sz = -_math.sin(_math.pi / 4)
-        cw = _math.cos(_math.pi / 4)
+        # Use -100° (< -90° target) to avoid floating-point boundary on ARM vs x86.
+        angle = _math.radians(100)
+        sz = -_math.sin(angle / 2)
+        cw = _math.cos(angle / 2)
         self._call(m, {'orientation': {'x': 0.0, 'y': 0.0, 'z': sz, 'w': cw}})
         self.assertTrue(m.stop_event.is_set())
 
