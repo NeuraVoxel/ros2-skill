@@ -813,7 +813,7 @@ Before any `tf lookup`, `tf echo`, or spatial sensor usage:
 1. Run `tf list` — confirm the expected frames are present. If the list is empty, TF is not publishing; escalate and halt any spatial operation.
 2. For each frame you intend to use, confirm it appears in `tf list` output. If a required frame is absent: it may not have been broadcast yet (DDS lag), or the node responsible for it has crashed. Wait 2 s and retry once before escalating.
 3. For any sensor frame (camera, LiDAR, IMU): run `tf echo <SENSOR_FRAME> <BASE_FRAME> --duration 1` to confirm the transform is actively updating and not stale. A stale transform (last updated > 1 s ago) means the sensor is not publishing its frame — do not use the sensor's spatial output.
-4. **TF cycle detection** — a TF tree with a cycle (e.g., `odom → base_link → odom`) causes `tf lookup` to hang indefinitely. If a `tf echo` or `tf lookup` call hangs past its timeout, suspect a cycle. Use `tf list` to inspect the frame list for duplicate parent-child relationships. The full `tf validate` CLI command is planned for a future CLI update (Wave 5); for now, timeout detection is the primary guard.
+4. **TF cycle detection** — a TF tree with a cycle (e.g., `odom → base_link → odom`) causes `tf lookup` to hang indefinitely. If a `tf echo` or `tf lookup` call hangs past its timeout, suspect a cycle. Run `tf validate` to perform automated DFS cycle detection and multiple-parent checks across the full TF graph. If `tf validate` reports any cycles or multi-parent frames, halt all spatial operations and report the offending frames before proceeding.
 
 ---
 

@@ -981,6 +981,65 @@ Error (insufficient messages):
 
 ---
 
+## topics qos-check `<topic>` [options]
+
+Inspect the QoS profiles of all publishers and subscribers on `<topic>` and report whether they are compatible. When a publisher uses `BEST_EFFORT` reliability and a subscriber uses `RELIABLE`, messages are silently discarded — this command detects that and suggests the corrective flag.
+
+**Run this before `publish-until` or any subscribe that times out unexpectedly.** It replaces manual interpretation of `topics details` output.
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `topic` | Yes | Full topic name (e.g. `/odom`) |
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--timeout SECONDS` | `5` | Node spin timeout |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics qos-check /odom
+python3 {baseDir}/scripts/ros2_cli.py topics qos-check /cmd_vel
+```
+
+**Output (incompatible):**
+```json
+{
+  "topic": "/odom",
+  "publisher_count": 1,
+  "subscriber_count": 1,
+  "publishers": [{"node": "/ekf_node", "reliability": "BEST_EFFORT", "durability": "VOLATILE"}],
+  "subscribers": [{"node": "/my_controller", "reliability": "RELIABLE", "durability": "VOLATILE"}],
+  "compatible": false,
+  "issues": ["reliability mismatch: publisher BEST_EFFORT vs subscriber RELIABLE on /my_controller"],
+  "suggestion": "Add --qos-reliability best_effort to your subscribe command to match the publisher"
+}
+```
+
+**Output (compatible):**
+```json
+{
+  "topic": "/cmd_vel",
+  "publisher_count": 1,
+  "subscriber_count": 1,
+  "compatible": true,
+  "issues": [],
+  "suggestion": "QoS is compatible — no flags needed"
+}
+```
+
+**Output (no publisher):**
+```json
+{
+  "topic": "/odom",
+  "publisher_count": 0,
+  "subscriber_count": 0,
+  "compatible": false,
+  "issues": ["no publisher on topic /odom"],
+  "suggestion": "Check nodes list to verify the publishing node is running"
+}
+```
+
+---
+
 ## topics find `<message_type>`
 
 Find all topics publishing a specific message type. Accepts both `/msg/` and short formats (normalised for comparison).
@@ -1616,6 +1675,52 @@ Output (success):
 Output (rejected — node disallows undeclaring):
 ```json
 {"node": "/turtlesim", "results": [{"name": "background_r", "success": false, "error": "Node rejected deletion (parameter may be read-only or undeclaring is not allowed)"}], "count": 1}
+```
+
+---
+
+## params find `<pattern>` [options]
+
+Search all running nodes (or a specific node) for parameters whose names contain `<pattern>` (case-insensitive substring match). Fetches the value of each matching parameter. Use pattern `all` or `*` to return every parameter on every node.
+
+**Use this instead of:** `nodes list` → `params list <node>` × N → manual grep. Automates the full cross-node scan required by Rule 0 velocity-limit discovery.
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `pattern` | Yes | Substring to match against parameter names (case-insensitive). Use `all` or `*` to return everything. |
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--node NODE` | (all nodes) | Restrict search to a single node |
+| `--timeout SECONDS` | `10` | Per-node service timeout |
+
+```bash
+# Find all velocity-related params across all nodes
+python3 {baseDir}/scripts/ros2_cli.py params find vel
+
+# Find limit params on a specific node
+python3 {baseDir}/scripts/ros2_cli.py params find limit --node /base_controller
+
+# Dump all params from all nodes
+python3 {baseDir}/scripts/ros2_cli.py params find all
+```
+
+**Output (matches found):**
+```json
+{
+  "pattern": "vel",
+  "node_filter": null,
+  "matches": [
+    {"node": "/base_controller", "param": "max_vel_x", "full_name": "/base_controller:max_vel_x", "value": "0.5"},
+    {"node": "/teleop_node", "param": "scale_linear_vel", "full_name": "/teleop_node:scale_linear_vel", "value": "0.3"}
+  ],
+  "count": 2
+}
+```
+
+**Output (no matches):**
+```json
+{"pattern": "vel", "node_filter": null, "matches": [], "count": 0, "error": "No parameters matching 'vel' found on any node"}
 ```
 
 ---
@@ -2700,6 +2805,66 @@ Output (nothing received):
 
 TF2 transform utilities for querying, listing, and monitoring coordinate frame transforms.
 
+### tf tree [options]
+
+Subscribe to `/tf` and `/tf_static` for a short duration and output the full frame hierarchy as an ASCII tree. Use this to understand the robot's transform topology before any spatial operation.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--duration SECONDS` | `2.0` | How long to collect TF messages |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py tf tree
+python3 {baseDir}/scripts/ros2_cli.py tf tree --duration 3
+```
+
+**Output:**
+```json
+{
+  "frames": ["world", "odom", "base_link", "laser_link", "camera_link"],
+  "root_frames": ["world"],
+  "tree": "world\n└── odom\n    └── base_link\n        ├── laser_link\n        └── camera_link",
+  "transform_count": 4
+}
+```
+
+**No frames received:**
+```json
+{"error": "No TF frames received within 2.0s — is a TF publisher running?"}
+```
+
+### tf validate [options]
+
+Collect TF transforms and check for structural problems: cycles, frames with multiple parents, and empty trees. Run this before any TF-dependent operation when the tree is unfamiliar or after a node restart.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--duration SECONDS` | `2.0` | How long to collect TF messages |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py tf validate
+```
+
+**Output (valid):**
+```json
+{
+  "valid": true,
+  "frames": ["world", "odom", "base_link", "laser_link"],
+  "issues": [],
+  "warnings": ["Frame 'laser_link' has no children — leaf node (expected for sensors)"]
+}
+```
+
+**Output (cycle detected):**
+```json
+{
+  "valid": false,
+  "frames": ["odom", "base_link", "odom"],
+  "issues": ["Cycle detected involving frame 'odom'", "Frame 'base_link' has multiple parents: odom, world"],
+  "warnings": []
+}
+```
+
 ### tf list / tf ls
 
 List all available coordinate frames.
@@ -2935,15 +3100,20 @@ Error (session already exists):
 
 ---
 
-## launch list / launch ls
+## launch list / launch ls `[keyword]`
 
-List running launch sessions in tmux.
+Without a keyword, lists running launch sessions in tmux. With a keyword, searches all installed ROS 2 packages for launch files whose path contains the keyword (case-insensitive).
 
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `keyword` | No | Substring to search for in package names or launch file paths |
+
+**List running sessions (no keyword):**
 ```bash
 python3 {baseDir}/scripts/ros2_cli.py launch list
 ```
 
-**Output:**
+**Output (no keyword):**
 ```json
 {
   "all_sessions": ["launch_navigation2_navigation2", "launch_turtlesim_turtlesim"],
@@ -2957,6 +3127,42 @@ python3 {baseDir}/scripts/ros2_cli.py launch list
   ]
 }
 ```
+
+**Search for launch files by keyword:**
+```bash
+python3 {baseDir}/scripts/ros2_cli.py launch list navigation
+```
+
+**Output (with keyword):**
+```json
+{
+  "keyword": "navigation",
+  "matches": [
+    {
+      "package": "navigation2",
+      "launch_file": "navigation2.launch.py",
+      "full_path": "/opt/ros/humble/share/navigation2/launch/navigation2.launch.py"
+    },
+    {
+      "package": "nav2_bringup",
+      "launch_file": "bringup_launch.py",
+      "full_path": "/opt/ros/humble/share/nav2_bringup/launch/bringup_launch.py"
+    }
+  ],
+  "count": 2
+}
+```
+
+**Common keywords:**
+
+| Intent | Keyword |
+|--------|---------|
+| Navigation stack | `navigation` or `nav2` |
+| Robot description / URDF | `robot_description` or `urdf` |
+| Teleop / joystick | `teleop` |
+| Camera / sensors | `camera` or `sensor` |
+| Control framework | `ros2_control` or `controller` |
+| Simulation | `gazebo` or `sim` |
 
 ---
 

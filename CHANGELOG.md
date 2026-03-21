@@ -77,6 +77,14 @@ Comprehensive review of RULES.md, AGENTS.md, and SKILL.md targeting agent self-r
 - **Launch discovery** — keyword inference table added (bringup/nav/camera/arm/sim); planned native `launch list <keyword>` noted for Wave 5; `ros2 pkg list` / `ros2 pkg files` documented as Rule 2 exceptions until then.
 - **Rule 24 / AGENTS.md Rule 33** — conditional and branching task sequences: retry limits per failure type, fallback chain table, escalation message format. Two consecutive identical failures → escalate immediately.
 
+### CLI Introspection (Wave 5)
+
+- **`params find <pattern>`** — cross-node parameter search; finds any parameter matching a substring across all live nodes; optional `--node` filter; returns node path + current value for each match (AGENTS.md Rule 34)
+- **`tf tree`** — ASCII TF hierarchy visualization; subscribes to `/tf` + `/tf_static`, builds parent→child tree; use before any spatial operation (AGENTS.md Rule 35)
+- **`tf validate`** — DFS cycle detection + multiple-parent checks across full TF graph; returns `"valid": false` with offending frames; required pre-flight for spatial ops (AGENTS.md Rules 36 + RULES.md Rule 17 EC-7 updated)
+- **`topics qos-check <topic>`** — cross-compares publisher and subscriber QoS profiles; returns `compatible` flag and suggested `--qos-*` flag to resolve mismatches (AGENTS.md Rule 37)
+- **`launch list <keyword>`** — keyword-based launch file discovery across all installed packages; returns package name + full path for each match; use to resolve natural-language launch requests (AGENTS.md Rule 38)
+
 ### New Commands
 
 - `bag info <bag_path>` — show metadata for a ROS 2 bag (duration, message counts, per-topic stats); no live graph required

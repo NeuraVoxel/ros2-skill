@@ -534,6 +534,50 @@ If a motion command is interrupted (CLI exception, SIGTERM, keyboard interrupt):
 
 **Never report by default:** topic name selected (unless unexpected), intermediate discovery steps, command text being run, "I will now…" narration, or unsolicited explanations. The user wants results, not running commentary.
 
+### 34 — Cross-node parameter search: use `params find <pattern>`
+
+When you need to locate a parameter (e.g. `max_vel_x`, `scale`, `joy_vel`) across all running nodes without knowing which node owns it, use `params find <pattern>`. It searches all live node parameter lists case-insensitively and returns every match with its node path and current value. Use it before hard-coding parameter names or guessing nodes.
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py params find <pattern>
+python3 {baseDir}/scripts/ros2_cli.py params find <pattern> --node <node_name>  # scope to one node
+```
+
+### 35 — Visualise the TF tree with `tf tree` before any spatial operation
+
+Before any spatial task (movement, sensor read, frame lookup), run `tf tree` to see the full parent→child hierarchy. A healthy tree is a single rooted DAG. If the tree shows multiple roots, disconnected frames, or unexpected structure, resolve before proceeding.
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py tf tree
+python3 {baseDir}/scripts/ros2_cli.py tf tree --duration 2  # collect longer
+```
+
+### 36 — Run `tf validate` to detect cycles and multi-parent frames
+
+Run `tf validate` as part of pre-flight for any spatial operation (in addition to `tf tree`). It performs DFS cycle detection and multiple-parent checks. If it reports `"valid": false`, halt all spatial operations and report the offending frames before proceeding.
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py tf validate
+```
+
+### 37 — Check QoS compatibility before publishing or subscribing: use `topics qos-check`
+
+Before publishing to a topic or subscribing via `publish-until`, run `topics qos-check <topic>` if you suspect a mismatch. It cross-compares publisher and subscriber QoS profiles and returns a `compatible` flag plus a suggested `--qos-*` flag to add. An incompatible QoS pair = silent zero messages — the command will run but nothing will happen.
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics qos-check <topic>
+```
+
+### 38 — Discover launch files by keyword with `launch list <keyword>`
+
+When the user asks to "launch the navigation stack" or "start the robot", but the exact package/file is unknown, use `launch list <keyword>` to search all installed packages. It returns package names and full file paths matching the keyword. Then use `launch run <package> <file>` with the result.
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py launch list <keyword>
+```
+
+**Common keywords:** `navigation` / `nav2`, `robot_description` / `urdf`, `teleop`, `camera`, `ros2_control` / `controller`, `gazebo` / `sim`.
+
 ---
 
 ## Safety
