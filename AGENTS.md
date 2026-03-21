@@ -306,6 +306,18 @@ When a user request is ambiguous or incomplete, resolve it yourself — then act
 3. `<name>.py`
 4. If multiple files match and the intent is genuinely unclear — only then ask.
 
+**Launch package discovery** — when the package is unknown (user says "run the bringup", "launch navigation"): use keyword inference to find the right package. Use `ros2 pkg list` + `ros2 pkg files <package>` as Rule 25 last-resort exceptions until `launch list <keyword>` is available (Wave 5).
+
+| User says... | Search for packages/files containing... |
+|---|---|
+| "bringup", "bring up", "start the robot" | `bringup`, `bringup.launch.py` |
+| "navigation", "nav", "drive autonomously" | `navigation2`, `nav2`, `navigation` |
+| "camera", "vision" | `camera`, `realsense`, `image_pipeline` |
+| "arm", "manipulation", "moveit" | `moveit`, `arm`, `manipulation` |
+| "sim", "simulation", "gazebo" | `gazebo`, `simulation`, `sim` |
+
+If one clear match → launch immediately (Rule 26). If multiple candidates → present list, ask once. If none → ask for exact package/file name.
+
 **Camera / image tasks** — do not ask which topic to use. Discover it:
 ```bash
 python3 {baseDir}/scripts/ros2_cli.py topics find sensor_msgs/msg/CompressedImage
@@ -481,6 +493,32 @@ For any command with timeout > 10 s: note the critical nodes (velocity controlle
 ### 31 — Validate odometry frame_id and TF tree before spatial operations
 
 On first use of `<ODOM_TOPIC>` per session, subscribe for one message and read `header.frame_id`. If non-canonical (not containing `odom`), note to the user once; store the frame for position reporting. If empty, flag as misconfiguration. — Before any TF operation: run `tf list` to confirm frames are present. For sensor frames: run `tf echo <SENSOR_FRAME> <BASE_FRAME> --duration 1` to confirm the transform is not stale. If `tf echo` or `tf lookup` hangs past timeout, suspect a TF cycle — inspect `tf list` for duplicate parent-child relationships.
+
+### 33 — Conditional and branching task sequences: use fallbacks, enforce retry limits, escalate precisely
+
+When a task step can fail and a recovery path exists, take it autonomously without asking — but enforce hard retry limits.
+
+**Retry limits (never exceed):**
+
+| Situation | Max autonomous retries | On max reached |
+|---|---|---|
+| Motion timeout (`publish-until`) | 1 — remaining distance only (Rule 21) | Escalate: position, target, remaining, cause |
+| Verification failure (Rule 8) | 2 fix+retry cycles (3 attempts total) | Escalate as critical failure |
+| Discovery empty (Rule 10) | 1 broadened search after 1 s | Ask user or declare unavailable |
+| General step failure | 1 | Escalate |
+| Safety failure (estop, controller offline) | **0** — escalate immediately | No autonomous retry |
+
+**Fallback chains (execute without asking, but always notify):**
+
+| Preferred | Fails because | Fallback |
+|---|---|---|
+| `publish-until` closed-loop | No odom / QoS mismatch | `publish-sequence` open-loop — notify user |
+| Discovered topic | Empty result after broadened search | Ask user |
+| Controller A | Fails to activate | Try controller B if known; else escalate |
+
+**Escalation message must include:** what was tried, why it failed, current system state, and **one specific recommended next step** — never a list of options.
+
+**Two consecutive identical failures → escalate immediately. No third attempt.**
 
 ### 32 — On any process interrupt, send estop before exiting
 

@@ -989,6 +989,68 @@ If the user sends a new command (any kind) while a `publish-until` or `publish-s
 
 **This rule applies regardless of how much of the original motion had completed.** Even if the robot was 1 cm from its target, stop on receipt of a new command.
 
+### Rule 24 — Conditional and branching task sequences
+
+Rule 16 defines how to execute a linear sequence (step N → verify → step N+1). This rule extends that to tasks with branches, fallbacks, and retry limits.
+
+#### When a task has a conditional structure
+
+Some tasks cannot be resolved as a linear sequence because the next action depends on the outcome of the current one. Examples:
+- "Move to position X; if you can't reach it after two tries, report where you ended up"
+- "Try to activate controller A; if it fails, try controller B instead"
+- "Attempt closed-loop; if odom is unavailable, fall back to open-loop"
+
+**General conditional pattern:**
+
+```
+attempt = 1
+max_attempts = 2  # default unless user specifies otherwise
+
+while attempt ≤ max_attempts:
+  Execute step N
+  If step N succeeds → proceed to next step (or complete task)
+  If step N fails:
+    If attempt < max_attempts:
+      Diagnose (Rule 7), adjust parameters if possible, increment attempt
+    If attempt == max_attempts:
+      Escalate (see escalation rules below)
+```
+
+#### Retry rules
+
+| Situation | Max autonomous retries | Action on max reached |
+|---|---|---|
+| Motion command timeout (`publish-until`) | 1 (remaining distance only, Rule 21) | Escalate: position, target, remaining, cause |
+| Verification failure (Rule 8 retry protocol) | 2 (3 total attempts) | Escalate as critical failure |
+| Discovery empty result (Rule 10 retry) | 1 (broadened search after 1 s) | Ask user or declare unavailable |
+| General step failure (not covered above) | 1 | Escalate |
+| Safety-related failure (estop, controller offline) | 0 — escalate immediately | No autonomous retry on safety failures |
+
+**Never retry more times than the table above specifies.** Autonomous retry loops without bounds create unpredictable behaviour and mask the root cause.
+
+#### Fallback chains
+
+When a preferred method fails and a known fallback exists, execute the fallback without asking:
+
+| Preferred | Fallback condition | Fallback action |
+|---|---|---|
+| `publish-until` (closed-loop) | No odom / QoS mismatch | `publish-sequence` (open-loop) — notify user |
+| Discovered topic | Empty result from all `topics find` | Ask user for topic name (genuine ambiguity) |
+| Discovered launch file | No keyword match | Broader search → if still empty, ask |
+| Controller A | Controller A fails to activate | Try controller B if one exists; else escalate |
+
+**Always notify the user when a fallback fires.** Include: what was tried, why it failed, what the fallback is, and what accuracy/safety implications the fallback has (e.g., "Running open-loop — distance not guaranteed").
+
+#### Escalation rules
+
+Escalate to the user (one clear, factual message) when:
+1. Max retries exhausted — include: last known position, target, remaining distance/angle, root cause
+2. No fallback is available for a failed step
+3. Any safety check fails and cannot recover (estop unverified, controller offline and unreachable)
+4. Two consecutive attempts produce the same failure — do not attempt a third
+
+**When escalating, always provide:** what was tried, what failed, current system state (position, controller state), and one specific suggested next step. Never present a list of options — recommend one action.
+
 ---
 
 ## Quick Decision Card
@@ -1339,6 +1401,8 @@ Use this decision table whenever an in-flight action goal needs to be stopped:
 
 **When user says "run the bringup" or "launch navigation" (partial/ambiguous request):**
 
+**Planned native command (Wave 5):** `launch list <keyword>` will provide native keyword-filtered launch file discovery within ros2-skill, eliminating the need for the `ros2` CLI exceptions below. Until that command is available, use the following workflow.
+
 1. **Discover available packages:**
    ```bash
    # ros2-skill has no package-listing command — this is a Rule 2 last-resort exception.
@@ -1353,15 +1417,21 @@ Use this decision table whenever an in-flight action goal needs to be stopped:
    ros2 pkg files <package>
    ```
 
-3. **Intelligent inference (use context):**
-   - "bringup" → look for packages with `bringup` in name, or launch files named `bringup.launch.py`
-   - "navigation" → look for `navigation2`, `nav2`, or launch files with `navigation`
-   - "camera" → look for camera-related packages
+3. **Intelligent inference (use context keywords):**
+
+   | User says... | Search for packages / files containing... |
+   |---|---|
+   | "bringup", "bring up", "start the robot", "boot" | `bringup`, `bringup.launch.py` |
+   | "navigation", "nav", "drive autonomously" | `navigation2`, `nav2`, `navigation` |
+   | "camera", "vision", "image" | `camera`, `realsense`, `image_pipeline` |
+   | "manipulation", "arm", "moveit" | `moveit`, `arm`, `manipulation` |
+   | "simulation", "sim", "gazebo" | `gazebo`, `simulation`, `sim` |
+   | exact package name given | use it directly |
 
 4. **If exactly one clear match found:**
    - Launch it immediately — do not ask for confirmation (Rule 5)
 
-5. **If multiple candidates found and cannot be disambiguated:**
+5. **If multiple candidates found and cannot be disambiguated by context:**
    - Present options: "Found 3 launch files: X, Y, Z. Which one?" — this is the only case where asking is permitted
 
 6. **If no match found:**
