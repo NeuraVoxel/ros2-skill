@@ -43,6 +43,7 @@ from ros2_topic import (
     cmd_topics_diag,
     cmd_topics_battery_list,
     cmd_topics_battery,
+    cmd_topics_qos_check,
 )
 
 from ros2_node import (
@@ -62,6 +63,7 @@ from ros2_param import (
     cmd_params_preset_load,
     cmd_params_preset_list,
     cmd_params_preset_delete,
+    cmd_params_find,
 )
 
 from ros2_service import (
@@ -116,6 +118,8 @@ from ros2_tf import (
     cmd_tf_quaternion_from_euler_degrees,
     cmd_tf_transform_point,
     cmd_tf_transform_vector,
+    cmd_tf_tree,
+    cmd_tf_validate,
 )
 from ros2_lifecycle import (
     cmd_lifecycle_nodes,
@@ -262,6 +266,10 @@ def build_parser():
                    help="Number of messages to sample (default: 10)")
     p.add_argument("--timeout", type=float, default=10.0,
                    help="Max wait time in seconds (default: 10)")
+    p = tsub.add_parser("qos-check", help="Check QoS compatibility between publishers and subscribers")
+    p.add_argument("topic", help="Topic name (e.g. /odom)")
+    p.add_argument("--timeout", type=float, default=5.0,
+                   help="Timeout in seconds (default: 5)")
     tsub.add_parser("diag-list",
                     help="List all topics publishing DiagnosticArray messages (by type)")
     p = tsub.add_parser("diag",
@@ -594,6 +602,12 @@ def build_parser():
                    help="Additional parameter names to delete")
     p.add_argument("--timeout", type=float, default=5.0,
                    help="Timeout in seconds (default: 5)")
+    p = psub.add_parser("find", help="Search for parameters matching a pattern across all nodes")
+    p.add_argument("pattern", help="Case-insensitive substring to match (use 'all' or '*' for everything)")
+    p.add_argument("--node", default=None,
+                   help="Limit search to a single node (e.g. /turtlesim)")
+    p.add_argument("--timeout", type=float, default=10.0,
+                   help="Timeout per node in seconds (default: 10)")
     p = psub.add_parser("preset-save", help="Save node parameters as a named preset")
     p.add_argument("node", help="Node name (e.g. /turtlesim)")
     p.add_argument("preset", help="Preset name (e.g. indoor)")
@@ -796,6 +810,16 @@ def build_parser():
     p.add_argument("z", type=float, help="Vector z")
     p.add_argument("--timeout", "-t", type=float, default=5.0, help="Timeout")
 
+    # tf tree
+    p = tfsub.add_parser("tree", help="Display TF frame tree as ASCII diagram")
+    p.add_argument("--duration", "-d", type=float, default=2.0,
+                   help="Seconds to collect TF data (default: 2.0)")
+
+    # tf validate
+    p = tfsub.add_parser("validate", help="Validate TF tree for cycles and multiple parents")
+    p.add_argument("--duration", "-d", type=float, default=2.0,
+                   help="Seconds to collect TF data (default: 2.0)")
+
     # ------------------------------------------------------------------
     # launch
     # ------------------------------------------------------------------
@@ -810,8 +834,13 @@ def build_parser():
     p.add_argument("args", nargs="*", help="Additional launch arguments")
     p.add_argument("--timeout", type=float, default=30.0, help="Timeout for launch to start (default: 30)")
 
-    lsub.add_parser("list", help="List running launch sessions")
-    lsub.add_parser("ls", help="Alias for list")
+    p = lsub.add_parser("list", help="List running launch sessions, or search for launch files by keyword")
+    p.add_argument("keyword", nargs="?", default=None,
+                   help="Optional keyword to search installed packages for matching launch files "
+                        "(use 'all' to list every launch file)")
+    p = lsub.add_parser("ls", help="Alias for list")
+    p.add_argument("keyword", nargs="?", default=None,
+                   help="Optional keyword to search for launch files")
 
     p = lsub.add_parser("kill", help="Kill a running launch session")
     p.add_argument("session", help="Session name to kill")
@@ -935,6 +964,7 @@ DISPATCH = {
     # topics — Phase 2
     ("topics", "bw"): cmd_topics_bw,
     ("topics", "delay"): cmd_topics_delay,
+    ("topics", "qos-check"): cmd_topics_qos_check,
     # services — canonical
     ("services", "list"): cmd_services_list,
     ("services", "type"): cmd_services_type,
@@ -986,6 +1016,7 @@ DISPATCH = {
     ("params", "preset-load"):   cmd_params_preset_load,
     ("params", "preset-list"):   cmd_params_preset_list,
     ("params", "preset-delete"): cmd_params_preset_delete,
+    ("params", "find"): cmd_params_find,
     # params — alias
     ("params", "ls"): cmd_params_list,
     # actions — canonical
@@ -1022,6 +1053,8 @@ DISPATCH = {
     ("tf", "quaternion-from-euler-deg"): cmd_tf_quaternion_from_euler_degrees,
     ("tf", "transform-point"): cmd_tf_transform_point,
     ("tf", "transform-vector"): cmd_tf_transform_vector,
+    ("tf", "tree"): cmd_tf_tree,
+    ("tf", "validate"): cmd_tf_validate,
     # launch
     ("launch", "new"):   cmd_launch_run,
     ("launch", "list"):   cmd_launch_list,

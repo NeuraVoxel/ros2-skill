@@ -1624,6 +1624,98 @@ def cmd_topics_battery(args):
         output({"error": str(e)})
 
 
+def cmd_topics_qos_check(args):
+    """Compare QoS profiles of all publishers and subscribers on a topic."""
+    topic = args.topic
+    timeout = getattr(args, 'timeout', 5.0)
+
+    try:
+        with ros2_context():
+            node = ROS2CLI()
+
+            pub_info = node.get_publishers_info_by_topic(topic)
+            sub_info = node.get_subscriptions_info_by_topic(topic)
+
+        def _qos_entry(info_item):
+            q = info_item.qos_profile
+            # ReliabilityPolicy and DurabilityPolicy are IntEnum-like in rclpy
+            reliability = getattr(q.reliability, 'name', str(q.reliability))
+            durability = getattr(q.durability, 'name', str(q.durability))
+            node_ns = info_item.node_namespace.rstrip('/')
+            return {
+                "node": f"{node_ns}/{info_item.node_name}",
+                "reliability": reliability,
+                "durability": durability,
+            }
+
+        publishers = [_qos_entry(p) for p in pub_info]
+        subscribers = [_qos_entry(s) for s in sub_info]
+
+        if not publishers:
+            return output({
+                "topic": topic,
+                "publisher_count": 0,
+                "subscriber_count": len(subscribers),
+                "publishers": publishers,
+                "subscribers": subscribers,
+                "compatible": False,
+                "issues": ["no publisher on topic"],
+                "suggestion": "Start a publisher on this topic first",
+            })
+
+        # Check compatibility: publisher reliability must be >= subscriber reliability.
+        # In practice: if any subscriber is RELIABLE and any publisher is BEST_EFFORT,
+        # they are incompatible (BEST_EFFORT pub cannot satisfy RELIABLE sub).
+        issues = []
+        for pub in publishers:
+            for sub in subscribers:
+                if (pub["reliability"] != sub["reliability"] and
+                        sub["reliability"] == "RELIABLE" and
+                        pub["reliability"] == "BEST_EFFORT"):
+                    issues.append(
+                        f"reliability mismatch: publisher {pub['reliability']} "
+                        f"vs subscriber {sub['reliability']}"
+                    )
+                if pub["durability"] != sub["durability"]:
+                    issues.append(
+                        f"durability mismatch: publisher {pub['durability']} "
+                        f"vs subscriber {sub['durability']}"
+                    )
+
+        # De-duplicate
+        seen = set()
+        unique_issues = []
+        for issue in issues:
+            if issue not in seen:
+                seen.add(issue)
+                unique_issues.append(issue)
+
+        compatible = len(unique_issues) == 0
+
+        if compatible:
+            suggestion = "QoS is compatible — no flags needed"
+        else:
+            # Suggest matching pub reliability if that's the primary issue
+            pub_rel = publishers[0]["reliability"] if publishers else "BEST_EFFORT"
+            suggestion = (
+                f"Add --qos-reliability {pub_rel.lower()} to your subscribe command "
+                "to match the publisher"
+            )
+
+        output({
+            "topic": topic,
+            "publisher_count": len(publishers),
+            "subscriber_count": len(subscribers),
+            "publishers": publishers,
+            "subscribers": subscribers,
+            "compatible": compatible,
+            "issues": unique_issues,
+            "suggestion": suggestion,
+        })
+    except Exception as e:
+        output({"error": str(e)})
+
+
 if __name__ == "__main__":
     import sys
     import os
