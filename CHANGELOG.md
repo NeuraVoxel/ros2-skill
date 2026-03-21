@@ -61,6 +61,17 @@ Comprehensive review of RULES.md, AGENTS.md, and SKILL.md targeting agent self-r
 
 - 14 new unit tests: estop Twist/TwistStamped branching, `ros2_context` shutdown, `ConditionMonitor` QoS auto-matching, TF monitor missing-frame error
 
+### Edge Cases and Limit Enforcement (Wave 3)
+
+- **Four-source velocity-limit scan** (Rule 0) — extends param scan to: URDF joint limits from `robot_description` on `robot_state_publisher`; ros2_control hardware interface limits via `control list-hardware-interfaces`; YAML config params on `controller_manager`; adds `scale` keyword to catch teleop `scale_linear`/`scale_angular` params. Binding ceiling = minimum across all four sources.
+- **Robot not moving diagnostic** (Rule 7) — 3-step protocol when odom velocity stays ≈ 0 despite active publishing: check topic hz; compare commanded vs binding ceiling; auto-reissue at 90% of limit if exceeded. Never report "not moving" without completing all three steps.
+- **Mid-motion node crash monitoring** (Rule 13) — for commands > 10 s, check `nodes list` every 10 s; estop and escalate if velocity controller or odom publisher disappears.
+- **Simulated clock re-check** (Rule 0.1) — `/clock` liveness must be re-verified before every timed command, not just at session start. If clock is not advancing, block the timed command.
+- **Odometry `frame_id` check** (Rule 15) — on first use of odom topic, read `header.frame_id`; note non-canonical frames to user; store for position reporting and TF queries.
+- **TF tree pre-flight validation** (Rule 17) — run `tf list` before any TF operation; run `tf echo` for sensor frames to confirm staleness; `tf echo` timeout = suspect cycle.
+- **Process interrupt cleanup** (Rule 18) — any abrupt CLI exit during motion = potential coasting robot; send estop immediately as first recovery action. Notes known signal handler gap in `ros2_cli.py`.
+- **AGENTS.md Rules 28–32** — condensed coverage for all seven Wave 3 additions; full RULES.md → AGENTS.md coverage audit confirmed (all 25 rules, 0–23, covered across entries 1–32).
+
 ### New Commands
 
 - `bag info <bag_path>` — show metadata for a ROS 2 bag (duration, message counts, per-topic stats); no live graph required
