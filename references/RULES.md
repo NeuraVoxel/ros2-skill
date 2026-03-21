@@ -55,7 +55,7 @@ This rule exists because:
 | Use a camera image or depth image (any visual pipeline) | Before using the camera data: 1. Find the paired `camera_info` topic: `topics find sensor_msgs/msg/CameraInfo` — the result will share a namespace with the image topic (e.g., `/camera/camera_info` pairs with `/camera/image_raw`). 2. Subscribe to confirm calibration is present: `topics subscribe <CAMERA_INFO_TOPIC> --max-messages 1 --timeout 2` — verify `K` (intrinsic matrix) is non-zero. 3. Read the `header.frame_id` from the `camera_info` message; confirm it is present in `tf list`. **A camera with no `camera_info` publisher is uncalibrated. A camera whose `frame_id` is absent from TF will produce wrong spatial results.** Both conditions must be satisfied before using the camera for any spatial or metric task (depth estimation, object localisation, point cloud processing). |
 | Use a sensor topic whose data will be interpreted spatially (camera, LiDAR, IMU, depth, GPS, sonar) | Before consuming the data: 1. Subscribe to the topic for 1 message to read the `header.frame_id`. 2. Run `tf list` to confirm that `frame_id` is present in the TF tree. 3. Run `tf echo <SENSOR_FRAME> <BASE_FRAME> --duration 1` (where `<BASE_FRAME>` is the robot's base frame from `tf list`) to confirm the transform is actively updating and not stale. **Never use sensor data whose frame is absent from TF or has not been updated recently** — spatial computations on stale or missing transforms produce wrong results with no error. |
 | Query a TF transform | `tf list` to discover available frames; never hardcode frame names like `map`, `base_link`, `odom` |
-| Switch or load a controller | 1. `control list-controllers` to discover controller names and states (never hardcode).<br>2. `control list-hardware-components` to confirm the hardware component is in `active` state.<br>3. `control list-hardware-interfaces` to confirm the relevant hardware interfaces are `available/active`.<br>**Never load, switch, or configure a controller while the hardware component is `inactive` or `unavailable`** — the controller will load without error but will silently discard all commands. Always use `--strictness STRICT` for `switch-controllers` unless explicitly instructed otherwise. |
+| Switch or load a controller | 1. `control list-controllers` to discover controller names and states (never hardcode).<br>2. `control list-hardware-components` to confirm the hardware component is in `active` state.<br>3. `control list-hardware-interfaces` to confirm the relevant hardware interfaces are `available/active`.<br>**Never load, switch, or configure a controller while the hardware component is `inactive` or `unavailable`** — the controller will load without error but will silently discard all commands. Always use `--strictness STRICT` for `switch-controllers` unless explicitly instructed otherwise.<br>4. **If `control list-controllers` errors or times out:** run `nodes list` and look for a node whose name contains `controller_manager`. If absent, escalate immediately: *"Controller manager is offline — cannot command motion."* Do not attempt any controller operation until it is confirmed running.<br>5. **Multiple velocity controllers:** when `control list-controllers` returns more than one active controller that could handle velocity commands, filter by the robot part named in the user's request — "arm" / "manipulator" → prefer controllers whose name contains `arm` or `manip`; "base" / "drive" / "mobile" → prefer controllers whose name contains `base`, `mobile`, or `diff`. If the user's request gives no part context, use the first result (Rule 11) and note the choice. |
 | Any operation involving a node | `nodes list` first; never assume a node name |
 | Set a parameter | 1. `nodes list` to discover the node name<br>2. `params list <node>` to discover the parameter name (never assume it)<br>3. `params describe <node:param>` to confirm type (int/float/bool/string), valid range, and read-only status — **never set a parameter without this; wrong type silently truncates or is rejected**<br>4. `params set <node:param> <value>` with value matching the confirmed type; verify with `params get` after (Rule 8) |
 | Get / list / dump parameters | `nodes list` to discover the node name; `params list <node>` to discover parameter names |
@@ -342,12 +342,25 @@ This applies without exception to:
    - Stopping a controller that may be load-bearing for other systems
    - Any action the user's message did not clearly and specifically authorise
 
-3. **The motion goal contains an ambiguous quantity that no safe default can resolve:**
-   - Words like "a bit", "slightly", "a little", "nearby", "close to", "far", "some distance" specify no actionable target.
-   - In such cases: ask once for the specific value needed (e.g., *"How many meters forward?"* or *"How many degrees to turn?"*). Never substitute a guessed or assumed value. Never apply a 'reasonable default distance' — motion without a verified target is a safety risk.
-   - **Exception:** "Move forward" or "drive forward" with no qualifier is an open-ended command — execute with `publish-sequence` per Rule 3. The ambiguity rule applies only when a vague quantity word is present.
+3. **The motion goal uses a vague quantity word:** Words like "a bit", "slightly", "a little", "nearby", "close to", "a short distance" provide no exact target. Use the conservative safe defaults below — they are calibrated to be safe on any platform:
+
+   | Vague word or phrase | Default |
+   |---|---|
+   | "a bit", "slightly", "a little", "a tad", "just a touch" | 0.1 m linear / 5° rotation |
+   | "a short distance", "a little further", "a bit more" | 0.3 m |
+   | "nearby", "close to here", "not far", "a modest distance" | 0.5 m |
+   | "a fair distance", "somewhat far", "a good distance" | 1.0 m |
+   | "turn slightly", "rotate a bit", "yaw a little" | 5° |
+   | "turn some", "rotate a moderate amount" | 15° |
+
+   After executing, **note the assumption in the one-line report**: *"Moved 0.1 m (interpreted 'a bit' as 0.1 m — say 'more' to continue)."* The user can then issue a correction or continuation command without being interrupted mid-task.
+
+   **Exception:** "Move forward" or "drive forward" with no qualifier at all is an open-ended command — execute with `publish-sequence` per Rule 3. The vague-quantity defaults apply only when a quantity-implying word is explicitly present.
 
 If none of these conditions apply: **just do it.**
+
+**Rule 0 and Rule 5 interaction — discovery is silent, execution is silent:**
+Rule 0 mandates exhaustive introspection before acting. Rule 5 mandates acting without asking or narrating. These do not conflict: Rule 0 discovery runs in parallel and silently (the user never sees it). Rule 5 governs the execution phase — do not narrate steps, do not ask for permission to execute, do not report intermediate discovery results. Only the final outcome is reported. "Discovery + silent execution" is the expected pattern for every command.
 
 **Explicit list of things that must never trigger a question:**
 - "Should I run this command?" — No. Run it.
@@ -448,6 +461,7 @@ After any `publish-until` or `publish-sequence` timeout, error, or unexpected st
 | `lifecycle set <node> <transition>` | Run `lifecycle get <node>` — confirm the node reached the expected state |
 | `actions send <action> <json>` | **Pass a timeout flag** (check COMMANDS.md or `actions send --help` for the flag name). On return: check `status` — `SUCCEEDED` = completed; `FAILED` or `CANCELED` = treat as failure, diagnose per Rule 7. **If the command hangs past the timeout:** immediately send `actions cancel <goal_id>` (use the goal ID returned at submission), then diagnose why the action server did not respond. Never leave an action goal orphaned. Monitor feedback messages during execution: if a navigation action sends feedback with no progress for > 10 s, treat as stuck, cancel, and diagnose. |
 | `control load-controller` / `control switch-controllers` / `control configure-controller` | 1. Run `control list-controllers` — confirm controller reached the expected state (`active` or `inactive`). 2. Run `control list-hardware-components` — confirm the hardware component is still `active`. If the hardware component is `inactive` after a controller operation, no velocity commands will be executed — this is the most common silent failure in ros2_control. |
+| `services call` response | After any service call, inspect the response JSON. If it contains a `success`, `status`, `result`, or `error` field whose value indicates failure (e.g., `"success": false`, `"status": "ERROR"`, non-empty `"error"` string), treat as a failure and diagnose per Rule 7. A zero-error CLI return code only means the request was delivered — it does not mean the operation succeeded. |
 | `topics publish` (single shot, state-change intent) | Run `topics subscribe <topic> --max-messages 1 --timeout 3` or `topics hz <topic>` to confirm messages are being received |
 | `estop` (emergency stop) | After sending `estop`, verify it took effect: subscribe `<ODOM_TOPIC> --max-messages 1 --timeout 3` and check `twist.twist.linear.x`, `.y`, and `twist.twist.angular.z` are all < 0.01. If velocity is still non-zero after 3 s: the estop was not received (controller may be down or topic is wrong). **Critical failure — do not proceed with any command.** Report immediately: *"Estop sent but velocity still non-zero — robot may not have stopped. Controller or velocity topic may be offline."* |
 | Movement completion (position / orientation reporting) | **Three-phase protocol — all steps required:** (1) Confirm odom is still live: run `topics hz <ODOM_TOPIC> --duration 1` — if rate < 5 Hz, flag as degraded before reporting. (2) Confirm the robot is stationary: subscribe `<ODOM_TOPIC> --max-messages 1`; check `twist.twist.linear.x`, `twist.twist.linear.y`, and `twist.twist.angular.z` are all < 0.01 m/s or rad/s. If any exceed 0.01, wait 0.5 s and repeat. (3) Once confirmed stationary, subscribe `<ODOM_TOPIC> --max-messages 1` and report position, orientation, or yaw from **this** reading only. **Covariance check:** if `pose.covariance[0]` (x-variance) > 0.1 m² or `pose.covariance[35]` (yaw-variance) > 0.1 rad², qualify the report: *"Pose reported but covariance is high — estimate may be unreliable."* |
@@ -461,6 +475,8 @@ Never report yaw, position, or distance from any reading taken while motion was 
 **Never use the words "Done", "Succeeded", "Completed", "Applied", or any equivalent without first running the verification step for that operation type.** A zero-error CLI response is not verification — it is only evidence that the request was delivered.
 
 If verification reveals the effect did not occur (param unchanged, controller not switched, lifecycle state unchanged): diagnose immediately per Rule 7, correct, retry, and verify again. Do not move on until the verification passes.
+
+**Verification retry protocol:** All verification steps include one automatic retry to account for transient ROS 2 communication delays (DDS discovery lag, executor spin delay). If verification still fails after the auto-retry: apply a correction (diagnose per Rule 7, fix the root cause) and re-verify up to 2 additional times. After 3 total verification attempts with no success, escalate as a critical failure — do not loop indefinitely.
 
 **Exception:** For `publish-until` and `publish-sequence`, the command's own stop condition or duration is the execution criterion — do not add a separate `topics hz` check **during** an active motion sequence. This exception applies only to checking delivery-rate mid-motion. It does **not** exempt the post-motion two-phase odometry read required for position/orientation reporting — that step is always mandatory after motion completes.
 
@@ -543,8 +559,8 @@ Topic names, service names, action names, node names, and TF frame names returne
    | "primary", "main", "base" LiDAR/sensor | `front`, `base`, `main`, `primary` |
    | No context clue | use the **first result** |
 
-2. **If context resolves to exactly one candidate:** use it, state which was selected (Rule 6).
-3. **If context is still ambiguous (e.g., two `front` cameras):** use the first matching result, state which was selected. Do not ask the user (Rule 5).
+2. **If context resolves to exactly one candidate:** use it. State the selection in the report whenever more than one candidate existed.
+3. **If no context keywords apply, or multiple candidates remain after keyword matching:** use the first result. Always state the selection in the report when more than one candidate existed. Do not ask the user (Rule 5).
 
 **Multi-robot network exception — when namespaces suggest different robots:**
 If discovery returns results from multiple distinct robot namespaces (e.g., `/robot_1/odom`, `/robot_2/odom`, `/robot_3/odom`) and no context clue in the conversation identifies which robot the user is addressing:
@@ -740,6 +756,8 @@ map → odom → base_link (→ sensor frames)
 
 ### Rule 18 — Always run `estop` after `publish-until`, regardless of outcome
 
+**Rule 18 is a hard preemption rule.** On any `publish-until` exit — condition met, timeout, or exception — `estop` is the **first and only permitted action**. No diagnostic, no odometry read, no report, no retry, no recovery attempt may begin until `estop` has been sent **and** verified (odom velocity < 0.01 on all axes). This sequencing is absolute: safety before information.
+
 `publish-until` publishes velocity commands continuously until a condition is met or the timeout expires. When it exits — for any reason — the robot is left at whatever velocity was last commanded. It does **not** send a zero-velocity stop message automatically. Unless `estop` is called immediately after, the robot will coast or drift.
 
 **Mandatory post-`publish-until` protocol:**
@@ -767,20 +785,26 @@ Apply this rule in all three exit cases:
 
 `publish-until` creates a `ConditionMonitor` subscriber internally. If the odometry publisher uses `BEST_EFFORT` reliability and the subscriber uses `RELIABLE`, messages are silently discarded — the condition is never met, the loop runs to timeout, and the robot coasts (Rule 18).
 
-**Pre-`publish-until` QoS check:**
+**Pre-`publish-until` QoS check — this must happen BEFORE issuing `publish-until`:**
 
 ```bash
 topics details <ODOM_TOPIC>
 ```
 
-Inspect the output:
-- If `reliability: BEST_EFFORT` → the publisher is best-effort; `publish-until` auto-matches (M5 fix), but verify by checking `condition_met` in the output.
-- If `publisher_count == 0` → there is no odom publisher; fall back to open-loop (Rule 9).
-- If `publisher_count > 0` but `reliability` is absent from the details output → treat as unknown; run `topics hz <ODOM_TOPIC> --duration 2` to confirm messages are flowing before committing to closed-loop.
+Inspect the output, then apply the hard gate:
+
+| Result | Action |
+|---|---|
+| `publisher_count == 0` | **Do not attempt `publish-until`.** No odom publisher exists — fall back to open-loop immediately. |
+| `reliability: BEST_EFFORT` | `publish-until` auto-matches QoS (M5 fix). Proceed. Verify `condition_met: true` in the output afterward. |
+| `reliability: RELIABLE` or absent | Proceed with closed-loop — the subscriber will match. |
+| QoS mismatch detected and auto-matching fails | **Do not attempt `publish-until`.** Fall back to `publish-sequence` immediately. Notify the user: *"Odometry QoS incompatible. Running open-loop — accuracy not guaranteed."* |
+
+**Never attempt `publish-until` first and discover a QoS mismatch at timeout.** The gate is pre-flight, not post-hoc.
 
 **This check is already required by Rule 15 (odom subscribe).** Treating it as a distinct pre-`publish-until` step ensures it is not skipped when the agent goes directly to motion without an explicit odom-subscribe step first.
 
-**If QoS is mismatched and auto-matching fails:** report the mismatch, fall back to `publish-sequence` with a time-based estimate, and notify the user: *"Odometry QoS is incompatible. Running open-loop — accuracy not guaranteed."*
+**Distinguishing QoS failure from genuine timeout:** If `publish-until` returns `condition_met: false` on the first attempt and the cause is uncertain, run `topics hz <ODOM_TOPIC> --duration 2` immediately after estop. If the rate is 0 Hz → the odom publisher was not being received (QoS mismatch or publisher offline) — fall back to open-loop. If rate > 0 Hz → odom was flowing; the condition was genuinely not met within the timeout — apply Rule 21 (re-issue for remaining distance).
 
 ### Rule 20 — Use `--slow-last` for all movements exceeding 2 m or 180°
 
@@ -833,7 +857,47 @@ When `publish-until` exits with `condition_met: false`, the robot did not reach 
 
 **Never re-issue the original full command.** Sending the same distance/angle again from a partially-moved position will overshoot the target by whatever distance was already covered.
 
+**Near-success case:** When `publish-until` returns `condition_met: false`, read odom and compute the delta from the pre-motion baseline. If delta ≥ (target − 0.05 m) for linear moves, or delta ≥ (target − 3°) for rotations, treat as success — the robot is within tolerance. Report actual distance/angle moved and note the monitoring field may need adjustment if tolerance was reached this way consistently. Do not re-issue.
+
 **If two consecutive `publish-until` calls timeout on the same move:** escalate to the user. Do not attempt a third retry autonomously. Report: current position, target, remaining distance, and the reason for the timeouts (QoS? Odom dropout? Velocity controller issue?).
+
+### Rule 22 — Reject unreasonably large motion commands without explicit confirmation
+
+Motion commands with extreme distances or angles are almost always operator errors, not genuine intent. Executing them unverified risks uncontrolled traversal of large areas or repeated spinning.
+
+**Hard ceilings — reject without explicit confirmation:**
+
+| Motion type | Ceiling |
+|---|---|
+| Linear (any direction) | > 50 m in a single command |
+| Rotation | > 3600° (10 full turns) in a single command |
+
+**Soft warning — execute but report the assumption:**
+
+| Motion type | Range | Action |
+|---|---|---|
+| Linear | 10–50 m | Execute, but include in report: *"Long move: X m requested. Robot will take approximately Y s at Z m/s. Monitoring for safety."* |
+| Rotation | 360–3600° | Execute with mandatory `--slow-last` (Rule 20), report: *"Multi-turn rotation: X° requested."* |
+
+**If a ceiling is exceeded**, stop and report: *"Requested distance/angle (X m / X°) exceeds the maximum safe single-command ceiling (50 m / 3600°). Please confirm this is intentional, or break the move into segments."* Do not execute until the user explicitly re-confirms.
+
+**This ceiling does not apply to open-loop `publish-sequence`** (no distance target) — the user's stop command or a duration flag bounds those commands instead.
+
+### Rule 23 — Any new command received while motion is active: stop first
+
+If the user sends a new command (any kind) while a `publish-until` or `publish-sequence` motion is executing, the in-flight motion must be stopped before the new command is handled.
+
+**Protocol:**
+
+1. **Send `estop` immediately** — before processing the new command at all.
+2. **Verify estop took effect** (Rule 8 estop row: odom velocity < 0.01 within 5 s).
+3. **Then handle the new command** as a fresh request from a stationary robot.
+
+**Never run two motion commands in parallel.** Overlapping velocity commands produce unpredictable trajectories. The user's new command is not pre-approval for skipping the stop.
+
+**If the new command is itself "stop" / "halt" / "estop":** treat it as a direct estop request — send `estop` immediately, verify, report. No motion resumes until the user issues a new motion command.
+
+**This rule applies regardless of how much of the original motion had completed.** Even if the robot was 1 cm from its target, stop on receipt of a new command.
 
 ---
 

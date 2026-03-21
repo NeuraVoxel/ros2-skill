@@ -419,6 +419,18 @@ Always add `--slow-last 0.5 --slow-factor 0.3` (linear) or `--slow-last 30 --slo
 
 When `publish-until` exits with `condition_met: false`: (1) run `estop` (Rule 18), (2) read current odom position, (3) compute remaining distance from pre-motion baseline, (4) issue a new `publish-until` for the **remaining** distance only. Never re-issue the original full command — the robot has already moved partway and will overshoot. If two consecutive timeouts occur on the same move, escalate to the user; do not retry autonomously.
 
+**Near-success tolerance:** if delta ≥ (target − 0.05 m) for linear or ≥ (target − 3°) for rotation, treat as success — the robot is within tolerance. Report actual distance moved; do not re-issue.
+
+**`condition_met: false` root cause:** after estop, run `topics hz <ODOM_TOPIC> --duration 2`. If rate = 0 Hz → QoS/publisher issue (not a genuine timeout); fall back to open-loop. If rate > 0 Hz → genuine timeout; apply remaining-distance retry above.
+
+### 22 — Reject motion commands exceeding safe ceilings
+
+If the user requests > 50 m linear or > 3600° rotation in a single command, stop and ask for explicit confirmation before executing. For 10–50 m or 360–3600°: execute but report the scope in the outcome line. These ceilings exist to catch operator typos and runaway commands — not to limit genuine long-range operation. After explicit user confirmation, the ceiling does not apply again for that same command.
+
+### 23 — Any new command during active motion: estop first
+
+If a new user command arrives while a motion is in progress: (1) send `estop` immediately, (2) verify odom velocity < 0.01 within 5 s, (3) then handle the new command from a stationary robot. Never run two motions in parallel. If the new command is "stop" / "halt" / "estop": estop, verify, report — no further motion until the user issues a new motion command.
+
 ---
 
 ## Safety
@@ -468,11 +480,30 @@ python3 {baseDir}/scripts/ros2_cli.py interface proto <vel_msg_type>
 
 If odom rate < 5 Hz → fall back to open-loop (`topics publish-sequence`) and notify the user that accuracy is not guaranteed.
 
+**Controller selection when multiple are active:** if `control list-controllers` returns more than one active controller that could handle velocity, pick by robot part named in the user's request: "arm"/"manipulator" → prefer names containing `arm`, `manip`; "base"/"drive"/"mobile" → prefer names containing `base`, `mobile`, `diff`. If no part context: use the first result and note the choice. If `control list-controllers` errors or times out: run `nodes list`, confirm `controller_manager` is present; if absent, escalate and halt.
+
 ### Phase 2 — Execute
+
+**Step 0 — Vague quantity resolution (before computing speed):**
+
+If the user's request contains a vague quantity word with no numeric value, resolve it to a safe default before proceeding. Note the assumption in the final report.
+
+| Vague word or phrase | Default |
+|---|---|
+| "a bit", "slightly", "a little", "just a touch" | 0.1 m / 5° |
+| "a short distance", "a little further" | 0.3 m |
+| "nearby", "close to here", "not far" | 0.5 m |
+| "a fair distance", "somewhat far" | 1.0 m |
+| "turn slightly", "rotate a bit" | 5° |
+| "turn some", "rotate a moderate amount" | 15° |
+
+**Step 0.5 — Already-at-target check:**
+
+Before issuing `publish-until`, compare the pre-motion odom position (from Rule 9) against the target. If the remaining distance is ≤ 0.05 m (linear) or ≤ 3° (rotation), skip motion entirely and report: *"Robot is already at or within tolerance of the target. No motion issued."*
 
 **Step 1 — Compute speed from requested distance/angle (before building the payload):**
 
-Speed scales proportionally with distance/angle, then is capped at the discovered velocity limit.
+Speed scales proportionally with distance/angle, then is capped at the discovered velocity limit. Coefficients (0.3 linear, 0.006 angular) are tuned for small platforms (< 5 kg). For heavier platforms, halve the coefficients or fetch `<node>:max_accel` and compute speed = sqrt(2 × max_accel × distance) if available.
 
 ```
 linear_speed  = clamp(distance_m  × 0.3,  min=0.05 m/s,   max=velocity_limit or 0.20 m/s)
