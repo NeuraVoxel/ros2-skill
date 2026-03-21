@@ -353,9 +353,91 @@ def cmd_launch_run(args):
 
 
 def cmd_launch_list(args):
-    """List running launch sessions in tmux."""
-    result = list_sessions("launch_")
-    return output(result)
+    """List running launch sessions in tmux, or search for launch files by keyword."""
+    import subprocess
+
+    keyword = getattr(args, 'keyword', None)
+
+    # No keyword → existing behaviour: list running tmux sessions
+    if not keyword:
+        result = list_sessions("launch_")
+        return output(result)
+
+    scan_all = keyword.lower() in ('all', '*')
+
+    try:
+        # Get all packages
+        pkg_proc = subprocess.run(
+            ["ros2", "pkg", "list"],
+            capture_output=True, text=True, timeout=30
+        )
+        if pkg_proc.returncode != 0:
+            return output({
+                "keyword": keyword,
+                "matches": [],
+                "count": 0,
+                "suggestion": "Could not retrieve package list — is ROS 2 sourced?",
+            })
+
+        all_pkgs = [p.strip() for p in pkg_proc.stdout.splitlines() if p.strip()]
+
+        # Filter packages by keyword (unless scan_all)
+        if scan_all:
+            candidate_pkgs = all_pkgs
+        else:
+            kw_lower = keyword.lower()
+            candidate_pkgs = [p for p in all_pkgs if kw_lower in p.lower()]
+
+        matches = []
+        note = None
+        if scan_all:
+            note = "full scan — may take several seconds"
+
+        for pkg in candidate_pkgs:
+            try:
+                files_proc = subprocess.run(
+                    ["ros2", "pkg", "files", pkg],
+                    capture_output=True, text=True, timeout=30
+                )
+                if files_proc.returncode != 0:
+                    continue
+                for fpath in files_proc.stdout.splitlines():
+                    fpath = fpath.strip()
+                    fname = os.path.basename(fpath)
+                    if not (fname.endswith('.launch.py') or
+                            fname.endswith('.launch.xml') or
+                            fname.endswith('.launch')):
+                        continue
+                    # Match: keyword in file name OR keyword already matched via package name
+                    kw_lower = keyword.lower() if not scan_all else ''
+                    if scan_all or kw_lower in fname.lower() or kw_lower in pkg.lower():
+                        matches.append({
+                            "package": pkg,
+                            "launch_file": fname,
+                            "launch_command": f"launch new {pkg} {fname}",
+                        })
+            except subprocess.TimeoutExpired:
+                continue
+            except Exception:
+                continue
+
+        result = {
+            "keyword": keyword,
+            "matches": matches,
+            "count": len(matches),
+        }
+        if note:
+            result["note"] = note
+        if not matches:
+            result["suggestion"] = (
+                "Try a broader keyword or check 'ros2 pkg list' for available packages"
+            )
+        return output(result)
+
+    except subprocess.TimeoutExpired:
+        return output({"error": "Timeout scanning packages", "keyword": keyword})
+    except Exception as e:
+        return output({"error": str(e)})
 
 
 def cmd_launch_kill(args):

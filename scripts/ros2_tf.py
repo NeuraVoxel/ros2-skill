@@ -635,6 +635,176 @@ def cmd_tf_transform_vector(args):
             return output({"error": str(e)})
 
 
+def _collect_tf_pairs(duration):
+    """Subscribe to /tf and /tf_static for `duration` seconds and return a set of (parent, child) pairs.
+
+    Returns (pairs_set, import_error_msg).  On ImportError returns (None, error_msg).
+    """
+    try:
+        import rclpy
+        from tf2_msgs.msg import TFMessage
+    except ImportError:
+        return None, "tf2_ros or tf2_msgs not available — install with: sudo apt install ros-{distro}-tf2-ros"
+
+    pairs = set()
+
+    def _tf_callback(msg):
+        for transform in msg.transforms:
+            parent = transform.header.frame_id
+            child = transform.child_frame_id
+            if parent and child and parent != child:
+                pairs.add((parent, child))
+
+    import time as _time
+    with ros2_context():
+        node = rclpy.node.Node("tf_tree_collector")
+        node.create_subscription(
+            TFMessage, "/tf", _tf_callback, 10
+        )
+        node.create_subscription(
+            TFMessage, "/tf_static", _tf_callback, 10
+        )
+        end = _time.time() + duration
+        while _time.time() < end:
+            rclpy.spin_once(node, timeout_sec=0.1)
+
+    return pairs, None
+
+
+def _build_tree_str(children_map, roots, indent="", prefix=""):
+    """Recursively build ASCII tree string from a parent→children map."""
+    lines = []
+    root_list = sorted(roots)
+    for i, root in enumerate(root_list):
+        is_last = (i == len(root_list) - 1)
+        connector = "└── " if is_last else "├── "
+        lines.append(indent + connector + root)
+        child_indent = indent + ("    " if is_last else "│   ")
+        children = sorted(children_map.get(root, []))
+        if children:
+            sub = _build_tree_str(children_map, children, child_indent)
+            if sub:
+                lines.append(sub)
+    return "\n".join(lines)
+
+
+def cmd_tf_tree(args):
+    """Collect TF transforms and display them as an ASCII tree."""
+    duration = getattr(args, 'duration', 2.0)
+
+    pairs, err = _collect_tf_pairs(duration)
+    if err:
+        return output({"error": err})
+
+    if not pairs:
+        return output({
+            "error": f"No TF frames received within {duration}s — is a TF publisher running?"
+        })
+
+    # Build parent → children map
+    all_children = {child for _, child in pairs}
+    all_parents = {parent for parent, _ in pairs}
+    all_frames = sorted(all_parents | all_children)
+
+    children_map = {}
+    for parent, child in pairs:
+        children_map.setdefault(parent, set()).add(child)
+
+    # Root frames: appear as parents but never as children
+    root_frames = sorted(all_parents - all_children)
+    if not root_frames:
+        # Fallback: every parent is a root (cycle or disconnected)
+        root_frames = sorted(all_parents)
+
+    # Build ASCII representation
+    root_lines = []
+    for root in root_frames:
+        root_lines.append(root)
+        sub = _build_tree_str(children_map, children_map.get(root, set()))
+        if sub:
+            root_lines.append(sub)
+    tree_str = "\n".join(root_lines)
+
+    output({
+        "frames": all_frames,
+        "root_frames": root_frames,
+        "tree": tree_str,
+        "transform_count": len(pairs),
+    })
+
+
+def cmd_tf_validate(args):
+    """Validate the TF tree for cycles, multiple parents, and other issues."""
+    duration = getattr(args, 'duration', 2.0)
+
+    pairs, err = _collect_tf_pairs(duration)
+    if err:
+        return output({"error": err})
+
+    if not pairs:
+        return output({
+            "error": f"No TF frames received within {duration}s — is a TF publisher running?"
+        })
+
+    all_children_set = {child for _, child in pairs}
+    all_parents_set = {parent for parent, _ in pairs}
+    all_frames = sorted(all_parents_set | all_children_set)
+
+    children_map = {}
+    parent_map = {}  # child → set of parents
+    for parent, child in pairs:
+        children_map.setdefault(parent, set()).add(child)
+        parent_map.setdefault(child, set()).add(parent)
+
+    issues = []
+    warnings = []
+
+    # Check multiple parents
+    for child, parents in parent_map.items():
+        if len(parents) > 1:
+            issues.append(
+                f"Frame '{child}' has multiple parents: {', '.join(sorted(parents))}"
+            )
+
+    # Check for cycles using DFS
+    def _has_cycle(frame, visited, stack):
+        visited.add(frame)
+        stack.add(frame)
+        for child in children_map.get(frame, set()):
+            if child not in visited:
+                result = _has_cycle(child, visited, stack)
+                if result:
+                    return result
+            elif child in stack:
+                return child
+        stack.discard(frame)
+        return None
+
+    visited = set()
+    for frame in all_frames:
+        if frame not in visited:
+            cycle_node = _has_cycle(frame, visited, set())
+            if cycle_node:
+                issues.append(f"Cycle detected involving frame '{cycle_node}'")
+
+    # Leaf-node warnings
+    for frame in all_frames:
+        if frame not in children_map:
+            warnings.append(f"Frame '{frame}' has no children — leaf node")
+
+    valid = len(issues) == 0
+
+    result = {
+        "valid": valid,
+        "frames": all_frames,
+        "issues": issues,
+    }
+    if warnings:
+        result["warnings"] = warnings
+
+    output(result)
+
+
 if __name__ == "__main__":
     import sys
     import os

@@ -635,6 +635,123 @@ def cmd_params_preset_delete(args):
     output({"preset": args.preset, "deleted": True})
 
 
+def cmd_params_find(args):
+    """Search all running nodes (or one specific node) for parameters matching a pattern."""
+    pattern = args.pattern
+    node_filter = getattr(args, 'node', None)
+    timeout = getattr(args, 'timeout', 10.0)
+
+    # Normalise node filter
+    if node_filter and not node_filter.startswith('/'):
+        node_filter = '/' + node_filter
+
+    # Wildcard shorthand: treat 'all' or '*' as match-everything
+    match_all = pattern.lower() in ('all', '*')
+
+    def _param_matches(name):
+        if match_all:
+            return True
+        return pattern.lower() in name.lower()
+
+    try:
+        from rcl_interfaces.srv import ListParameters, GetParameters
+        with ros2_context():
+            node = ROS2CLI()
+
+            # Determine which nodes to query
+            if node_filter:
+                nodes_to_search = [node_filter]
+            else:
+                node_info = node.get_node_names_and_namespaces()
+                nodes_to_search = [
+                    f"{ns.rstrip('/')}/{n}" for n, ns in node_info
+                ]
+
+            matches = []
+
+            for node_name in nodes_to_search:
+                # List parameters for this node
+                list_client = node.create_client(
+                    ListParameters, f"{node_name}/list_parameters"
+                )
+                if not list_client.wait_for_service(timeout_sec=min(timeout, 3.0)):
+                    # Node has no param service — skip silently
+                    continue
+
+                future = list_client.call_async(ListParameters.Request())
+                end_time = time.time() + timeout
+                while time.time() < end_time and not future.done():
+                    rclpy.spin_once(node, timeout_sec=0.1)
+
+                if not future.done():
+                    future.cancel()
+                    continue
+
+                result = future.result()
+                names = result.result.names if result.result else []
+                matching_names = [n for n in names if _param_matches(n)]
+
+                if not matching_names:
+                    continue
+
+                # Get values for matching parameters
+                get_client = node.create_client(
+                    GetParameters, f"{node_name}/get_parameters"
+                )
+                if not get_client.wait_for_service(timeout_sec=min(timeout, 3.0)):
+                    # Can list but not get — record with unknown values
+                    for pname in matching_names:
+                        matches.append({
+                            "node": node_name,
+                            "param": pname,
+                            "full_name": f"{node_name}:{pname}",
+                            "value": None,
+                        })
+                    continue
+
+                get_req = GetParameters.Request()
+                get_req.names = list(matching_names)
+                get_future = get_client.call_async(get_req)
+                end_time = time.time() + timeout
+                while time.time() < end_time and not get_future.done():
+                    rclpy.spin_once(node, timeout_sec=0.1)
+
+                if not get_future.done():
+                    get_future.cancel()
+                    for pname in matching_names:
+                        matches.append({
+                            "node": node_name,
+                            "param": pname,
+                            "full_name": f"{node_name}:{pname}",
+                            "value": None,
+                        })
+                    continue
+
+                values = get_future.result().values or []
+                for pname, pval in zip(matching_names, values):
+                    py_val = _param_value_to_python(pval)
+                    matches.append({
+                        "node": node_name,
+                        "param": pname,
+                        "full_name": f"{node_name}:{pname}",
+                        "value": str(py_val) if py_val is not None else None,
+                    })
+
+        if not matches:
+            return output({
+                "error": f"No parameters matching '{pattern}' found on any node"
+            })
+
+        output({
+            "pattern": pattern,
+            "node_filter": node_filter,
+            "matches": matches,
+            "count": len(matches),
+        })
+    except Exception as e:
+        output({"error": str(e)})
+
+
 if __name__ == "__main__":
     import sys
     import os

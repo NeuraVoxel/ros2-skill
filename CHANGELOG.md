@@ -61,6 +61,34 @@ Comprehensive review of RULES.md, AGENTS.md, and SKILL.md targeting agent self-r
 
 - 14 new unit tests: estop Twist/TwistStamped branching, `ros2_context` shutdown, `ConditionMonitor` QoS auto-matching, TF monitor missing-frame error
 
+### Edge Cases and Limit Enforcement (Wave 3)
+
+- **Four-source velocity-limit scan** (Rule 0) — extends param scan to: URDF joint limits from `robot_description` on `robot_state_publisher`; ros2_control hardware interface limits via `control list-hardware-interfaces`; YAML config params on `controller_manager`; adds `scale` keyword to catch teleop `scale_linear`/`scale_angular` params. Binding ceiling = minimum across all four sources.
+- **Robot not moving diagnostic** (Rule 7) — 3-step protocol when odom velocity stays ≈ 0 despite active publishing: check topic hz; compare commanded vs binding ceiling; auto-reissue at 90% of limit if exceeded. Never report "not moving" without completing all three steps.
+- **Mid-motion node crash monitoring** (Rule 13) — for commands > 10 s, check `nodes list` every 10 s; estop and escalate if velocity controller or odom publisher disappears.
+- **Simulated clock re-check** (Rule 0.1) — `/clock` liveness must be re-verified before every timed command, not just at session start. If clock is not advancing, block the timed command.
+- **Odometry `frame_id` check** (Rule 15) — on first use of odom topic, read `header.frame_id`; note non-canonical frames to user; store for position reporting and TF queries.
+- **TF tree pre-flight validation** (Rule 17) — run `tf list` before any TF operation; run `tf echo` for sensor frames to confirm staleness; `tf echo` timeout = suspect cycle.
+- **Process interrupt cleanup** (Rule 18) — any abrupt CLI exit during motion = potential coasting robot; send estop immediately as first recovery action. Notes known signal handler gap in `ros2_cli.py`.
+- **AGENTS.md Rules 28–32** — condensed coverage for all seven Wave 3 additions; full RULES.md → AGENTS.md coverage audit confirmed (all 25 rules, 0–23, covered across entries 1–32).
+
+### Workflow and Self-Reliance (Wave 4)
+
+- **Launch discovery** — keyword inference table added (bringup/nav/camera/arm/sim); planned native `launch list <keyword>` noted for Wave 5; `ros2 pkg list` / `ros2 pkg files` documented as Rule 2 exceptions until then.
+- **Rule 24 / AGENTS.md Rule 33** — conditional and branching task sequences: retry limits per failure type, fallback chain table, escalation message format. Two consecutive identical failures → escalate immediately.
+
+### Dynamic Deceleration Zone
+
+- **Auto-computed decel zone in `publish-until`** — `--slow-last` and `--slow-factor` are now computed from kinematics (`v_cmd² / (2 × a_max)` for linear; `ω_cmd² / (2 × α_max)` for rotation) instead of hardcoded constants. Accel and min-vel params fetched from live nodes at startup (2 s timeout). Per-axis fallbacks: `linear.x=0.125 m/s`, `linear.y=0.1 m/s`, `angular.z=0.375 rad/s`; accel fallbacks: `0.5 m/s²` linear / `1.0 rad/s²` angular. `--slow-last` still overrides when provided. Computed values reported in output as `"decel_zone"`. Rule 20 and AGENTS.md Rule 20 updated.
+
+### CLI Introspection (Wave 5)
+
+- **`params find <pattern>`** — cross-node parameter search; finds any parameter matching a substring across all live nodes; optional `--node` filter; returns node path + current value for each match (AGENTS.md Rule 34)
+- **`tf tree`** — ASCII TF hierarchy visualization; subscribes to `/tf` + `/tf_static`, builds parent→child tree; use before any spatial operation (AGENTS.md Rule 35)
+- **`tf validate`** — DFS cycle detection + multiple-parent checks across full TF graph; returns `"valid": false` with offending frames; required pre-flight for spatial ops (AGENTS.md Rules 36 + RULES.md Rule 17 EC-7 updated)
+- **`topics qos-check <topic>`** — cross-compares publisher and subscriber QoS profiles; returns `compatible` flag and suggested `--qos-*` flag to resolve mismatches (AGENTS.md Rule 37)
+- **`launch list <keyword>`** — keyword-based launch file discovery across all installed packages; returns package name + full path for each match; use to resolve natural-language launch requests (AGENTS.md Rule 38)
+
 ### New Commands
 
 - `bag info <bag_path>` — show metadata for a ROS 2 bag (duration, message counts, per-topic stats); no live graph required

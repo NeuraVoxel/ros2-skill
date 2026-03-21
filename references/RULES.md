@@ -61,13 +61,27 @@ This rule exists because:
 | Get / list / dump parameters | `nodes list` to discover the node name; `params list <node>` to discover parameter names |
 | Load parameters from a YAML file (`params load` or `--params-file` in launch) | 1. `nodes list` to confirm the target node is running.<br>2. `params list <node>` to get the current parameter names on that node.<br>3. Compare YAML file keys against the discovered names — **any YAML key that does not match a declared parameter is silently ignored; no error is raised.** Verify every key you intend to set is present in `params list` output before loading.<br>4. For each YAML key you will set, `params describe <node:param>` to confirm type — a YAML string loaded into an integer parameter silently fails or truncates.<br>5. After loading: `params get <node:param>` on each key to verify values were applied (Rule 8). |
 
-**Parameter introspection is mandatory before any movement command.** Velocity limits can live on any node — not just nodes with "controller" in the name. Before publishing velocity:
-1. Run `nodes list` to get every node currently running
-2. Run `params list <NODE>` on **every single node** in the list (run in parallel batches if there are many)
-3. For each node, look for any parameter whose name contains `max`, `limit`, `vel`, `speed`, or `accel` (case-insensitive). These are candidates for velocity limits.
-4. Run `params get <NODE>:<param>` for every candidate found across all nodes
-5. Identify the binding ceiling: the **minimum across all discovered linear limit values** and the **minimum across all discovered angular/theta limit values**
-6. Cap your commanded velocity at that ceiling. If no limits are found on any node, use conservative defaults (0.2 m/s linear, 0.75 rad/s angular) and note this to the user.
+**Parameter introspection is mandatory before any movement command.** Velocity limits can live on any node — not just nodes with "controller" in the name. Before publishing velocity, sweep **all four limit sources** in parallel:
+
+**Source 1 — Node parameters (all nodes):**
+1. Run `nodes list` to get every node currently running.
+2. Run `params list <NODE>` on **every single node** in the list (run in parallel batches if there are many).
+3. For each node, look for any parameter whose name contains `max`, `limit`, `vel`, `speed`, `accel`, or `scale` (case-insensitive). These are candidates for velocity limits. The `scale` keyword catches teleop nodes that publish `scale_linear`, `scale_angular`, or `max_vel_*` params — these define the operator's commanded ceiling and must be respected.
+4. Run `params get <NODE>:<param>` for every candidate found across all nodes.
+
+**Source 2 — URDF joint limits (if `robot_state_publisher` is running):**
+5. Check whether a node with `robot_state_publisher` in its name exists in `nodes list`. If it does, run `params get <RSP_NODE>:robot_description` to retrieve the URDF XML. Parse the URDF for any `<limit velocity="..."/>` and `<limit acceleration="..."/>` entries on joints relevant to the requested motion type (wheel joints for linear/angular base motion, arm joints for arm commands). Extract the minimum velocity limit across all relevant joints and treat it as a binding ceiling alongside Source 1.
+6. **If `robot_description` is not a parameter on the node** (some configurations use `robot_description_semantic` or load it from a file): skip URDF parsing and proceed with Sources 1, 3, 4 only.
+
+**Source 3 — ros2_control hardware interface limits:**
+7. Run `control list-hardware-interfaces` and inspect the output for commanded interfaces (those listed under `[claimed]` or with `velocity command` in their description). If the controller manager or hardware nodes expose per-joint limit parameters (commonly named `<joint>/limits/max_velocity`, `<joint>/limits/max_acceleration`, or similar), retrieve them via `params list` + `params get` on the `controller_manager` node and any hardware plugin nodes. If no such params exist, skip — this source is optional.
+
+**Source 4 — Hardware component YAML limits (via controller_manager params):**
+8. Run `params list /controller_manager` and look for any parameter matching `<joint>.*limit.*` or `<joint>.*max.*`. These often come from YAML robot configuration files loaded at launch via `--params-file` and land as regular parameters on the controller_manager node. Retrieve each candidate with `params get`.
+
+**Binding ceiling = the minimum across all values discovered in Sources 1–4.**
+9. Identify the binding ceiling: the **minimum across all discovered linear limit values** and the **minimum across all discovered angular/theta limit values**.
+10. Cap your commanded velocity at that ceiling. If no limits are found across all four sources, use conservative defaults (0.2 m/s linear, 0.75 rad/s angular) and note this in the report.
 
 **Never hardcode or assume:**
 - ❌ Never use `/cmd_vel` without first discovering the velocity topic with `topics find`
@@ -124,6 +138,13 @@ python3 {baseDir}/scripts/ros2_cli.py lifecycle get <node>
 A node in `unconfigured` or `inactive` state will silently fail when its topics or services are used. Activate required nodes before proceeding.
 
 **These checks are session-level.** Do not re-run for every command. Re-run only if the user relaunches the robot or if nodes appear/disappear unexpectedly.
+
+**Exception — simulated time re-check before every timed command:**
+Step 2 (simulated clock check) is the one session-level check that must be **repeated before every timed operation** (`publish-until`, `publish-sequence`, `topics subscribe --timeout`, etc.). A simulator can pause or reset at any point. Before any timed command, run:
+```bash
+python3 {baseDir}/scripts/ros2_cli.py topics subscribe /clock --max-messages 1 --timeout 2
+```
+If no message arrives (even though the clock topic exists): the simulator is paused. **Do not issue any timed command** — all timeouts will fire instantly or block indefinitely depending on whether ROS time is forwarding. Escalate: *"Simulator clock is not advancing. Cannot issue timed commands until the simulator is unpaused."* This check adds under 2 s to every motion pre-flight and prevents the most expensive class of sim-based failures.
 
 ### Rule 0.5 — Never hallucinate commands, flags, or names
 
@@ -433,6 +454,14 @@ services call <SET_LOGGER_LEVEL_SERVICE> '{"logger_name": "", "level": 20}'
 ```
 Use `logger_name: ""` to affect the root logger, or specify the node's fully qualified logger name (e.g., `"my_controller"`) to narrow the scope. **Only escalate to the user if debug-level output still does not identify the cause.**
 
+**Robot not moving — silent controller rejection diagnostic:**
+If odom velocity stays ≈ 0 for more than 2 s after a `publish-until` or `topics publish` command was issued (i.e., commands are being sent but the robot is not responding), apply this diagnostic in order — do not guess:
+
+1. **Confirm commands are reaching the topic:** run `topics hz <VEL_TOPIC> --duration 2`. If rate = 0 Hz → the publishing command itself failed; retry with the correct topic. If rate > 0 Hz → commands are arriving at the topic; proceed to step 2.
+2. **Compare commanded velocity to the binding ceiling (Rule 0 Sources 1–4):** if the commanded value exceeds any discovered limit, the controller is silently discarding the message. This is the most common cause of "correct commands, no movement." **Immediately reissue with velocity clamped to 90% of the binding ceiling.** Report: *"Original speed X m/s exceeded controller limit Y m/s — reissued at Z m/s."*
+3. **If commanded velocity ≤ all limits but robot still not moving:** escalate to hardware/controller diagnosis — check `control list-controllers` (is the controller `active`?), `control list-hardware-components` (is hardware `active`?), and run `nodes list` to confirm the controller node is still running. Apply the pre-escalation debug log-level step above if the cause is still unclear.
+4. **Never report "robot not moving" to the user without first completing steps 1–3.** Each step takes under 3 s. Reporting before diagnosing forces the user to do the work the agent should have done autonomously.
+
 **Motion-error lockout — mandatory after any motion timeout or motion failure:**
 After any `publish-until` or `publish-sequence` timeout, error, or unexpected stop, the robot is in an unknown physical state. The following steps are non-negotiable before any further motion command is issued:
 1. Send `estop`.
@@ -613,6 +642,13 @@ Topic names, controller states, node lists, lifecycle states, and parameter valu
 - An error suggests the graph changed (a topic previously seen is now absent)
 - A node that was present is no longer in `nodes list`
 
+**Mid-motion node crash monitoring — mandatory for commands with expected duration > 10 s:**
+For any `publish-until` or `publish-sequence` whose calculated timeout exceeds 10 s, monitor the node graph during execution:
+- Every 10 s (at each segment boundary if using long-motion segmentation from Rule 9), run `nodes list` in the background.
+- Identify the critical nodes: the velocity controller node and the odom publisher node (both discovered during Rule 0 pre-flight).
+- **If either critical node disappears from `nodes list`:** immediately send `estop`, verify it took effect, then escalate: *"Critical node `<node_name>` crashed during motion at position X. Robot stopped. Cannot resume motion until node is restarted."* Do not attempt to continue motion.
+- Short commands (≤ 10 s): node-crash monitoring is optional. The command will timeout before the periodic check adds meaningful safety.
+
 **If the graph changes unexpectedly mid-task** (a node disappears, a controller deactivates without being told to, a topic that was publishing goes silent):
 1. Stop the current task.
 2. Re-run the full Rule 0.1 session-start checks (`doctor`, clock check, lifecycle state).
@@ -654,6 +690,17 @@ Before subscribing to a topic and waiting for a message, verify a publisher exis
 4. **If `publisher_count > 0` and QoS is compatible but subscribe still times out:** run `topics hz <topic>` to confirm messages are actively flowing (a publisher node may be up but not sending).
 
 **For `<ODOM_TOPIC>` specifically (used in every motion workflow):** always run step 1–3 before the first odom subscribe in Rule 9. A QoS mismatch on odom causes every motion command to hang silently at the stationary check — the most expensive possible failure point.
+
+**Odometry `frame_id` check — run once per session when odom topic is first used:**
+After confirming a publisher exists on `<ODOM_TOPIC>`, subscribe for one message and read `header.frame_id`:
+```bash
+topics subscribe <ODOM_TOPIC> --max-messages 1 --timeout 5
+```
+Inspect the returned `header.frame_id` value:
+- **`odom`, `odom_combined`, `robot_odom`, or any name containing `odom`**: canonical frame — proceed normally.
+- **Anything else** (e.g., `world`, `map`, `base_link`, a custom name): note to the user once and proceed: *"Odometry is published in frame `<frame_id>` rather than the canonical `odom` frame. Position values are relative to `<frame_id>`."* This does not block motion but affects how position deltas should be interpreted.
+- **Empty `frame_id`**: flag as a configuration problem: *"Odometry `frame_id` is empty — the publisher may be misconfigured. Position reporting may be unreliable."*
+Store the `frame_id` value for the session. Use it when reporting positions and when querying TF transforms.
 
 Before publishing to a topic intended for a subscriber:
 1. Run `topics details <topic>` — check `subscriber_count`.
@@ -761,6 +808,13 @@ map → odom → base_link (→ sensor frames)
 - Confuse a jump in `map` → `odom` (localisation correction) with the robot physically moving
 - Consume spatial sensor data without first verifying the sensor's `frame_id` exists in the TF tree and is not stale — run `tf list` and `tf echo <SENSOR_FRAME> <BASE_FRAME>` before using any sensor's spatial output
 
+**TF tree pre-flight validation — run before any TF-dependent operation:**
+Before any `tf lookup`, `tf echo`, or spatial sensor usage:
+1. Run `tf list` — confirm the expected frames are present. If the list is empty, TF is not publishing; escalate and halt any spatial operation.
+2. For each frame you intend to use, confirm it appears in `tf list` output. If a required frame is absent: it may not have been broadcast yet (DDS lag), or the node responsible for it has crashed. Wait 2 s and retry once before escalating.
+3. For any sensor frame (camera, LiDAR, IMU): run `tf echo <SENSOR_FRAME> <BASE_FRAME> --duration 1` to confirm the transform is actively updating and not stale. A stale transform (last updated > 1 s ago) means the sensor is not publishing its frame — do not use the sensor's spatial output.
+4. **TF cycle detection** — a TF tree with a cycle (e.g., `odom → base_link → odom`) causes `tf lookup` to hang indefinitely. If a `tf echo` or `tf lookup` call hangs past its timeout, suspect a cycle. Run `tf validate` to perform automated DFS cycle detection and multiple-parent checks across the full TF graph. If `tf validate` reports any cycles or multi-parent frames, halt all spatial operations and report the offending frames before proceeding.
+
 ---
 
 ### Rule 18 — Always run `estop` after `publish-until`, regardless of outcome
@@ -789,6 +843,16 @@ Apply this rule in all three exit cases:
 **Verify `estop` took effect (Rule 8):** subscribe to `<ODOM_TOPIC>` and confirm all velocity axes < 0.01 within 5 s (10 s for heavy platforms > 20 kg). If velocity remains non-zero after the window, report a critical failure — the velocity controller may have disconnected.
 
 **This rule supersedes any perceived urgency to diagnose quickly.** An unstopped robot during diagnosis creates a moving-hazard context that makes every subsequent action more dangerous.
+
+**Process interrupt (Ctrl+C / SIGTERM) cleanup:**
+If the `ros2_cli.py` process is interrupted (keyboard interrupt, SIGTERM, or any unhandled exception) while a motion command is in progress, the `ros2_context()` context manager calls `rclpy.shutdown()` in its `finally` block — but this does **not** send a zero-velocity stop message. The robot will coast.
+
+**What the agent must do if it detects a mid-motion interruption:**
+- If control returns to the agent after an interrupted motion command (e.g., the CLI process exited with a non-zero code mid-publish), treat it identically to a Rule 18 `publish-until` exception case: **send `estop` immediately** before doing anything else.
+- Do not assume the robot stopped because the CLI process exited. The velocity controller continues executing the last commanded velocity until it receives a stop command or times out.
+
+**What should exist in the CLI (for awareness):**
+`ros2_cli.py` should register a `signal.signal(signal.SIGTERM, ...)` handler that sends `estop` and then exits cleanly. This is a known gap — tracked as a CLI improvement. Until it is implemented, the agent must treat any abrupt CLI exit as a potential coasting-robot event and issue `estop` as the first recovery action.
 
 ### Rule 19 — Verify QoS compatibility before `publish-until` (and before any subscribe)
 
@@ -832,37 +896,67 @@ If the field is not found in the subscribed message, stop and re-run `interface 
 
 **Distinguishing QoS failure from genuine timeout:** If `publish-until` returns `condition_met: false` on the first attempt and the cause is uncertain, run `topics hz <ODOM_TOPIC> --duration 2` immediately after estop. If the rate is 0 Hz → the odom publisher was not being received (QoS mismatch or publisher offline) — fall back to open-loop. If rate > 0 Hz → odom was flowing; the condition was genuinely not met within the timeout — apply Rule 21 (re-issue for remaining distance).
 
-### Rule 20 — Use `--slow-last` for all movements exceeding 2 m or 180°
+### Rule 20 — Deceleration zone: auto-computed for every `publish-until` move
 
-The deceleration zone (`--slow-last`) ramps down to `--slow-factor` speed over the final N metres or degrees of a movement. Without it, the robot arrives at the target at full commanded velocity and immediately stops — producing overshoot on any platform with non-negligible inertia.
+The deceleration zone ramps velocity down linearly from full commanded speed to a fine-control floor over the final N units of a movement. Without it, the robot arrives at full velocity and overshoots any platform with non-negligible inertia.
 
-**Mandatory thresholds:**
+**The skill computes the zone automatically** from the commanded velocity and discovered params. Do not add `--slow-last` manually unless you need to override the computed value.
 
-| Movement type | Threshold | Default recommendation |
-|---|---|---|
-| Linear (forward/backward) | > 2 m | `--slow-last 0.5 --slow-factor 0.3` |
-| Rotation | > 180° (π rad) | `--slow-last 30 --slow-factor 0.4` (degrees) |
-| Strafing (holonomic) | > 2 m | `--slow-last 0.5 --slow-factor 0.3` |
+#### How auto-compute works
 
-**Rule:** If the movement distance or angle exceeds the threshold, **always** add `--slow-last` and `--slow-factor` to the `publish-until` command. Never omit them for long moves, even if the user does not mention smoothness.
+For **linear** moves:
+```
+a_max     = param scan (max_accel / accel_limit / decel_limit); fallback 0.5 m/s²
+v_min     = param scan (min_vel_x / min_vel / min_speed);       fallback: x=0.125 m/s, y=0.1 m/s
+v_cmd     = |linear.x| or |linear.y| (x preferred)
+
+slow_last = clamp( v_cmd² / (2 × a_max),  min=0.05 m,  max=distance × 0.4 )
+slow_factor = clamp( v_min / v_cmd,  min=0.10,  max=0.50 )
+```
+
+For **rotation** moves:
+```
+α_max     = param scan (max_ang_accel / ang_accel_limit);       fallback 1.0 rad/s²
+ω_min     = param scan (min_ang_vel / min_angular_speed);       fallback 0.375 rad/s
+ω_cmd     = |angular.z|
+
+slow_last = clamp( ω_cmd² / (2 × α_max),  min=3°,  max=angle × 0.4 )
+slow_factor = clamp( ω_min / ω_cmd,  min=0.10,  max=0.50 )
+```
+
+Param fetch runs at startup with a **2 s hard timeout**. If no matching params are found, the fallback defaults above are used silently. The computed values are reported in the output JSON under `"decel_zone"`.
+
+**Example output:**
+```json
+"decel_zone": {
+  "auto_computed": true,
+  "slow_last": 0.32,
+  "slow_factor": 0.28,
+  "params_source": "/velocity_controller:max_accel"
+}
+```
+
+#### Manual override
+
+If `--slow-last` is provided explicitly, auto-compute is skipped entirely and the provided value is used as-is. Use this only if the computed zone produces observed overshoot or when testing:
 
 ```bash
-# Long forward move (> 2 m) — decel zone required
+# Manual override — suppress auto-compute
 python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
   '{"linear":{"x":0.4},"angular":{"z":0.0}}' \
   --monitor <ODOM_TOPIC> --field pose.pose.position.x --delta 3.0 \
   --slow-last 0.5 --slow-factor 0.3
-
-# Long rotation (> 180°) — decel zone required
-python3 {baseDir}/scripts/ros2_cli.py topics publish-until <VEL_TOPIC> \
-  '{"linear":{"x":0.0},"angular":{"z":0.6}}' \
-  --monitor <ODOM_TOPIC> --field pose.pose.orientation.z --rotate 200 --degrees \
-  --slow-last 30 --slow-factor 0.4
 ```
 
-**Adjust `--slow-factor` for platform inertia:** heavier or faster platforms need a lower factor (more aggressive slow-down). If overshoot is observed even with the default factor, reduce `--slow-factor` (e.g., 0.2) and increase `--slow-last` (e.g., 0.8 m).
+#### Fallback defaults (when params unavailable)
 
-**Short moves (≤ 2 m / ≤ 180°):** `--slow-last` is optional but recommended. The default velocity cap (Rule 0.5) limits harm from overshoot on short moves.
+| Axis | Fine-control floor (`v_min`) | Accel fallback (`a_max`) |
+|------|------------------------------|--------------------------|
+| linear.x | 0.125 m/s | 0.5 m/s² |
+| linear.y | 0.100 m/s | 0.5 m/s² |
+| angular.z | 0.375 rad/s | 1.0 rad/s² |
+
+**If overshoot is observed** with auto-computed values: increase `--slow-last` (larger zone) or decrease `--slow-factor` (lower floor). Report both values from `"decel_zone"` output so the user can see what was used.
 
 ### Rule 21 — After a `publish-until` timeout, verify position before re-issuing
 
@@ -924,6 +1018,68 @@ If the user sends a new command (any kind) while a `publish-until` or `publish-s
 **If the new command is itself "stop" / "halt" / "estop":** treat it as a direct estop request — send `estop` immediately, verify, report. No motion resumes until the user issues a new motion command.
 
 **This rule applies regardless of how much of the original motion had completed.** Even if the robot was 1 cm from its target, stop on receipt of a new command.
+
+### Rule 24 — Conditional and branching task sequences
+
+Rule 16 defines how to execute a linear sequence (step N → verify → step N+1). This rule extends that to tasks with branches, fallbacks, and retry limits.
+
+#### When a task has a conditional structure
+
+Some tasks cannot be resolved as a linear sequence because the next action depends on the outcome of the current one. Examples:
+- "Move to position X; if you can't reach it after two tries, report where you ended up"
+- "Try to activate controller A; if it fails, try controller B instead"
+- "Attempt closed-loop; if odom is unavailable, fall back to open-loop"
+
+**General conditional pattern:**
+
+```
+attempt = 1
+max_attempts = 2  # default unless user specifies otherwise
+
+while attempt ≤ max_attempts:
+  Execute step N
+  If step N succeeds → proceed to next step (or complete task)
+  If step N fails:
+    If attempt < max_attempts:
+      Diagnose (Rule 7), adjust parameters if possible, increment attempt
+    If attempt == max_attempts:
+      Escalate (see escalation rules below)
+```
+
+#### Retry rules
+
+| Situation | Max autonomous retries | Action on max reached |
+|---|---|---|
+| Motion command timeout (`publish-until`) | 1 (remaining distance only, Rule 21) | Escalate: position, target, remaining, cause |
+| Verification failure (Rule 8 retry protocol) | 2 (3 total attempts) | Escalate as critical failure |
+| Discovery empty result (Rule 10 retry) | 1 (broadened search after 1 s) | Ask user or declare unavailable |
+| General step failure (not covered above) | 1 | Escalate |
+| Safety-related failure (estop, controller offline) | 0 — escalate immediately | No autonomous retry on safety failures |
+
+**Never retry more times than the table above specifies.** Autonomous retry loops without bounds create unpredictable behaviour and mask the root cause.
+
+#### Fallback chains
+
+When a preferred method fails and a known fallback exists, execute the fallback without asking:
+
+| Preferred | Fallback condition | Fallback action |
+|---|---|---|
+| `publish-until` (closed-loop) | No odom / QoS mismatch | `publish-sequence` (open-loop) — notify user |
+| Discovered topic | Empty result from all `topics find` | Ask user for topic name (genuine ambiguity) |
+| Discovered launch file | No keyword match | Broader search → if still empty, ask |
+| Controller A | Controller A fails to activate | Try controller B if one exists; else escalate |
+
+**Always notify the user when a fallback fires.** Include: what was tried, why it failed, what the fallback is, and what accuracy/safety implications the fallback has (e.g., "Running open-loop — distance not guaranteed").
+
+#### Escalation rules
+
+Escalate to the user (one clear, factual message) when:
+1. Max retries exhausted — include: last known position, target, remaining distance/angle, root cause
+2. No fallback is available for a failed step
+3. Any safety check fails and cannot recover (estop unverified, controller offline and unreachable)
+4. Two consecutive attempts produce the same failure — do not attempt a third
+
+**When escalating, always provide:** what was tried, what failed, current system state (position, controller state), and one specific suggested next step. Never present a list of options — recommend one action.
 
 ---
 
@@ -1275,6 +1431,8 @@ Use this decision table whenever an in-flight action goal needs to be stopped:
 
 **When user says "run the bringup" or "launch navigation" (partial/ambiguous request):**
 
+**Planned native command (Wave 5):** `launch list <keyword>` will provide native keyword-filtered launch file discovery within ros2-skill, eliminating the need for the `ros2` CLI exceptions below. Until that command is available, use the following workflow.
+
 1. **Discover available packages:**
    ```bash
    # ros2-skill has no package-listing command — this is a Rule 2 last-resort exception.
@@ -1289,15 +1447,21 @@ Use this decision table whenever an in-flight action goal needs to be stopped:
    ros2 pkg files <package>
    ```
 
-3. **Intelligent inference (use context):**
-   - "bringup" → look for packages with `bringup` in name, or launch files named `bringup.launch.py`
-   - "navigation" → look for `navigation2`, `nav2`, or launch files with `navigation`
-   - "camera" → look for camera-related packages
+3. **Intelligent inference (use context keywords):**
+
+   | User says... | Search for packages / files containing... |
+   |---|---|
+   | "bringup", "bring up", "start the robot", "boot" | `bringup`, `bringup.launch.py` |
+   | "navigation", "nav", "drive autonomously" | `navigation2`, `nav2`, `navigation` |
+   | "camera", "vision", "image" | `camera`, `realsense`, `image_pipeline` |
+   | "manipulation", "arm", "moveit" | `moveit`, `arm`, `manipulation` |
+   | "simulation", "sim", "gazebo" | `gazebo`, `simulation`, `sim` |
+   | exact package name given | use it directly |
 
 4. **If exactly one clear match found:**
    - Launch it immediately — do not ask for confirmation (Rule 5)
 
-5. **If multiple candidates found and cannot be disambiguated:**
+5. **If multiple candidates found and cannot be disambiguated by context:**
    - Present options: "Found 3 launch files: X, Y, Z. Which one?" — this is the only case where asking is permitted
 
 6. **If no match found:**
