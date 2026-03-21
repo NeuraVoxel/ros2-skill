@@ -77,6 +77,10 @@ Comprehensive review of RULES.md, AGENTS.md, and SKILL.md targeting agent self-r
 - **Launch discovery** — keyword inference table added (bringup/nav/camera/arm/sim); planned native `launch list <keyword>` noted for Wave 5; `ros2 pkg list` / `ros2 pkg files` documented as Rule 2 exceptions until then.
 - **Rule 24 / AGENTS.md Rule 33** — conditional and branching task sequences: retry limits per failure type, fallback chain table, escalation message format. Two consecutive identical failures → escalate immediately.
 
+### Dynamic Deceleration Zone
+
+- **Auto-computed decel zone in `publish-until`** — `--slow-last` and `--slow-factor` are now computed from kinematics (`v_cmd² / (2 × a_max)` for linear; `ω_cmd² / (2 × α_max)` for rotation) instead of hardcoded constants. Accel and min-vel params fetched from live nodes at startup (2 s timeout). Per-axis fallbacks: `linear.x=0.125 m/s`, `linear.y=0.1 m/s`, `angular.z=0.375 rad/s`; accel fallbacks: `0.5 m/s²` linear / `1.0 rad/s²` angular. `--slow-last` still overrides when provided. Computed values reported in output as `"decel_zone"`. Rule 20 and AGENTS.md Rule 20 updated.
+
 ### CLI Introspection (Wave 5)
 
 - **`params find <pattern>`** — cross-node parameter search; finds any parameter matching a substring across all live nodes; optional `--node` filter; returns node path + current value for each match (AGENTS.md Rule 34)
