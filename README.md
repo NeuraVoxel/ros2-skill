@@ -21,23 +21,7 @@ An AI agent skill that lets agents control ROS 2 robots through natural language
 
 The long-term goal is full parity with the `ros2` CLI — every command available in a terminal, made accessible to an AI agent. Beyond that baseline, ros2-skill adds capabilities that only make sense in an agent context: goal-conditioned publishing, sensor image capture, system diagnostics, and external integrations like Discord reporting.
 
-## Quick Start (CLI)
-
-> **Note:** The CLI is intended for debugging and development only. Normal usage is through the chat interface of your AI agent platform (e.g. nanobot, OpenClaw) — not by running `ros2_cli.py` directly.
-
-See [`references/CLI.md`](references/CLI.md) for the full command list, agent features, and global options.
-
-```bash
-# Source ROS 2 environment
-source /opt/ros/${ROS_DISTRO}/setup.bash
-
-# Run commands directly (debugging / development only)
-python3 scripts/ros2_cli.py version
-python3 scripts/ros2_cli.py topics list
-python3 scripts/ros2_cli.py nodes list
-```
-
-## Quick Start (AI Agent)
+## Quick Start
 
 **ros2-skill** works with any AI agent that supports [Agent Skills](https://agentskills.io). For easy setup, I recommend using [nanobot](https://github.com/HKUDS/nanobot), a lightweight alternative to [OpenClaw](https://github.com/openclaw/openclaw) that can run directly on-board the ROS 2 robot's computer. Install **ros2-skill** from [ClawHub](https://clawhub.ai/adityakamath/ros2-skill) and talk to your robot:
 
@@ -55,6 +39,8 @@ python3 scripts/ros2_cli.py nodes list
 No user clarification needed — the agent uses ros2-skill tools to answer all its own questions.
 
 For nanobot deployments, load both `SKILL.md` (command reference) and `AGENTS.md` (operational rules and safety constraints) into the agent's system prompt. The full rule set is in [`references/RULES.md`](references/RULES.md).
+
+> **Note:** `ros2_cli.py` is intended for debugging and development only. Normal usage is through the chat interface of your agent platform. See [`references/CLI.md`](references/CLI.md) for the full command list.
 
 ## How It Works
 
