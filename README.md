@@ -173,7 +173,7 @@ ros2-skill/
 ## Requirements
 
 - Python 3.10+
-- ROS 2 (Humble, Iron, Jazzy, or compatible distribution), environment sourced
+- ROS 2, environment sourced
 
 **Optional:**
 - `opencv-python` and `numpy` — required for `topics capture-image`
@@ -187,6 +187,8 @@ python3 -m pytest tests/ -v
 ```
 
 Tests that require a live ROS 2 environment will skip gracefully if one is not available.
+
+Tested with ROS 2 Kilted and [nanobot](https://github.com/HKUDS/nanobot) on a Raspberry Pi.
 
 ## Changelog
 
