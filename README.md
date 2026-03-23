@@ -87,11 +87,11 @@ ros2-skill/
 ├── references/
 │   ├── CLI.md                 # Supported commands, agent features, global options
 │   ├── COMMANDS.md            # Full command reference with output examples
+│   ├── EXAMPLES.md            # Practical usage guide for agents
 │   └── RULES.md               # Agent safety rules and operational constraints
 ├── tests/
 │   └── test_ros2_cli.py       # Unit tests
 ├── AGENTS.md                  # Agent system prompt — load alongside SKILL.md for nanobot deployments
-├── EXAMPLES.md                # Practical usage guide for agents
 └── CHANGELOG.md               # Version history
 ```
 
