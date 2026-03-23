@@ -1,7 +1,6 @@
 # ROS 2 Skill
 
 ![Status](https://img.shields.io/badge/Status-Active-green)
-![ROS 2](https://img.shields.io/badge/ROS%202-Supported-green?style=flat&logo=ros&logoSize=auto)
 [![Repo](https://img.shields.io/badge/Repo-adityakamath%2Fros2--skill-purple?style=flat&logo=github&logoSize=auto)](https://github.com/adityakamath/ros2-skill)
 [![Blog](https://img.shields.io/badge/Blog-kamathrobotics.com-darkorange?style=flat&logo=hashnode&logoSize=auto)](https://kamathrobotics.com)
 [![Ask DeepWiki (Experimental)](https://deepwiki.com/badge.svg)](https://deepwiki.com/adityakamath/ros2-skill)
