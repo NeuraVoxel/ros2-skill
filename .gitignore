@@ -595,3 +595,4 @@ docs/plans/
 # Claude AI work data
 .claude/
 .claude/
+.DS_Store
