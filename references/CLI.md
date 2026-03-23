@@ -87,4 +87,4 @@ Place these **before** the command name to apply a setting to all commands:
 python3 scripts/ros2_cli.py --timeout 30 --retries 3 lifecycle get /camera_driver
 ```
 
-See [`../EXAMPLES.md`](../EXAMPLES.md) for practical usage examples including image capture and Discord integration.
+See [`EXAMPLES.md`](EXAMPLES.md) for practical usage examples including image capture and Discord integration.

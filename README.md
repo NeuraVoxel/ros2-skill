@@ -9,6 +9,13 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Static Badge](https://img.shields.io/badge/License-Apache%202.0-blue)
 
+[![SKILL.md](https://img.shields.io/badge/docs-SKILL.md-blue)](SKILL.md)
+[![AGENTS.md](https://img.shields.io/badge/docs-AGENTS.md-blue)](AGENTS.md)
+[![RULES.md](https://img.shields.io/badge/docs-RULES.md-blue)](references/RULES.md)
+[![COMMANDS.md](https://img.shields.io/badge/docs-COMMANDS.md-blue)](references/COMMANDS.md)
+[![EXAMPLES.md](https://img.shields.io/badge/docs-EXAMPLES.md-blue)](references/EXAMPLES.md)
+[![CLI.md](https://img.shields.io/badge/docs-CLI.md-blue)](references/CLI.md)
+
 [Agent Skill](https://agentskills.io) for ROS 2 robot control via rclpy.
 
 ```text
