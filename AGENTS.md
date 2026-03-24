@@ -250,6 +250,7 @@ python3 {baseDir}/scripts/discord_tools.py send-image \
 | Action server names | `actions list` or `actions find <type>` |
 | TF frame names | `tf list` |
 | Controller names | `control list-controllers` |
+| Component container names / loaded component IDs | `component list` |
 | Parameter names on a node | `params list <node>` |
 
 **When discovery returns empty — fallback chain:**
