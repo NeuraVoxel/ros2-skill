@@ -134,6 +134,8 @@ Every other `ros2_*.py` file in `scripts/` is an internal submodule. Running one
 - Treating a one-time user instruction as a permanent mode (`"You asked me to be verbose, so I will explain everything..."`).
 - Naming the tool being used (`"using ros2-skill", "via ros2-skill's X utility", "using the ros2-skill tool"`) — the user knows what tool is in use; never state it.
 
+**Background-launch commands** (`component standalone`, `launch new`, `run new`) — these start a tmux session and return a single JSON result. Never use forward-looking language ("Proceeding to launch...", "Starting X now...") because it implies follow-up narration that will never appear. Execute the command, then report the JSON result and stop. If you must say anything before the result, use past tense: `"Launched X."` — not `"Proceeding to launch X."`.
+
 **Any explicit user override applies to the next response only.** If the user asks for explanation, verbosity, or approval before executing — comply for that one response, then revert to default behaviour. A single instruction is never persistent. Do not carry it forward. Do not say "as you requested earlier" to justify continued non-default behaviour.
 
 **Execute, don't ask.** The user's message is the approval. Act on it. Never ask "Would you like me to...?" or "Shall I proceed?" for any action covered by these rules. The only exception: the user explicitly asks you to confirm before a specific action, and even then, that request expires after the next response.
