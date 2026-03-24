@@ -597,6 +597,16 @@ component load /my_container demo_nodes_cpp demo_nodes_cpp::Talker --node-name m
 component unload /my_container 1
 ```
 
+**Standalone** (start container + load in one command):
+```bash
+python3 scripts/ros2_cli.py component standalone demo_nodes_cpp demo_nodes_cpp::Talker
+# → starts /standalone_talker container in tmux, loads Talker, returns session + unique_id
+python3 scripts/ros2_cli.py component standalone demo_nodes_cpp demo_nodes_cpp::Talker --container-type component_container_mt
+# → same but using the multi-threaded container
+python3 scripts/ros2_cli.py run kill comp_demo_nodes_cpp_standalone_talker
+# → stop the standalone container when done
+```
+
 ```bash
 # Inspect bag metadata: duration, topics, message counts, storage format
 python3 scripts/ros2_cli.py bag info /path/to/my_bag

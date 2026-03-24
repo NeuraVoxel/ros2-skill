@@ -309,6 +309,7 @@ When a user request is ambiguous or incomplete, resolve it yourself — then act
 | "kill/stop the launch" | `launch kill <session>` |
 | "take a photo" | discover camera topic → `topics capture-image --topic <discovered>` |
 | "topic list" or "topic" instead of "topics" | self-correct silently per Rule 6, retry with `topics` |
+| "run talker standalone", "standalone component", "component without container" | `component standalone <package> <plugin>` |
 
 **Launch file name resolution** — try in order, act on first match, never ask:
 1. Exact match (`base`)

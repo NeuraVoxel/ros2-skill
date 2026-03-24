@@ -112,6 +112,7 @@ python3 {baseDir}/scripts/ros2_cli.py component list --help
 python3 {baseDir}/scripts/ros2_cli.py component ls --help
 python3 {baseDir}/scripts/ros2_cli.py component load --help
 python3 {baseDir}/scripts/ros2_cli.py component unload --help
+python3 {baseDir}/scripts/ros2_cli.py component standalone --help
 
 # pkg (no live ROS 2 graph required)
 python3 {baseDir}/scripts/ros2_cli.py pkg list --help
@@ -4039,6 +4040,46 @@ Output:
 
 ---
 
+## component standalone `<package_name>` `<plugin_name>` [options]
+
+Run a composable node in its own standalone container. Starts a fresh `rclcpp_components/component_container` in a tmux session and immediately loads the specified plugin into it. The container node is named `standalone_<plugin_class>` (derived from the plugin name, e.g. `demo_nodes_cpp::Talker` → `/standalone_talker`).
+
+**ROS 2 CLI equivalent:** `ros2 component standalone <package> <plugin>`
+
+**Requires:** tmux, rclcpp_components, composition_interfaces
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--container-type TYPE` | `component_container` | Container executable (`component_container`, `component_container_mt`, `component_container_isolated`) |
+| `--node-name NAME` | `""` | Override the loaded node's name |
+| `--node-namespace NS` | `""` | Override the loaded node's namespace |
+| `--remap RULE [...]` | `[]` | Remap rules (e.g. `/from:=/to`) |
+| `--log-level LEVEL` | `0` | Log level for the loaded node (uint8: 0=unset, 10=DEBUG, 20=INFO, 30=WARN, 40=ERROR, 50=FATAL) |
+| `--timeout SECS` | `10.0` | Total timeout for container start + component load |
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py component standalone demo_nodes_cpp demo_nodes_cpp::Talker
+```
+
+**Output (success):**
+```json
+{
+  "success": true,
+  "session": "comp_demo_nodes_cpp_standalone_talker",
+  "container": "/standalone_talker",
+  "container_type": "component_container",
+  "package_name": "demo_nodes_cpp",
+  "plugin_name": "demo_nodes_cpp::Talker",
+  "full_node_name": "/standalone_talker/talker",
+  "unique_id": 1,
+  "status": "running"
+}
+```
+
+The session can be killed with `run kill <session>` when the container is no longer needed.
+
+---
+
 ## daemon status
 
 Check whether the ROS 2 daemon is running.
@@ -4316,6 +4357,7 @@ Maps user intent phrases to the correct ros2-skill command sequence. When a phra
 | "load component X into container Y", "load X into component container" | `component load <container> <package> <plugin>` | Intra-process component — shares address space with container |
 | "list running containers and components" | `component list` | Shows all containers and their loaded component IDs and names |
 | "unload component X", "remove component with ID N" | `component unload <container> <unique_id>` | Removes a component without killing the container |
+| "run <plugin> standalone", "standalone container for <plugin>", "run <plugin> without an existing container" | `component standalone <package> <plugin>` | Creates its own container + loads in one step; container persists in tmux, kill with `run kill <session>` |
 
 **Key distinction:** `run new` creates a standalone OS process. `component load` inserts a composable node into an already-running container (`rclcpp::ComponentManager`) — lower IPC overhead, same address space. Use `component list` to discover available containers before loading.
 
