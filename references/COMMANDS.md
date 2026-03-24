@@ -4281,3 +4281,5 @@ Maps user intent phrases to the correct ros2-skill command sequence. When a phra
 | "what domain ID is in use", "check ROS_DOMAIN_ID" | Check env: `echo $ROS_DOMAIN_ID` *(direct shell)* |
 
 **Note:** `ROS_DOMAIN_ID` defaults to `0` and is user-configurable. If the graph looks unexpectedly large (too many unrecognised nodes), a domain collision with another system is likely — check with `echo $ROS_DOMAIN_ID` and verify the expected value with the user.
+
+**Setting `ROS_DOMAIN_ID` — important limitation:** `export ROS_DOMAIN_ID=X` in a subprocess does not propagate to the parent shell. The agent cannot persistently change this value for future `ros2_cli.py` calls — each call inherits the environment it was launched with. To apply a different domain ID for a single command, prefix it: `ROS_DOMAIN_ID=42 python3 {baseDir}/scripts/ros2_cli.py topics list`. For a persistent change, the user must set the variable in their shell before launching the agent.
