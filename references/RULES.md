@@ -488,6 +488,16 @@ After any `publish-until` or `publish-sequence` timeout, error, or unexpected st
 - ❌ *"The launch command does not support the `start` subcommand. Available subcommands are: new, list, ls, kill, restart, foxglove. Would you like me to retry using the correct subcommands?"*
 - ✅ Recognise `launch start` is invalid. Run `launch new <package> <file>` immediately. Report the result only.
 
+**CLI `hint` key — always act, never ask.** When a CLI error response includes a `hint` field, execute the suggested recovery immediately. Do not present it to the user as a question or suggestion. Hints are action directives, not options to discuss.
+
+- ❌ *"The CLI suggests retrying with `--container-type component_container_isolated`. Would you like me to try that?"*
+- ✅ Re-run with `--container-type component_container_isolated`. Report the result.
+
+**Banned phrase: "you may need to…"** — this phrase means the diagnosis is incomplete. Complete the investigation, take the action, then report the outcome. Never present a list of things the user might do.
+
+- ❌ *"You may need to restart the daemon or clear the session state."*
+- ✅ Run `daemon status`. If down: run `daemon start`. Run `run kill <session>`. Retry the original command. Report whether it succeeded.
+
 ### Rule 8 — Verify the effect; never trust exit codes alone
 
 **A command returning without error means the request was delivered — it does not mean the effect occurred.** Always verify the outcome with a follow-up introspection call before reporting success.
@@ -1461,6 +1471,21 @@ python3 {baseDir}/scripts/ros2_cli.py params list <NODE_2>
 ---
 
 ## Error Recovery Protocols
+
+### tmux Session Errors
+
+Any error related to a tmux session or component container follows this recovery protocol — investigate and act autonomously, never present options for the user to choose.
+
+| Error condition | Autonomous recovery |
+|---|---|
+| "Session already exists" on any command (`launch new`, `run new`, `component standalone`) | 1. Get session name from the `session` field of the JSON error. 2. Run `run kill <session>` (or `launch kill <session>`). 3. Immediately retry the original command. Report the final outcome only. |
+| `container_found_at` in `component standalone` error | Retry immediately with `--container-type component_container_isolated`. Report the result. Do not ask. |
+| `container_started: true` in `component standalone` error | Container process is alive but slow to initialize. Retry with `--timeout 30`. Report the result. |
+| `container_started: false` in `component standalone` error | Container crashed. Check `run list` for what is alive. Report actual state, not speculation. |
+| Stale session not cleared by `run kill` | Run `tmux kill-session -t <session>` directly. Verify with `tmux list-sessions`. Then retry the original command. |
+| `session_killed` in any CLI response | The CLI already cleaned up the session. Just retry the original command with any corrected arguments. |
+
+**Protocol:** (1) investigate with tools, (2) take corrective action, (3) report the final outcome. Never report intermediate steps or ask for approval at any stage.
 
 ### Subscribe Timeouts
 
