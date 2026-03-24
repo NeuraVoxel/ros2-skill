@@ -4215,11 +4215,6 @@ Maps user intent phrases to the correct ros2-skill command sequence. When a phra
 | User intent | Correct approach | Notes |
 |---|---|---|
 | "run X", "start node X", "launch X as a node" | `run new <package> <executable>` | Standalone process — node runs in its own OS process |
-| "load component X into container Y", "load X into component container" | `component load` *(Wave 2)* | Intra-process component — shares address space with container; lower IPC overhead |
-| "list running containers and components" | `component list` *(Wave 2)* | Shows container nodes and which components are loaded into each |
-| "unload component X from container Y" | `component unload` *(Wave 2)* | Removes a component without killing the container |
-
-**Key distinction:** `run new` creates a standalone OS process. `component load` inserts a composable node into an already-running component container (`rclcpp::Node` loaded as a shared library). Use `component load` only when a container node is already running (visible in `nodes list` with a name ending in `component_container` or similar).
 
 ---
 
@@ -4240,10 +4235,8 @@ Maps user intent phrases to the correct ros2-skill command sequence. When a phra
 | User intent | Correct command |
 |---|---|
 | "what's in this bag", "bag file info", "how long is the bag", "what topics does the bag have" | `bag info <path>` |
-| "record a bag", "capture topics to a bag", "start recording", "log sensor data" | `ros2 bag record` *(direct CLI — not yet in ros2-skill; see `references/CLI.md`)* |
-| "play back a bag", "replay bag file", "play bag" | `ros2 bag play` *(direct CLI — not yet in ros2-skill; see `references/CLI.md`)* |
 
-**Note:** `bag info` does not require a live ROS 2 graph — it reads `metadata.yaml` from the bag directory. `bag record` and `bag play` will be added to ros2-skill in a future release; until then, use the direct `ros2 bag` CLI.
+**Note:** `bag info` does not require a live ROS 2 graph — it reads `metadata.yaml` from the bag directory.
 
 ---
 
