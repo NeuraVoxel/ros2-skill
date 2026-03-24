@@ -143,6 +143,7 @@ from ros2_component import (
     cmd_component_load,
     cmd_component_unload,
     cmd_component_standalone,
+    cmd_component_kill,
 )
 from ros2_pkg import (
     cmd_pkg_list,
@@ -946,6 +947,8 @@ def build_parser():
     p.add_argument("container",  help="Container node name (e.g. /my_container)")
     p.add_argument("unique_id",  type=int, help="Unique ID of the component to unload (from component load or component list)")
     p.add_argument("--timeout",  type=float, default=5.0, dest="timeout", help="Service call timeout in seconds (default: 5.0)")
+    p = compsub.add_parser("kill", help="Kill a standalone component container session (comp_* sessions)")
+    p.add_argument("session", help="Session name to kill (e.g. comp_demo_nodes_cpp_standalone_talker)")
     p = compsub.add_parser(
         "standalone",
         help="Run a composable node in its own standalone container (tmux session)",
@@ -1150,6 +1153,7 @@ DISPATCH = {
     ("component", "ls"):    cmd_component_list,
     ("component", "load"):   cmd_component_load,
     ("component", "unload"): cmd_component_unload,
+    ("component", "kill"):      cmd_component_kill,
     ("component", "standalone"): cmd_component_standalone,
     # pkg
     ("pkg", "list"):        cmd_pkg_list,

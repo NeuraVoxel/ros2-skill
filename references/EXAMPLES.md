@@ -603,8 +603,8 @@ python3 scripts/ros2_cli.py component standalone demo_nodes_cpp demo_nodes_cpp::
 # → starts /standalone_talker container in tmux, loads Talker, returns session + unique_id
 python3 scripts/ros2_cli.py component standalone demo_nodes_cpp demo_nodes_cpp::Talker --container-type component_container_mt
 # → same but using the multi-threaded container
-python3 scripts/ros2_cli.py run kill comp_demo_nodes_cpp_standalone_talker
-# → stop the standalone container when done
+python3 scripts/ros2_cli.py component kill comp_demo_nodes_cpp_standalone_talker
+# → stop the standalone container when done (use the session name from standalone output)
 ```
 
 ```bash

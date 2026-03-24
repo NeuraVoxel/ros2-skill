@@ -142,7 +142,7 @@ Every other `ros2_*.py` file in `scripts/` is an internal submodule. Running one
 
 | Error condition | Autonomous recovery |
 |---|---|
-| "Session already exists" on any tmux command | Run `run kill <session>` (get name from the `session` field in the JSON), then immediately retry the original command. Report the final success or failure, not the intermediate kill. |
+| "Session already exists" on any tmux command | Use the correct kill command for the session prefix: `component kill <session>` (comp_*), `run kill <session>` (run_*), `launch kill <session>` (launch_*). Get the session name from the `session` field in the JSON. Then immediately retry. Report the final success or failure only. |
 | `container_found_at` in standalone error | Retry `component standalone` with `--container-type component_container_isolated`. Do not ask. |
 | `container_started: true` in standalone error | Retry with `--timeout 30` (or double the original). Report the result. |
 | Stale session not cleared by `run kill` | Run `tmux kill-session -t <session>` directly, verify with `tmux list-sessions`, then retry. |

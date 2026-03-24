@@ -347,6 +347,14 @@ def cmd_component_unload(args):
         output({"error": str(exc)})
 
 
+def cmd_component_kill(args):
+    """Kill a standalone component container session (comp_* sessions only)."""
+    from ros2_utils import kill_session_cmd
+    session = args.session
+    result = kill_session_cmd(session, "comp_")
+    output(result)
+
+
 def _cleanup_standalone_session(session_name):
     """Kill the tmux container session and remove its metadata.
 

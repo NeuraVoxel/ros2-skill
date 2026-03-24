@@ -112,6 +112,7 @@ python3 {baseDir}/scripts/ros2_cli.py component list --help
 python3 {baseDir}/scripts/ros2_cli.py component ls --help
 python3 {baseDir}/scripts/ros2_cli.py component load --help
 python3 {baseDir}/scripts/ros2_cli.py component unload --help
+python3 {baseDir}/scripts/ros2_cli.py component kill --help
 python3 {baseDir}/scripts/ros2_cli.py component standalone --help
 
 # pkg (no live ROS 2 graph required)
@@ -4084,12 +4085,49 @@ python3 {baseDir}/scripts/ros2_cli.py component standalone demo_nodes_cpp demo_n
 ```json
 {
   "error": "Session 'comp_demo_nodes_cpp_standalone_talker' already exists",
-  "suggestion": "Use 'run kill comp_demo_nodes_cpp_standalone_talker' to kill it first",
+  "suggestion": "Use 'component kill comp_demo_nodes_cpp_standalone_talker' to kill it first",
   "session": "comp_demo_nodes_cpp_standalone_talker"
 }
 ```
 
-The session can be killed with `run kill <session>` when the container is no longer needed.
+The session can be killed with `component kill <session>` when the container is no longer needed.
+
+---
+
+## component kill `<session>`
+
+Kill a standalone component container session. Terminates the tmux session and removes its metadata entry. Only accepts sessions with the `comp_` prefix.
+
+**No live ROS 2 graph required.**
+
+```bash
+python3 {baseDir}/scripts/ros2_cli.py component kill comp_demo_nodes_cpp_standalone_talker
+```
+
+**Output (success):**
+```json
+{
+  "success": true,
+  "session": "comp_demo_nodes_cpp_standalone_talker",
+  "message": "Session 'comp_demo_nodes_cpp_standalone_talker' killed"
+}
+```
+
+**Output (wrong session type):**
+```json
+{
+  "error": "Session 'run_my_node' is not a comp session",
+  "hint": "Comp sessions start with 'comp_'"
+}
+```
+
+**Output (session not found):**
+```json
+{
+  "error": "Session 'comp_demo_nodes_cpp_standalone_talker' does not exist",
+  "available_sessions": []
+}
+```
 
 ---
 
@@ -4370,7 +4408,8 @@ Maps user intent phrases to the correct ros2-skill command sequence. When a phra
 | "load component X into container Y", "load X into component container" | `component load <container> <package> <plugin>` | Intra-process component — shares address space with container |
 | "list running containers and components" | `component list` | Shows all containers and their loaded component IDs and names |
 | "unload component X", "remove component with ID N" | `component unload <container> <unique_id>` | Removes a component without killing the container |
-| "run <plugin> standalone", "standalone container for <plugin>", "run <plugin> without an existing container" | `component standalone <package> <plugin>` | Creates its own container + loads in one step; container persists in tmux, kill with `run kill <session>` |
+| "run <plugin> standalone", "standalone container for <plugin>", "run <plugin> without an existing container" | `component standalone <package> <plugin>` | Creates its own container + loads in one step; container persists in tmux, kill with `component kill <session>` |
+| "kill standalone", "stop standalone container", "cancel standalone" | `component kill <session>` | Terminates the container's tmux session; get the session name from `component standalone` output or `run list` |
 
 **Key distinction:** `run new` creates a standalone OS process. `component load` inserts a composable node into an already-running container (`rclcpp::ComponentManager`) — lower IPC overhead, same address space. Use `component list` to discover available containers before loading.
 

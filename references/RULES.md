@@ -59,7 +59,7 @@ This rule exists because:
 | Any operation involving a node | `nodes list` first; never assume a node name |
 | Load a composable node (`component load`) | 1. `component list` to discover available containers — **never hardcode a container name**.<br>2. Confirm the target container appears in the output before proceeding.<br>3. After loading: verify the new component appears in a follow-up `component list` and note the returned `unique_id` — it is required for `component unload`. |
 | Unload a composable node (`component unload`) | 1. `component list` to discover the current containers and their loaded components — **never hardcode a `unique_id`**.<br>2. Identify the correct `unique_id` from the list output.<br>3. After unloading: run `component list` again to confirm the component is no longer present. |
-| Run a composable node standalone (`component standalone`) | No pre-existing container needed — `component standalone` creates the container automatically. After running: `component list` to confirm the container and component are visible. Kill the session with `run kill <session>` when done. |
+| Run a composable node standalone (`component standalone`) | No pre-existing container needed — `component standalone` creates the container automatically. After running: `component list` to confirm the container and component are visible. Kill the session with `component kill <session>` when done. |
 | Set a parameter | 1. `nodes list` to discover the node name<br>2. `params list <node>` to discover the parameter name (never assume it)<br>3. `params describe <node:param>` to confirm type (int/float/bool/string), valid range, and read-only status — **never set a parameter without this; wrong type silently truncates or is rejected**<br>4. `params set <node:param> <value>` with value matching the confirmed type; verify with `params get` after (Rule 8) |
 | Get / list / dump parameters | `nodes list` to discover the node name; `params list <node>` to discover parameter names |
 | Load parameters from a YAML file (`params load` or `--params-file` in launch) | 1. `nodes list` to confirm the target node is running.<br>2. `params list <node>` to get the current parameter names on that node.<br>3. Compare YAML file keys against the discovered names — **any YAML key that does not match a declared parameter is silently ignored; no error is raised.** Verify every key you intend to set is present in `params list` output before loading.<br>4. For each YAML key you will set, `params describe <node:param>` to confirm type — a YAML string loaded into an integer parameter silently fails or truncates.<br>5. After loading: `params get <node:param>` on each key to verify values were applied (Rule 8). |
@@ -496,7 +496,7 @@ After any `publish-until` or `publish-sequence` timeout, error, or unexpected st
 **Banned phrase: "you may need to…"** — this phrase means the diagnosis is incomplete. Complete the investigation, take the action, then report the outcome. Never present a list of things the user might do.
 
 - ❌ *"You may need to restart the daemon or clear the session state."*
-- ✅ Run `daemon status`. If down: run `daemon start`. Run `run kill <session>`. Retry the original command. Report whether it succeeded.
+- ✅ Run `daemon status`. If down: run `daemon start`. Run `component kill <session>` (for comp_ sessions) or `run kill <session>` / `launch kill <session>` as appropriate. Retry the original command. Report whether it succeeded.
 
 ### Rule 8 — Verify the effect; never trust exit codes alone
 
@@ -1478,7 +1478,7 @@ Any error related to a tmux session or component container follows this recovery
 
 | Error condition | Autonomous recovery |
 |---|---|
-| "Session already exists" on any command (`launch new`, `run new`, `component standalone`) | 1. Get session name from the `session` field of the JSON error. 2. Run `run kill <session>` (or `launch kill <session>`). 3. Immediately retry the original command. Report the final outcome only. |
+| "Session already exists" on any command (`launch new`, `run new`, `component standalone`) | 1. Get session name from the `session` field of the JSON error. 2. Run `component kill <session>` (comp_ sessions), `run kill <session>` (run_ sessions), or `launch kill <session>` (launch_ sessions). 3. Immediately retry the original command. Report the final outcome only. |
 | `container_found_at` in `component standalone` error | Retry immediately with `--container-type component_container_isolated`. Report the result. Do not ask. |
 | `container_started: true` in `component standalone` error | Container process is alive but slow to initialize. Retry with `--timeout 30`. Report the result. |
 | `container_started: false` in `component standalone` error | Container crashed. Check `run list` for what is alive. Report actual state, not speculation. |

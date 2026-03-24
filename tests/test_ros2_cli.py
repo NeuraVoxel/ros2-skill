@@ -218,6 +218,7 @@ MINIMAL_ARGS = [
     ("component","ls",       ["component", "ls"]),
     ("component","load",     ["component", "load", "/ComponentManager", "demo_nodes_cpp", "demo_nodes_cpp::Talker"]),
     ("component","unload",   ["component", "unload", "/ComponentManager", "1"]),
+    ("component","kill",      ["component", "kill", "comp_demo_nodes_cpp_standalone_talker"]),
     ("component","standalone",["component", "standalone", "demo_nodes_cpp", "demo_nodes_cpp::Talker"]),
     # pkg
     ("pkg",       "list",        ["pkg", "list"]),
@@ -1110,10 +1111,17 @@ class TestComponentParsing(unittest.TestCase):
             ("component", "ls"),
             ("component", "load"),
             ("component", "unload"),
+            ("component", "kill"),
             ("component", "standalone"),
         ]:
             self.assertIn(key, D, f"Missing dispatch entry: {key}")
             self.assertTrue(callable(D[key]))
+
+    def test_component_kill_parsing(self):
+        args = self.parser.parse_args(["component", "kill", "comp_pkg_standalone_talker"])
+        self.assertEqual(args.command, "component")
+        self.assertEqual(args.subcommand, "kill")
+        self.assertEqual(args.session, "comp_pkg_standalone_talker")
 
 
 class TestPkgParsing(unittest.TestCase):
