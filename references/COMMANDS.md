@@ -4203,3 +4203,81 @@ Then confirm the exact type of the discovered topic:
 ```bash
 python3 {baseDir}/scripts/ros2_cli.py topics type <discovered_topic>
 ```
+
+---
+
+## Agent Vocabulary: Natural-Language Trigger Words
+
+Maps user intent phrases to the correct ros2-skill command sequence. When a phrase below appears in a user request, use the mapped command — do not ask which command to run.
+
+### Node execution model
+
+| User intent | Correct approach | Notes |
+|---|---|---|
+| "run X", "start node X", "launch X as a node" | `run new <package> <executable>` | Standalone process — node runs in its own OS process |
+| "load component X into container Y", "load X into component container" | `component load` *(Wave 2)* | Intra-process component — shares address space with container; lower IPC overhead |
+| "list running containers and components" | `component list` *(Wave 2)* | Shows container nodes and which components are loaded into each |
+| "unload component X from container Y" | `component unload` *(Wave 2)* | Removes a component without killing the container |
+
+**Key distinction:** `run new` creates a standalone OS process. `component load` inserts a composable node into an already-running component container (`rclcpp::Node` loaded as a shared library). Use `component load` only when a container node is already running (visible in `nodes list` with a name ending in `component_container` or similar).
+
+---
+
+### Parameter files and YAML config
+
+| User intent | Correct command |
+|---|---|
+| "load params from file", "apply YAML params", "use config file", "load parameters from YAML" | `params load <node> <yaml_file>` |
+| "apply config to node X" | `params load <node> <yaml_file>` |
+| "use `--params-file` in launch" | Pass via `launch new <pkg> <file> --params-file <path>` |
+
+**Pre-load validation (Rule 0 — mandatory):** Before loading any YAML file, run `params list <node>` and compare YAML keys against declared parameters. Any YAML key not matching a declared parameter is silently ignored. Verify each intended key is present before loading.
+
+---
+
+### Bag files
+
+| User intent | Correct command |
+|---|---|
+| "what's in this bag", "bag file info", "how long is the bag", "what topics does the bag have" | `bag info <path>` |
+| "record a bag", "capture topics to a bag", "start recording", "log sensor data" | `ros2 bag record` *(direct CLI — not yet in ros2-skill; see `references/CLI.md`)* |
+| "play back a bag", "replay bag file", "play bag" | `ros2 bag play` *(direct CLI — not yet in ros2-skill; see `references/CLI.md`)* |
+
+**Note:** `bag info` does not require a live ROS 2 graph — it reads `metadata.yaml` from the bag directory. `bag record` and `bag play` will be added to ros2-skill in a future release; until then, use the direct `ros2 bag` CLI.
+
+---
+
+### Testing
+
+| User intent | Correct command |
+|---|---|
+| "run tests for package X", "test package X", "check if tests pass" | `colcon test --packages-select <pkg>` *(direct CLI — not in ros2-skill)* |
+| "run the test suite", "run all tests" | `colcon test` *(direct CLI)* |
+| "run pytest", "run unit tests" | `python3 -m pytest <path>` *(direct CLI)* |
+| "show test results", "what tests failed" | `colcon test-result --all` *(direct CLI)* |
+
+**Note:** Testing commands operate on the build system, not the live ROS 2 graph — they are outside the scope of `ros2_cli.py`. Use direct CLI commands. These commands do not require a running robot.
+
+---
+
+### Diagnostics: runtime log level
+
+| User intent | Correct command |
+|---|---|
+| "enable debug logging for node X", "set log level to debug", "get more verbose output from X" | `services call <SET_LOGGER_LEVEL_SERVICE> '{"logger_name": "", "level": 10}'` |
+| "reset log level", "disable debug logging" | `services call <SET_LOGGER_LEVEL_SERVICE> '{"logger_name": "", "level": 20}'` |
+
+**Discovery:** Find the service with `services find rcl_interfaces/srv/SetLoggerLevel`. Level values: `10` = DEBUG, `20` = INFO, `30` = WARN, `40` = ERROR. Use `logger_name: ""` for the root logger, or specify the node's logger name to narrow scope.
+
+---
+
+### Daemon and deployment context
+
+| User intent | Correct command |
+|---|---|
+| "check daemon status", "is the ROS daemon running" | `daemon status` |
+| "start the daemon", "restart daemon" | `daemon start` |
+| "stop the daemon" | `daemon stop` |
+| "what domain ID is in use", "check ROS_DOMAIN_ID" | Check env: `echo $ROS_DOMAIN_ID` *(direct shell)* |
+
+**Note:** `ROS_DOMAIN_ID` defaults to `0` and is user-configurable. If the graph looks unexpectedly large (too many unrecognised nodes), a domain collision with another system is likely — check with `echo $ROS_DOMAIN_ID` and verify the expected value with the user.
