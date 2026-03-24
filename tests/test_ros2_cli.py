@@ -1058,6 +1058,16 @@ class TestComponentParsing(unittest.TestCase):
         args = self.parser.parse_args(["component", "unload", "/c", "7"])
         self.assertIsInstance(args.unique_id, int)
 
+    def test_component_load_log_level_default_is_zero_int(self):
+        # Regression test: omitting --log-level must produce int 0, not string "".
+        # LoadNode.Request.log_level is uint8; passing a string causes a
+        # PyLong_Check assertion failure (exit code 134) in the C bindings.
+        args = self.parser.parse_args([
+            "component", "load", "/c", "pkg", "pkg::Node"
+        ])
+        self.assertIsInstance(args.log_level, int)
+        self.assertEqual(args.log_level, 0)
+
     def test_component_dispatch_new_entries(self):
         D = self.ros2_cli.DISPATCH
         for key in [
