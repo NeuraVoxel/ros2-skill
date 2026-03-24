@@ -2347,6 +2347,7 @@ class TestComponentStandaloneLogic(unittest.TestCase):
              patch("ros2_component.save_session"), \
              patch("ros2_component.ros2_context") as ctx, \
              patch("ros2_component.ROS2CLI",             return_value=mock_node), \
+             patch("rclpy.spin_once"), \
              patch("ros2_component.output",              side_effect=captured.append), \
              patch.dict("sys.modules", {"composition_interfaces.srv": mock_srv}):
             ctx.return_value.__enter__ = MagicMock(return_value=None)
@@ -2383,6 +2384,7 @@ class TestComponentStandaloneLogic(unittest.TestCase):
              patch.dict("sys.modules", {"composition_interfaces.srv": mock_srv}):
             self.ros2_component.cmd_component_standalone(self._make_args())
         self.assertIn("error", captured[0])
+        self.assertIn("already exists", captured[0]["error"])
 
     def test_tmux_start_failure_returns_error(self):
         result = self._run(True, tmux_ok=False)
