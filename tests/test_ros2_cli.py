@@ -218,6 +218,7 @@ MINIMAL_ARGS = [
     ("component","ls",       ["component", "ls"]),
     ("component","load",     ["component", "load", "/ComponentManager", "demo_nodes_cpp", "demo_nodes_cpp::Talker"]),
     ("component","unload",   ["component", "unload", "/ComponentManager", "1"]),
+    ("component","standalone",["component", "standalone", "demo_nodes_cpp", "demo_nodes_cpp::Talker"]),
     # pkg
     ("pkg",       "list",        ["pkg", "list"]),
     ("pkg",       "ls",          ["pkg", "ls"]),
@@ -1072,6 +1073,36 @@ class TestComponentParsing(unittest.TestCase):
         self.assertIsInstance(args.log_level, int)
         self.assertEqual(args.log_level, 0)
 
+    def test_component_standalone_parsing(self):
+        args = self.parser.parse_args([
+            "component", "standalone",
+            "demo_nodes_cpp", "demo_nodes_cpp::Talker"
+        ])
+        self.assertEqual(args.subcommand, "standalone")
+        self.assertEqual(args.package_name, "demo_nodes_cpp")
+        self.assertEqual(args.plugin_name, "demo_nodes_cpp::Talker")
+
+    def test_component_standalone_default_container_type(self):
+        args = self.parser.parse_args(["component", "standalone", "pkg", "pkg::Node"])
+        self.assertEqual(args.container_type, "component_container")
+
+    def test_component_standalone_container_type_mt(self):
+        args = self.parser.parse_args([
+            "component", "standalone", "pkg", "pkg::Node",
+            "--container-type", "component_container_mt"
+        ])
+        self.assertEqual(args.container_type, "component_container_mt")
+
+    def test_component_standalone_log_level_default_is_zero_int(self):
+        # Regression guard: must be int 0, not string "" — same crash risk as component load
+        args = self.parser.parse_args(["component", "standalone", "pkg", "pkg::Node"])
+        self.assertIsInstance(args.log_level, int)
+        self.assertEqual(args.log_level, 0)
+
+    def test_component_standalone_timeout_default(self):
+        args = self.parser.parse_args(["component", "standalone", "pkg", "pkg::Node"])
+        self.assertEqual(args.timeout, 10.0)
+
     def test_component_dispatch_new_entries(self):
         D = self.ros2_cli.DISPATCH
         for key in [
@@ -1079,6 +1110,7 @@ class TestComponentParsing(unittest.TestCase):
             ("component", "ls"),
             ("component", "load"),
             ("component", "unload"),
+            ("component", "standalone"),
         ]:
             self.assertIn(key, D, f"Missing dispatch entry: {key}")
             self.assertTrue(callable(D[key]))
@@ -2246,6 +2278,133 @@ class TestComponentUnloadLogic(unittest.TestCase):
         with patch.dict("sys.modules", {"composition_interfaces.srv": None}), \
              patch("ros2_component.output", side_effect=captured.append):
             self.ros2_component.cmd_component_unload(self._make_args())
+        self.assertIn("error", captured[0])
+        self.assertIn("hint", captured[0])
+
+
+class TestComponentStandaloneLogic(unittest.TestCase):
+    """Pure-logic tests for cmd_component_standalone (mocked ROS 2 + tmux)."""
+
+    @classmethod
+    def setUpClass(cls):
+        if not check_rclpy_available():
+            raise unittest.SkipTest("rclpy not available - requires ROS 2 environment")
+        import ros2_component
+        cls.ros2_component = ros2_component
+
+    def _make_args(self, package="demo_nodes_cpp", plugin="demo_nodes_cpp::Talker",
+                   container_type="component_container", node_name="",
+                   node_namespace="", remap_rules=None, log_level=0, timeout=10.0):
+        from unittest.mock import MagicMock
+        args = MagicMock()
+        args.package_name   = package
+        args.plugin_name    = plugin
+        args.container_type = container_type
+        args.node_name      = node_name
+        args.node_namespace = node_namespace
+        args.remap_rules    = remap_rules or []
+        args.log_level      = log_level
+        args.timeout        = timeout
+        return args
+
+    def _run(self, resp_success=True, full_node_name="/talker",
+             unique_id=1, error_message="",
+             tmux_ok=True, session_alive=True, container_ready=True):
+        from unittest.mock import MagicMock, patch
+
+        mock_resp = MagicMock()
+        mock_resp.success        = resp_success
+        mock_resp.full_node_name = full_node_name
+        mock_resp.unique_id      = unique_id
+        mock_resp.error_message  = error_message
+
+        mock_future = MagicMock()
+        mock_future.done.return_value   = True
+        mock_future.result.return_value = mock_resp
+
+        mock_client = MagicMock()
+        mock_client.wait_for_service.return_value = True
+        mock_client.call_async.return_value       = mock_future
+
+        list_svc = "/standalone_talker/list_nodes"
+        mock_node = MagicMock()
+        mock_node.create_client.return_value = mock_client
+        mock_node.get_service_names_and_types.return_value = (
+            [(list_svc, ["composition_interfaces/srv/ListNodes"])] if container_ready else []
+        )
+
+        mock_srv = MagicMock()
+        mock_srv.LoadNode         = MagicMock()
+        mock_srv.LoadNode.Request = MagicMock(return_value=MagicMock())
+        mock_srv.ListNodes        = MagicMock()
+
+        captured = []
+        with patch("ros2_component.check_tmux",         return_value=True), \
+             patch("ros2_component.session_exists",      return_value=False), \
+             patch("ros2_component.source_local_ws",     return_value=(None, "not_found")), \
+             patch("ros2_component.run_cmd",             return_value=("", "", 0 if tmux_ok else 1)), \
+             patch("ros2_component.check_session_alive", return_value=session_alive), \
+             patch("ros2_component.save_session"), \
+             patch("ros2_component.ros2_context") as ctx, \
+             patch("ros2_component.ROS2CLI",             return_value=mock_node), \
+             patch("ros2_component.output",              side_effect=captured.append), \
+             patch.dict("sys.modules", {"composition_interfaces.srv": mock_srv}):
+            ctx.return_value.__enter__ = MagicMock(return_value=None)
+            ctx.return_value.__exit__  = MagicMock(return_value=False)
+            self.ros2_component.cmd_component_standalone(self._make_args())
+        return captured[0]
+
+    def test_successful_standalone_has_required_keys(self):
+        result = self._run(True)
+        self.assertTrue(result["success"])
+        for key in ("session", "container", "container_type",
+                    "package_name", "plugin_name", "full_node_name", "unique_id"):
+            self.assertIn(key, result)
+
+    def test_container_path_derived_from_plugin_name(self):
+        result = self._run(True)
+        self.assertEqual(result["container"], "/standalone_talker")
+
+    def test_tmux_unavailable_returns_error(self):
+        from unittest.mock import patch
+        captured = []
+        with patch("ros2_component.check_tmux", return_value=False), \
+             patch("ros2_component.output", side_effect=captured.append):
+            self.ros2_component.cmd_component_standalone(self._make_args())
+        self.assertIn("error", captured[0])
+
+    def test_session_already_exists_returns_error(self):
+        from unittest.mock import MagicMock, patch
+        captured = []
+        mock_srv = MagicMock()
+        with patch("ros2_component.check_tmux",    return_value=True), \
+             patch("ros2_component.session_exists", return_value=True), \
+             patch("ros2_component.output",         side_effect=captured.append), \
+             patch.dict("sys.modules", {"composition_interfaces.srv": mock_srv}):
+            self.ros2_component.cmd_component_standalone(self._make_args())
+        self.assertIn("error", captured[0])
+
+    def test_tmux_start_failure_returns_error(self):
+        result = self._run(True, tmux_ok=False)
+        self.assertIn("error", result)
+
+    def test_container_not_ready_returns_error(self):
+        result = self._run(True, container_ready=False)
+        self.assertIn("error", result)
+
+    def test_failed_load_returns_success_false(self):
+        result = self._run(False, error_message="Plugin not found")
+        self.assertFalse(result["success"])
+        self.assertIn("error_message", result)
+
+    def test_import_error_returns_error_and_hint(self):
+        from unittest.mock import patch
+        captured = []
+        with patch.dict("sys.modules", {"composition_interfaces.srv": None}), \
+             patch("ros2_component.check_tmux",     return_value=True), \
+             patch("ros2_component.session_exists",  return_value=False), \
+             patch("ros2_component.output",          side_effect=captured.append):
+            self.ros2_component.cmd_component_standalone(self._make_args())
         self.assertIn("error", captured[0])
         self.assertIn("hint", captured[0])
 
