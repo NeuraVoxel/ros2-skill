@@ -937,7 +937,7 @@ def build_parser():
     p.add_argument("plugin_name",  help="Fully-qualified plugin class name (e.g. demo_nodes_cpp::Talker)")
     p.add_argument("--node-name",      dest="node_name",      default="", help="Override the loaded node's name")
     p.add_argument("--node-namespace", dest="node_namespace", default="", help="Override the loaded node's namespace")
-    p.add_argument("--remap",          nargs="*", default=[],             help="Remap rules (e.g. /from:=/to)")
+    p.add_argument("--remap", dest="remap_rules", nargs="*", default=[], help="Remap rules (e.g. /from:=/to)")
     p.add_argument("--log-level",      dest="log_level",      default="", help="Log level for the loaded node")
     p.add_argument("--timeout", type=float, default=5.0, dest="timeout",  help="Service call timeout in seconds (default: 5.0)")
 

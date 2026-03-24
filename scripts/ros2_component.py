@@ -180,7 +180,7 @@ def cmd_component_load(args):
     plugin_name = args.plugin_name
     node_name = getattr(args, 'node_name', '') or ''
     node_namespace = getattr(args, 'node_namespace', '') or ''
-    remap_rules = getattr(args, 'remap', None) or []
+    remap_rules = getattr(args, 'remap_rules', None) or []
     log_level = getattr(args, 'log_level', '') or ''
 
     try:
@@ -220,10 +220,9 @@ def cmd_component_load(args):
             while _time.time() < end and not future.done():
                 _rclpy.spin_once(node, timeout_sec=0.1)
 
-            node.destroy_node()
-
             if not future.done():
                 future.cancel()
+                node.destroy_node()
                 output({
                     "error": "LoadNode service call timed out",
                     "container": container,
@@ -232,6 +231,7 @@ def cmd_component_load(args):
                 })
                 return
 
+            node.destroy_node()
             resp = future.result()
             if not resp.success:
                 output({
