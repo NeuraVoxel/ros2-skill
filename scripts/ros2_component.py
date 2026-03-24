@@ -21,6 +21,8 @@ from ros2_utils import (
     run_cmd,
     check_session_alive,
     save_session,
+    kill_session,
+    delete_session_metadata,
 )
 
 
@@ -345,6 +347,17 @@ def cmd_component_unload(args):
         output({"error": str(exc)})
 
 
+def _cleanup_standalone_session(session_name):
+    """Kill the tmux container session and remove its metadata.
+
+    Called on every Phase 2 failure so that the session does not block a
+    subsequent retry.  Phase 1 failures (tmux start itself failed or the
+    session check failed) are already clean — no session exists to kill.
+    """
+    kill_session(session_name)
+    delete_session_metadata(session_name)
+
+
 def cmd_component_standalone(args):
     """Run a composable node in its own standalone container (tmux session).
 
@@ -493,12 +506,16 @@ def cmd_component_standalone(args):
                     container_node_name in name for name, _ns in all_nodes
                 )
 
+                # Always kill the orphaned tmux session so the next retry
+                # is not blocked by a "session already exists" error.
+                _cleanup_standalone_session(session_name)
+
                 if alt_path and alt_path != container_path:
                     output({
                         "error": f"Container service not found at expected path after {timeout}s",
                         "expected_path": container_path,
                         "container_found_at": alt_path,
-                        "session": session_name,
+                        "session_killed": session_name,
                         "hint": (
                             "Container started at a different path — it may be "
                             "component_container_isolated. Re-run with "
@@ -506,7 +523,7 @@ def cmd_component_standalone(args):
                             if container_type != "component_container_isolated"
                             else (
                                 "Container started but the component may not have loaded. "
-                                "Check with: component list"
+                                "Re-run the command."
                             )
                         ),
                     })
@@ -514,18 +531,18 @@ def cmd_component_standalone(args):
                     output({
                         "error": f"Container service not available after {timeout}s: {list_svc}",
                         "container_started": True,
-                        "session": session_name,
+                        "session_killed": session_name,
                         "hint": (
-                            f"Container process is running but its services are not yet ready. "
-                            f"Try a longer --timeout (current: {timeout}s) "
-                            f"or wait and check: component list"
+                            f"Container process was running but services were not ready within "
+                            f"{timeout}s. Session killed. Re-run with a longer "
+                            f"--timeout (e.g. --timeout 30)."
                         ),
                     })
                 else:
                     output({
                         "error": f"Container service not available after {timeout}s: {list_svc}",
                         "container_started": False,
-                        "session": session_name,
+                        "session_killed": session_name,
                         "hint": "Container process not found — it may have crashed. Check with: run list",
                     })
                 return
@@ -535,9 +552,10 @@ def cmd_component_standalone(args):
             client = node.create_client(LoadNode, load_svc)
             if not client.wait_for_service(timeout_sec=3.0):
                 node.destroy_node()
+                _cleanup_standalone_session(session_name)
                 output({
                     "error": f"LoadNode service not available: {load_svc}",
-                    "session": session_name,
+                    "session_killed": session_name,
                 })
                 return
 
@@ -557,9 +575,10 @@ def cmd_component_standalone(args):
             if not future.done():
                 future.cancel()
                 node.destroy_node()
+                _cleanup_standalone_session(session_name)
                 output({
                     "error": "LoadNode service call timed out",
-                    "session": session_name,
+                    "session_killed": session_name,
                     "container": container_path,
                 })
                 return
@@ -568,9 +587,10 @@ def cmd_component_standalone(args):
             resp = future.result()
 
             if not resp.success:
+                _cleanup_standalone_session(session_name)
                 output({
                     "success": False,
-                    "session": session_name,
+                    "session_killed": session_name,
                     "container": container_path,
                     "package_name": package_name,
                     "plugin_name": plugin_name,
@@ -603,7 +623,9 @@ def cmd_component_standalone(args):
             })
 
     except Exception as exc:
-        output({"error": f"Standalone launch failed: {exc}", "session": session_name})
+        # Best-effort cleanup — if Phase 1 never ran this is a no-op.
+        _cleanup_standalone_session(session_name)
+        output({"error": f"Standalone launch failed: {exc}", "session_killed": session_name})
 
 
 if __name__ == "__main__":

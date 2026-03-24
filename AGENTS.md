@@ -136,6 +136,20 @@ Every other `ros2_*.py` file in `scripts/` is an internal submodule. Running one
 
 **Background-launch commands** (`component standalone`, `launch new`, `run new`) — these start a tmux session and return a single JSON result. Never use forward-looking language ("Proceeding to launch...", "Starting X now...") because it implies follow-up narration that will never appear. Execute the command, then report the JSON result and stop. If you must say anything before the result, use past tense: `"Launched X."` — not `"Proceeding to launch X."`.
 
+**Act on hints; never ask about them.** When a CLI error response contains a `hint` key, execute the suggested recovery action immediately. Do not ask "Would you like me to try the hint?". Act, then report. The same applies to any self-contained suggestion produced by these rules (restart daemon, kill session, retry with different args).
+
+**tmux session errors — try before reporting.** Any error relating to sessions or containers follows this protocol: (1) investigate the actual state using the tools below, (2) take corrective action autonomously, (3) report the final outcome to the user — not the intermediate steps.
+
+| Error condition | Autonomous recovery |
+|---|---|
+| "Session already exists" on any tmux command | Run `run kill <session>` (get name from the `session` field in the JSON), then immediately retry the original command. Report the final success or failure, not the intermediate kill. |
+| `container_found_at` in standalone error | Retry `component standalone` with `--container-type component_container_isolated`. Do not ask. |
+| `container_started: true` in standalone error | Retry with `--timeout 30` (or double the original). Report the result. |
+| Stale session not cleared by `run kill` | Run `tmux kill-session -t <session>` directly, verify with `tmux list-sessions`, then retry. |
+| "you may need to…" in your own reasoning | Stop. That phrase means you have not investigated yet. Investigate first, then report findings as a completed diagnosis, not a suggestion list. |
+
+**Never say "you may need to…"** — this phrase means the investigation is incomplete. Diagnose fully, then give one concrete answer: what happened, what was done, what the result is.
+
 **Any explicit user override applies to the next response only.** If the user asks for explanation, verbosity, or approval before executing — comply for that one response, then revert to default behaviour. A single instruction is never persistent. Do not carry it forward. Do not say "as you requested earlier" to justify continued non-default behaviour.
 
 **Execute, don't ask.** The user's message is the approval. Act on it. Never ask "Would you like me to...?" or "Shall I proceed?" for any action covered by these rules. The only exception: the user explicitly asks you to confirm before a specific action, and even then, that request expires after the next response.
