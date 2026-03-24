@@ -335,6 +335,8 @@ python3 {baseDir}/scripts/ros2_cli.py topics find sensor_msgs/msg/Image
 ```
 Use the first result. If multiple camera topics exist and the user has not specified, pick the most likely one (e.g. the one matching a known camera node) and proceed.
 
+**Before using any camera data (capture, stream, detection, depth, point cloud, or any camera-dependent task):** verify calibration and TF registration — 1. `topics find sensor_msgs/msg/CameraInfo` to locate the paired `camera_info` topic (it shares a namespace with the image topic). 2. `topics subscribe <CAMERA_INFO_TOPIC> --max-messages 1 --timeout 2` — confirm the `K` intrinsic matrix is non-zero. 3. Read `header.frame_id` from the `camera_info` message; confirm it is present in `tf list`. **A camera with no `camera_info` publisher is uncalibrated. A camera whose `frame_id` is absent from TF produces wrong spatial results.** Both must be satisfied before proceeding.
+
 **When multiple results are returned — tiebreaker heuristics (apply in order):**
 
 1. **Format preference**: `CompressedImage` > `Image`; `TwistStamped` > `Twist` for stamped-capable controllers
@@ -510,7 +512,7 @@ For any command with timeout > 10 s: note the critical nodes (velocity controlle
 
 ### 31 — Validate odometry frame_id and TF tree before spatial operations
 
-On first use of `<ODOM_TOPIC>` per session, subscribe for one message and read `header.frame_id`. If non-canonical (not containing `odom`), note to the user once; store the frame for position reporting. If empty, flag as misconfiguration. — Before any TF operation: run `tf list` to confirm frames are present. For sensor frames: run `tf echo <SENSOR_FRAME> <BASE_FRAME> --duration 1` to confirm the transform is not stale. If `tf echo` or `tf lookup` hangs past timeout, suspect a TF cycle — inspect `tf list` for duplicate parent-child relationships.
+On first use of `<ODOM_TOPIC>` per session, subscribe for one message and read `header.frame_id`. If non-canonical (not containing `odom`), note to the user once; store the frame for position reporting. If empty, flag as misconfiguration. — Before any TF operation: run `tf list` to confirm frames are present. For sensor frames: run `tf echo <SENSOR_FRAME> <BASE_FRAME> --duration 1` to confirm the transform is not stale. If `tf echo` or `tf lookup` hangs past timeout, suspect a TF cycle — inspect `tf list` for duplicate parent-child relationships. For ongoing stale-frame detection during a task: use `tf monitor <FRAME>` — it continuously watches the frame and reports if updates stop arriving.
 
 ### 33 — Conditional and branching task sequences: use fallbacks, enforce retry limits, escalate precisely
 
@@ -610,6 +612,18 @@ python3 {baseDir}/scripts/ros2_cli.py topics find sensor_msgs/msg/PointCloud2
 - **No sensor found** → skip silently. Do not warn the user. Proceed with motion.
 
 Never block motion because no sensor was found. For short moves (≤ 5 s), skip the scan entirely.
+
+### 40 — Controller pre-flight: check hardware component AND hardware interfaces before load/switch
+
+Before any `control load-controller`, `control switch-controllers`, or `control configure-controller`:
+
+1. `control list-controllers` — discover controller names and current states (never hardcode)
+2. `control list-hardware-components` — confirm the relevant hardware component is in `active` state
+3. `control list-hardware-interfaces` — confirm the relevant hardware interfaces are `available/active`
+
+**Block condition:** if the hardware component is `inactive`/`unavailable`, OR if the relevant hardware interfaces are not `available/active`, do not proceed. Escalate: *"Hardware component/interfaces not active — cannot load or switch controllers until the hardware is active."* Both checks must pass — a hardware component can be `active` while its interfaces are still `unavailable`, and in that state the controller will load without error but silently discard all commands.
+
+After the operation: `control list-controllers` to confirm the controller reached the expected state (`active` or `inactive`), then `control list-hardware-components` to confirm the hardware component is still `active`.
 
 ---
 
